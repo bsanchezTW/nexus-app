@@ -5,9 +5,11 @@ import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/pressable.dart';
+import '../../../core/widgets/tw_components.dart';
 import '../../../data/models/notificacion.dart';
 import '../../../data/repositories/notificaciones_repository.dart';
 import '../notificacion_destino.dart';
@@ -25,6 +27,7 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
   bool _marcandoTodas = false;
   bool _eliminando = false;
   final Set<String> _seleccionados = {};
+  final Set<String> _descartadas = {};
 
   bool get _modoSeleccion => _seleccionados.isNotEmpty;
   bool get _ocupado => _marcandoTodas || _eliminando;
@@ -82,6 +85,27 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
     });
   }
 
+  Future<void> _descartar(String id) async {
+    setState(() {
+      _descartadas.add(id);
+      _seleccionados.remove(id);
+    });
+    try {
+      await ref.read(notificacionesRepositoryProvider).ocultarNotificaciones([
+        id,
+      ]);
+      ref.invalidate(notificacionesInboxProvider);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _descartadas.remove(id));
+      showAppSnackBar(
+        context,
+        'No se pudo eliminar la notificación.',
+        isError: true,
+      );
+    }
+  }
+
   Future<void> _eliminar(List<NotificacionInbox> lista) async {
     if (_ocupado || lista.isEmpty) return;
 
@@ -108,7 +132,12 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
         await repo.ocultarTodasNotificaciones();
       }
       ref.invalidate(notificacionesInboxProvider);
-      if (mounted) setState(_seleccionados.clear);
+      if (mounted) {
+        setState(() {
+          _seleccionados.clear();
+          if (!esSeleccion) _descartadas.clear();
+        });
+      }
     } catch (_) {
       if (mounted) {
         showAppSnackBar(
@@ -166,27 +195,27 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
     return AppScaffold(
       title: _modoSeleccion ? null : 'Notificaciones',
       titleWidget: _modoSeleccion
-          ? Text(
-              '${_seleccionados.length} seleccionada(s)',
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: AppColors.ink,
-              ),
-            )
+          ? Text('${_seleccionados.length} seleccionada(s)')
           : null,
       actions: inboxAsync.maybeWhen(
+        skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
         data: _accionesCabecera,
         orElse: () => const [],
       ),
       body: inboxAsync.when(
+        skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
           message: 'No se pudieron cargar las notificaciones.',
           onRetry: () => ref.invalidate(notificacionesInboxProvider),
         ),
         data: (lista) {
-          if (lista.isEmpty) {
+          final visibles = lista
+              .where((item) => !_descartadas.contains(item.id))
+              .toList();
+          if (visibles.isEmpty) {
             return const EmptyStateView(
               icon: Symbols.notifications_rounded,
               message: 'Sin notificaciones',
@@ -194,23 +223,29 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
           }
 
           return RefreshIndicator(
-            color: AppColors.primary,
+            color: TwColors.brand700,
             onRefresh: () async {
               ref.invalidate(notificacionesInboxProvider);
               await ref.read(notificacionesInboxProvider.future);
             },
-            child: ListView.separated(
+            child: ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(
                 parent: BouncingScrollPhysics(),
               ),
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-              itemCount: lista.length,
-              separatorBuilder: (_, _) =>
-                  const Divider(height: 1, color: AppColors.border),
+              padding: const EdgeInsets.fromLTRB(
+                TwSpacing.screenH,
+                8,
+                TwSpacing.screenH,
+                32,
+              ),
+              itemCount: visibles.length,
               itemBuilder: (context, index) {
-                final item = lista[index];
+                final item = visibles[index];
+                final hueco = EdgeInsets.only(
+                  bottom: index == visibles.length - 1 ? 0 : 12,
+                );
                 final seleccionada = _seleccionados.contains(item.id);
-                return _NotificacionTile(
+                final card = _NotificacionCard(
                   notificacion: item,
                   fecha: _formatoFecha(item.createdAt),
                   seleccionada: seleccionada,
@@ -223,6 +258,29 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
                       : _modoSeleccion
                       ? () => _alternarSeleccion(item.id)
                       : () => _abrir(item),
+                );
+
+                if (_modoSeleccion || _ocupado) {
+                  return Padding(padding: hueco, child: card);
+                }
+
+                return Dismissible(
+                  key: ValueKey(item.id),
+                  direction: DismissDirection.horizontal,
+                  onDismissed: (_) => _descartar(item.id),
+                  background: Padding(
+                    padding: hueco,
+                    child: const _FondoDescartar(
+                      alineacion: Alignment.centerLeft,
+                    ),
+                  ),
+                  secondaryBackground: Padding(
+                    padding: hueco,
+                    child: const _FondoDescartar(
+                      alineacion: Alignment.centerRight,
+                    ),
+                  ),
+                  child: Padding(padding: hueco, child: card),
                 );
               },
             ),
@@ -239,8 +297,37 @@ IconData _iconoParaTipo(TipoNotificacion tipo) {
   return Symbols.person_add_rounded;
 }
 
-class _NotificacionTile extends StatelessWidget {
-  const _NotificacionTile({
+TwIconBoxStyle _estiloParaTipo(TipoNotificacion tipo) {
+  if (tipo.esAcreditacion) return TwIconBoxStyle.greenTint;
+  if (tipo.esComentario) return TwIconBoxStyle.purpleTint;
+  return TwIconBoxStyle.blueTint;
+}
+
+class _FondoDescartar extends StatelessWidget {
+  const _FondoDescartar({required this.alineacion});
+
+  final Alignment alineacion;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: alineacion,
+      padding: const EdgeInsets.symmetric(horizontal: 22),
+      decoration: const BoxDecoration(
+        color: TwColors.dangerTint,
+        borderRadius: TwRadii.card,
+      ),
+      child: const Icon(
+        Symbols.delete_rounded,
+        color: TwColors.danger,
+        size: 22,
+      ),
+    );
+  }
+}
+
+class _NotificacionCard extends StatelessWidget {
+  const _NotificacionCard({
     required this.notificacion,
     required this.fecha,
     required this.seleccionada,
@@ -258,75 +345,70 @@ class _NotificacionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final icono = modoSeleccion
+        ? (seleccionada
+              ? Symbols.check_circle_rounded
+              : Symbols.radio_button_unchecked_rounded)
+        : _iconoParaTipo(notificacion.tipo);
+    final iconStyle = modoSeleccion
+        ? (seleccionada ? TwIconBoxStyle.brand : TwIconBoxStyle.blueTint)
+        : _estiloParaTipo(notificacion.tipo);
+
     final contenido = AnimatedContainer(
       duration: AppMotion.toggle,
       curve: AppMotion.ease,
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 15, 14, 15),
       decoration: BoxDecoration(
-        color: seleccionada ? AppColors.tintNavy : Colors.transparent,
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        color: seleccionada ? TwColors.blueTint : TwColors.surface,
+        borderRadius: TwRadii.card,
         border: Border.all(
-          color: seleccionada ? AppColors.primaryLight : Colors.transparent,
-          width: 1.5,
+          color: seleccionada ? TwColors.fieldBorderActive : TwColors.border07,
         ),
+        boxShadow: TwShadows.card,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: notificacion.leida
-                  ? AppColors.surfaceMuted
-                  : AppColors.tintNavy,
-              borderRadius: BorderRadius.circular(AppRadius.md),
-            ),
-            child: Icon(
-              modoSeleccion
-                  ? (seleccionada
-                        ? Symbols.check_circle_rounded
-                        : Symbols.radio_button_unchecked_rounded)
-                  : _iconoParaTipo(notificacion.tipo),
-              size: modoSeleccion ? 22 : 20,
-              color: modoSeleccion
-                  ? (seleccionada ? AppColors.primary : AppColors.textTertiary)
-                  : notificacion.leida
-                  ? AppColors.textSecondary
-                  : (notificacion.tipo.esAcreditacion
-                        ? AppColors.success
-                        : AppColors.primary),
-            ),
+          Opacity(
+            opacity: notificacion.leida && !modoSeleccion ? 0.78 : 1,
+            child: TwIconBox(icono, variant: iconStyle),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 13),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   notificacion.cuerpo,
-                  style: TextStyle(
-                    fontSize: 14.5,
+                  style: TwText.tileTitle.copyWith(
                     fontWeight: notificacion.leida
-                        ? FontWeight.w500
+                        ? FontWeight.w600
                         : FontWeight.w700,
-                    color: AppColors.ink,
                     height: 1.35,
                   ),
                 ),
                 if (fecha.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    fecha,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textTertiary,
-                    ),
-                  ),
+                  const SizedBox(height: 5),
+                  Text(fecha, style: TwText.tileSubtitle),
                 ],
               ],
             ),
           ),
+          if (!notificacion.leida && !modoSeleccion) ...[
+            const SizedBox(width: 10),
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: TwColors.brand700,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

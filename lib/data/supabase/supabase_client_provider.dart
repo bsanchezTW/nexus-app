@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/config/env.dart';
+import 'omitir_api_key_en_bearer_client.dart';
 
 /// Inicializa el SDK de Supabase una sola vez, al arrancar la app
 /// (ver `main.dart`), y expone el cliente ya configurado al resto de la app
@@ -11,10 +12,11 @@ import '../../core/config/env.dart';
 Future<void> initSupabase() async {
   await Supabase.initialize(
     url: Env.supabaseUrl,
-    // "publishableKey" es el nuevo nombre de lo que Supabase llamaba
-    // "anon key" (mismo valor, pensado para ser público; la seguridad real
-    // la dan las políticas RLS de supabase/schema.sql).
-    publishableKey: Env.supabaseAnonKey,
+    publishableKey: Env.supabasePublishableKey,
+    // El SDK, sin sesión, manda la publishable como Bearer. Eso no es un
+    // JWT y el gateway responde Invalid JWT cuando las anon legacy están
+    // apagadas (login y formulario público).
+    httpClient: OmitirApiKeyEnBearerClient(),
     // A diferencia de la web legada, dejamos detectSessionInUrl en true:
     // Flutter Web también necesita procesar el callback de recuperación de
     // contraseña / magic link cuando corre en navegador.
@@ -26,6 +28,19 @@ Future<void> initSupabase() async {
 
 final supabaseClientProvider = Provider<SupabaseClient>((ref) {
   return Supabase.instance.client;
+});
+
+/// Cliente sin sesión para el formulario público (otra publishable).
+///
+/// No reusa [Supabase.instance]: si alguien abre el form logueado, el
+/// cliente principal mandaría el JWT de staff y no el rol `anon`.
+final supabasePublicClientProvider = Provider<SupabaseClient>((ref) {
+  return SupabaseClient(
+    Env.supabaseUrl,
+    Env.supabasePublishableKeyForm,
+    httpClient: OmitirApiKeyEnBearerClient(),
+    authOptions: const AuthClientOptions(autoRefreshToken: false),
+  );
 });
 
 /// Todas las tablas de negocio viven en el esquema `public` (a diferencia

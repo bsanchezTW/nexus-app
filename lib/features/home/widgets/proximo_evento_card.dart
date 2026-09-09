@@ -20,7 +20,7 @@ double homeFeaturedSettledInset(double width) {
   return (width - contentWidth) / 2;
 }
 
-/// Card del home: próximo evento, o slider de fijados.
+/// Card del home: próximo evento, slider de fijados, o estado vacío.
 ///
 /// Rediseño: hero navy radio 22, métricas separadas por hairline y dos CTA de
 /// 48 dp (blanco + fantasma), según el prototipo de la pantalla de inicio.
@@ -85,8 +85,12 @@ class _ProximoEventoCardState extends State<ProximoEventoCard> {
     return true;
   }
 
-  double _alturaCard(BuildContext context) {
+  double _alturaCard(BuildContext context, {required bool vacia}) {
     final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.6);
+    if (vacia) {
+      // Eyebrow + título + subtítulo de 2 líneas, sin métricas ni CTA.
+      return 36 + 148 * scale;
+    }
     // 296 dp cubren el caso peor: título de 2 líneas + métricas + dos CTA de
     // 48. El aire extra queda entre el título y las métricas, para que los
     // botones coincidan de una card a otra.
@@ -100,16 +104,24 @@ class _ProximoEventoCardState extends State<ProximoEventoCard> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.items.isEmpty) return const SizedBox.shrink();
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth.isFinite
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
         final settledInset = homeFeaturedSettledInset(width);
+        final vacia = widget.items.isEmpty;
+        final cardHeight = _alturaCard(context, vacia: vacia);
 
-        final cardHeight = _alturaCard(context);
+        if (vacia) {
+          return Padding(
+            padding: EdgeInsets.symmetric(horizontal: settledInset),
+            child: SizedBox(
+              height: cardHeight,
+              child: const _EmptyProximoEventoCard(),
+            ),
+          );
+        }
 
         if (!_esSlider) {
           return Padding(
@@ -292,6 +304,69 @@ class _PuntoCarrusel extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadius.pill),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Hero del home cuando no hay próximo evento ni fijados: el hueco se
+/// mantiene para que el inicio no salte al quedar vacío.
+class _EmptyProximoEventoCard extends StatelessWidget {
+  const _EmptyProximoEventoCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('proximo_evento_vacio'),
+      width: double.infinity,
+      height: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: TwGradients.hero,
+        borderRadius: TwRadii.hero,
+        boxShadow: TwShadows.hero,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: const Padding(
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Symbols.schedule_rounded,
+                  size: 15,
+                  fill: 1,
+                  color: TwColors.whiteA75,
+                ),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'PRÓXIMO EVENTO',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TwText.homeEyebrow,
+                  ),
+                ),
+              ],
+            ),
+            Spacer(),
+            Text(
+              'Todo tranquilo por aquí',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TwText.homeHeroTitle,
+            ),
+            SizedBox(height: 8),
+            Text(
+              'No hay próximos eventos programados por ahora',
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TwText.heroMeta,
+            ),
+            Spacer(),
+          ],
         ),
       ),
     );

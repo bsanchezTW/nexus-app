@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../../../core/constants/duracion_actividad.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tw_tokens.dart';
@@ -52,18 +53,11 @@ class _KpiGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final cards = <TwKpiCard>[
       TwKpiCard(
-        value: '${data.totalEventos}',
-        label: 'Eventos',
-        icon: Symbols.calendar_month_rounded,
-        tint: TwColors.blueTint,
-        iconColor: TwColors.blueInk,
-      ),
-      TwKpiCard(
-        value: '${data.eventosProximos}',
-        label: 'Próximos',
-        icon: Symbols.event_upcoming_rounded,
-        tint: TwColors.greenTint,
-        iconColor: TwColors.greenInk,
+        value: '${data.eventosActivos}',
+        label: 'Activos',
+        icon: Symbols.bolt_rounded,
+        tint: TwColors.amberTint,
+        iconColor: TwColors.amberInk,
       ),
       TwKpiCard(
         value: '${data.totalRegistrados}',
@@ -78,13 +72,6 @@ class _KpiGrid extends StatelessWidget {
         icon: Symbols.verified_rounded,
         tint: TwColors.greenTint,
         iconColor: TwColors.greenInk,
-      ),
-      TwKpiCard(
-        value: '${data.eventosActivos}',
-        label: 'Activos',
-        icon: Symbols.bolt_rounded,
-        tint: TwColors.amberTint,
-        iconColor: TwColors.amberInk,
       ),
       TwKpiCard(
         value: '${data.eventosEsteMes}',
@@ -106,11 +93,13 @@ class _KpiGrid extends StatelessWidget {
                 for (var col = 0; col < 2; col++) ...[
                   if (col > 0) const SizedBox(width: 12),
                   Expanded(
-                    child: _HomeCardIn(
-                      key: ValueKey(cards[row * 2 + col].label),
-                      index: row * 2 + col,
-                      child: cards[row * 2 + col],
-                    ),
+                    child: row * 2 + col < cards.length
+                        ? _HomeCardIn(
+                            key: ValueKey(cards[row * 2 + col].label),
+                            index: row * 2 + col,
+                            child: cards[row * 2 + col],
+                          )
+                        : const SizedBox.shrink(),
                   ),
                 ],
               ],
@@ -154,7 +143,15 @@ class _EventosCalendarioState extends State<_EventosCalendario> {
     final eventosDelMes = widget.data.eventosEnMes(_mesVisible);
     final eventosPorDia = <int, List<Evento>>{};
     for (final evento in eventosDelMes) {
-      eventosPorDia.putIfAbsent(evento.fecha.day, () => []).add(evento);
+      var dia = fechaCalendario(evento.fecha);
+      final mesIni = DateTime(_mesVisible.year, _mesVisible.month, 1);
+      final mesFin = DateTime(_mesVisible.year, _mesVisible.month + 1, 0);
+      if (dia.isBefore(mesIni)) dia = mesIni;
+      final fin = evento.fechaFin;
+      while (!dia.isAfter(fin) && !dia.isAfter(mesFin)) {
+        eventosPorDia.putIfAbsent(dia.day, () => []).add(evento);
+        dia = dia.add(const Duration(days: 1));
+      }
     }
 
     final eventosLista = _diaSeleccionado != null
@@ -433,7 +430,9 @@ class _EventoCalendarioTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fecha = DateFormat('dd/MM/yyyy').format(evento.fecha);
+    final fecha = evento.esMultiDia
+        ? '${DateFormat('dd/MM/yyyy').format(evento.fecha)} – ${DateFormat('dd/MM/yyyy').format(evento.fechaFin)}'
+        : DateFormat('dd/MM/yyyy').format(evento.fecha);
     final pasado = evento.yaOcurrio;
 
     return Padding(

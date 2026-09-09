@@ -12,6 +12,7 @@ import '../../../core/router/refresh_on_visible.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../core/theme/browser_theme_color.dart';
 import '../../../core/theme/tw_tokens.dart';
+import '../../../core/utils/registro_asistente.dart';
 import '../../../core/widgets/action_lock.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
@@ -213,6 +214,10 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
                   subtitle: 'Inscribir a alguien en el evento',
                   onTap: () {
                     if (!requireOnline(context, ref)) return;
+                    if (evento.yaOcurrio) {
+                      TwToast.info(context, kMensajeEventoFinalizado);
+                      return;
+                    }
                     context.push(RoutePaths.registrar(widget.eventoId));
                   },
                 ),
@@ -305,7 +310,7 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
     final imagenUrl = evento.imagenUrl;
 
     return TwHeroCard(
-      dateText: formatearFechaLarga(evento.fecha),
+      dateText: formatearFechaActividad(evento.fecha, evento.duracionDias),
       status: evento.yaOcurrio ? TwStatus.finalizado : TwStatus.activo,
       title: evento.nombre,
       location: lugar,

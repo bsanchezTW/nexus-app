@@ -211,9 +211,7 @@ class _UsarEventoExternoScreenState
                             ? TwIconBoxStyle.brand
                             : TwIconBoxStyle.blueTint,
                         title: e.nombre,
-                        subtitle: operable
-                            ? null
-                            : (e.yaOcurrio ? 'Finalizado' : 'Inactivo'),
+                        subtitle: operable ? null : 'Finalizado',
                         onTap: () {
                           if (!operable) return;
                           Navigator.of(ctx).pop(e);
@@ -448,7 +446,12 @@ class _EventoExternoHero extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Flexible(
-                      child: TwDatePill(formatearFechaLarga(evento.fecha)),
+                      child: TwDatePill(
+                        formatearFechaActividad(
+                          evento.fecha,
+                          evento.duracionDias,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     TwStatusPill(

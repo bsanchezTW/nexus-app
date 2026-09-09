@@ -27,9 +27,7 @@ Deno.serve(async (req) => {
       return json({ error: "Correo inválido" }, 400);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminClient = createAdminClient(supabaseUrl, serviceRoleKey);
+    const adminClient = createAdminClient();
 
     const user = await findAuthUserByEmail(adminClient, email);
     if (!user) {

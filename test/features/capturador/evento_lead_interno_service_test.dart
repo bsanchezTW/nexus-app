@@ -45,6 +45,7 @@ class FakeEventosLeadsRepository extends EventosLeadsRepository {
       id: 'evento-lead-nuevo',
       nombre: evento.nombre,
       fecha: evento.fecha,
+      duracionDias: evento.duracionDias,
       pais: evento.pais,
       tematica: evento.tematica,
       eventoOrigenId: evento.eventoOrigenId,
@@ -88,6 +89,7 @@ void main() {
     pais: 'Chile',
     tematica: 'Telecomunicaciones',
     imagenUrl: 'https://cdn.example/connect.jpg',
+    duracionDias: 3,
   );
 
   testWidgets('el primer lead crea el evento de leads interno vinculado', (
@@ -102,6 +104,7 @@ void main() {
     expect(repo.creados.single.tipo, TipoEventoLead.interno);
     expect(repo.creados.single.pais, 'Chile');
     expect(repo.creados.single.imagenUrl, 'https://cdn.example/connect.jpg');
+    expect(repo.creados.single.duracionDias, 3);
     expect(resuelto.id, 'evento-lead-nuevo');
   });
 

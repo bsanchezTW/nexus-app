@@ -2,34 +2,34 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/connectivity_service.dart';
 import '../../../data/models/evento.dart';
+import '../../../data/models/evento_lead.dart';
 import '../../../data/offline/offline_cache_tables.dart';
 import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/registrados_repository.dart';
+import '../../capturador/providers/capturador_providers.dart';
 import '../../eventos/providers/eventos_providers.dart';
 
 class HomeDashboardData {
   const HomeDashboardData({
     required this.eventos,
+    this.actividades = const [],
     required this.totalRegistrados,
     required this.totalAcreditados,
   });
 
   final List<Evento> eventos;
+  final List<EventoLead> actividades;
   final int totalRegistrados;
   final int totalAcreditados;
 
-  int get totalEventos => eventos.length;
-
-  int get eventosActivos => eventos.where((e) => e.activo).length;
-
-  int get eventosProximos =>
-      eventos.where((e) => !e.yaOcurrio && e.activo).length;
+  /// No finalizados. La fecha (y la duración en actividades) cierra el evento.
+  int get eventosActivos =>
+      eventos.where((e) => !e.yaOcurrio).length +
+      actividades.where((a) => !a.yaOcurrio).length;
 
   int get eventosEsteMes {
     final hoy = DateTime.now();
-    return eventos
-        .where((e) => e.fecha.year == hoy.year && e.fecha.month == hoy.month)
-        .length;
+    return eventos.where((e) => e.cubreMes(hoy)).length;
   }
 
   double get porcentajeAcreditacion =>
@@ -45,20 +45,11 @@ class HomeDashboardData {
       proximosEventos.isEmpty ? null : proximosEventos.first;
 
   List<Evento> eventosEnMes(DateTime mes) {
-    return eventos
-        .where((e) => e.fecha.year == mes.year && e.fecha.month == mes.month)
-        .toList();
+    return eventos.where((e) => e.cubreMes(mes)).toList();
   }
 
   List<Evento> eventosEnDia(DateTime dia) {
-    return eventos
-        .where(
-          (e) =>
-              e.fecha.year == dia.year &&
-              e.fecha.month == dia.month &&
-              e.fecha.day == dia.day,
-        )
-        .toList();
+    return eventos.where((e) => e.cubreDia(dia)).toList();
   }
 }
 
@@ -90,6 +81,7 @@ final homeDashboardProvider = FutureProvider.autoDispose<HomeDashboardData>((
   ref,
 ) async {
   final eventos = await ref.watch(eventosListProvider.future);
+  final actividades = await ref.watch(eventosLeadsListProvider.future);
   final isOnline = ref.read(isOnlineProvider);
   final repo = ref.watch(registradosRepositoryProvider);
 
@@ -116,6 +108,7 @@ final homeDashboardProvider = FutureProvider.autoDispose<HomeDashboardData>((
 
   return HomeDashboardData(
     eventos: eventos,
+    actividades: actividades,
     totalRegistrados: resumen.total,
     totalAcreditados: resumen.acreditados,
   );

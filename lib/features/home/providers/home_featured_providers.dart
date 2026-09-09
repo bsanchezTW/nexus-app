@@ -69,7 +69,11 @@ Future<List<HomeFeaturedItem>> _construirDestacados(Ref ref) async {
   final eventoIds = await fijadosRepo.listarEventosFijadosOrdenados();
   final campanaIds = await fijadosRepo.listarCampanasFijadasOrdenadas();
   final dashboard = await ref.watch(homeDashboardProvider.future);
-  final proximo = dashboard.proximoEvento;
+  final campanas = await ref.watch(eventosLeadsListProvider.future);
+  final proximo = elegirProximoDestacado(
+    evento: dashboard.proximoEvento,
+    actividad: proximaActividadVigente(campanas),
+  );
   final fijados = <HomeFeaturedItem>[];
 
   if (eventoIds.isNotEmpty || campanaIds.isNotEmpty) {
@@ -94,10 +98,7 @@ Future<List<HomeFeaturedItem>> _construirDestacados(Ref ref) async {
     }
   }
 
-  final items = ensamblarHomeFeaturedItems(
-    fijados: fijados,
-    proximo: proximo == null ? null : HomeFeaturedItem.proximoEvento(proximo),
-  );
+  final items = ensamblarHomeFeaturedItems(fijados: fijados, proximo: proximo);
 
   if (items.isEmpty) return items;
 
@@ -123,7 +124,7 @@ Future<HomeFeaturedItem> _conMetricas({
   required LeadsRepository leadsRepo,
 }) async {
   try {
-    if (item.kind == HomeFeaturedKind.campanaFijada) {
+    if (item.esActividadCaptura) {
       final resumen = await leadsRepo.obtenerResumenCampana(item.id);
       return item.copyWith(leads: resumen.total);
     }

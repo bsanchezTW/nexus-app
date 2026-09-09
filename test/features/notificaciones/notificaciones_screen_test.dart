@@ -232,4 +232,51 @@ void main() {
     expect(find.text('Notificaciones'), findsOneWidget);
     expect(find.text('1 seleccionada(s)'), findsNothing);
   });
+
+  testWidgets('deslizar a la izquierda descarta la notificación', (
+    tester,
+  ) async {
+    final repo = FakeNotificacionesRepository(
+      fakeList: [
+        _notificacion(id: '1', cuerpo: 'Ana se registró a Summit'),
+        _notificacion(id: '2', cuerpo: 'Luis se registró a Expo'),
+      ],
+    );
+
+    await _montar(tester, repo: repo);
+
+    expect(find.byType(Dismissible), findsNWidgets(2));
+
+    await tester.drag(
+      find.text('Ana se registró a Summit'),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ana se registró a Summit'), findsNothing);
+    expect(find.text('Luis se registró a Expo'), findsOneWidget);
+    expect(repo.ultimasOcultadas, ['1']);
+    expect(repo.ocultarTodasLlamado, isFalse);
+  });
+
+  testWidgets('deslizar a la derecha descarta la notificación', (tester) async {
+    final repo = FakeNotificacionesRepository(
+      fakeList: [
+        _notificacion(id: '1', cuerpo: 'Ana se registró a Summit'),
+        _notificacion(id: '2', cuerpo: 'Luis se registró a Expo'),
+      ],
+    );
+
+    await _montar(tester, repo: repo);
+
+    await tester.drag(
+      find.text('Luis se registró a Expo'),
+      const Offset(500, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Luis se registró a Expo'), findsNothing);
+    expect(find.text('Ana se registró a Summit'), findsOneWidget);
+    expect(repo.ultimasOcultadas, ['2']);
+  });
 }

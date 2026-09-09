@@ -12,37 +12,40 @@ void main() {
   Evento evento(
     String id, {
     required DateTime fecha,
-    bool activo = true,
     String? nombre,
+    int duracionDias = 1,
   }) {
-    return Evento(id: id, nombre: nombre ?? id, fecha: fecha, activo: activo);
+    return Evento(
+      id: id,
+      nombre: nombre ?? id,
+      fecha: fecha,
+      duracionDias: duracionDias,
+    );
   }
 
-  EventoLead actividad(String id, {required DateTime fecha, String? origenId}) {
+  EventoLead actividad(
+    String id, {
+    required DateTime fecha,
+    String? origenId,
+    int duracionDias = 1,
+  }) {
     return EventoLead(
       id: id,
       nombre: id,
       fecha: fecha,
+      duracionDias: duracionDias,
       eventoOrigenId: origenId,
     );
   }
 
   group('SnapshotService.eventosDelSnapshot', () {
-    test('baja los activos que aún no han ocurrido', () {
+    test('baja los que aún no han ocurrido', () {
       final elegidos = SnapshotService.eventosDelSnapshot([
         evento('hoy', fecha: hoy),
         evento('futuro', fecha: manana),
       ]);
 
       expect(elegidos.map((e) => e.id), ['hoy', 'futuro']);
-    });
-
-    test('un evento pausado por el admin no ocupa disco', () {
-      final elegidos = SnapshotService.eventosDelSnapshot([
-        evento('pausado', fecha: manana, activo: false),
-      ]);
-
-      expect(elegidos, isEmpty);
     });
 
     test('lo ya finalizado deja de bajarse', () {
@@ -53,6 +56,18 @@ void main() {
 
       expect(elegidos.map((e) => e.id), ['vigente']);
     });
+
+    test(
+      'un evento de varios días sigue bajándose aunque haya empezado ayer',
+      () {
+        final elegidos = SnapshotService.eventosDelSnapshot([
+          evento('corta', fecha: ayer),
+          evento('larga', fecha: ayer, duracionDias: 3),
+        ]);
+
+        expect(elegidos.map((e) => e.id), ['larga']);
+      },
+    );
   });
 
   group('SnapshotService.actividadesDelSnapshot', () {
@@ -63,6 +78,15 @@ void main() {
       ]);
 
       expect(elegidas.map((e) => e.id), ['viva']);
+    });
+
+    test('una de varios días sigue vigente aunque haya empezado ayer', () {
+      final elegidas = SnapshotService.actividadesDelSnapshot([
+        actividad('corta', fecha: ayer),
+        actividad('larga', fecha: ayer, duracionDias: 3),
+      ]);
+
+      expect(elegidas.map((e) => e.id), ['larga']);
     });
   });
 
@@ -123,15 +147,13 @@ void main() {
       expect(conservados, {'futuro', 'hoy', 'en-margen'});
     });
 
-    test('un evento pausado igual se conserva si su fecha no pasó', () {
-      // La purga solo mira la fecha: `activo = false` decide qué se **baja**,
-      // no qué se tira. Apagar un evento un rato no puede vaciar el disco de
-      // quien ya lo tenía descargado.
+    test('mira el último día, no el de inicio', () {
       final conservados = SnapshotService.eventosAConservar([
-        evento('pausado', fecha: DateTime(2026, 9, 5), activo: false),
+        evento('un-dia-vieja', fecha: DateTime(2026, 6, 1)),
+        evento('multi-dia', fecha: DateTime(2026, 8, 18), duracionDias: 5),
       ], ahora: ahora);
 
-      expect(conservados, {'pausado'});
+      expect(conservados, {'multi-dia'});
     });
 
     test('lo caducado con escrituras pendientes no se toca', () {
@@ -141,28 +163,43 @@ void main() {
         ahora: ahora,
       );
 
-      expect(
-        conservados,
-        {'viejo'},
-        reason: 'su caché es lo único que sostiene lo capturado sin red',
-      );
+      expect(conservados, {
+        'viejo',
+      }, reason: 'su caché es lo único que sostiene lo capturado sin red');
+    });
+  });
+
+  group('SnapshotService.actividadesAConservar', () {
+    final ahora = DateTime(2026, 8, 21, 22, 0);
+
+    test('mira el último día, no el de inicio', () {
+      final conservados = SnapshotService.actividadesAConservar([
+        actividad('un-dia-vieja', fecha: DateTime(2026, 6, 1)),
+        actividad('multi-dia', fecha: DateTime(2026, 8, 18), duracionDias: 5),
+      ], ahora: ahora);
+
+      expect(conservados, {'multi-dia'});
     });
   });
 
   group('SnapshotService.origenesAConservar', () {
     test('se indexa por el evento de origen, no por la actividad', () {
-      final origenes = SnapshotService.origenesAConservar([
-        actividad('c1', fecha: DateTime(2026, 9, 1), origenId: 'evento-1'),
-        actividad('c2', fecha: DateTime(2026, 9, 1), origenId: 'evento-2'),
-      ], {'c1'});
+      final origenes = SnapshotService.origenesAConservar(
+        [
+          actividad('c1', fecha: DateTime(2026, 9, 1), origenId: 'evento-1'),
+          actividad('c2', fecha: DateTime(2026, 9, 1), origenId: 'evento-2'),
+        ],
+        {'c1'},
+      );
 
       expect(origenes, {'evento-1'});
     });
 
     test('una actividad externa sin origen no deja clave', () {
-      final origenes = SnapshotService.origenesAConservar([
-        actividad('c1', fecha: DateTime(2026, 9, 1)),
-      ], {'c1'});
+      final origenes = SnapshotService.origenesAConservar(
+        [actividad('c1', fecha: DateTime(2026, 9, 1))],
+        {'c1'},
+      );
 
       expect(origenes, isEmpty);
     });

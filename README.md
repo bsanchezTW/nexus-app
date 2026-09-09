@@ -26,7 +26,7 @@ y 18) y corrige explícitamente los hallazgos críticos ahí identificados.
 | 9 | `.env` con credenciales reales incluido en el ZIP pese a `.gitignore`. | `.env` real nunca se versiona; `.env.example` documenta las variables sin valores reales. Ver `.gitignore`. |
 | 10 | Control de acceso por rol solo en la UI (`if (rol === 'admin')` repetido en decenas de archivos). | Sigue existiendo en la UI por UX (`RequireAdmin`, `isAdminProvider`), pero ya no es la única barrera: RLS + triggers son la fuente de verdad. |
 | 11 | El cambio obligatorio de contraseña (`perfiles.cambiar_pass`, regla 6.1 de la doc) existía como pantalla pero nada lo forzaba: un usuario marcado podía seguir usando la app. | El `redirect` del router fuerza `/recrear-pass` mientras `cambiar_pass = true`; al guardar la nueva contraseña se refresca el perfil y se vuelve al home. |
-| 12 | La Edge Function `enviar-qr` estaba declarada pero **nunca se invocaba**, `email_confirmacion_enviado` nunca se marcaba, y ningún flujo mostraba/entregaba el QR del asistente (la pantalla de escaneo leía un QR que nadie tenía). | Desde "Ver registrados" se puede abrir el QR de cada asistente (codifica `registrados.id`, lo mismo que lee el escáner) y enviarlo por email vía `enviar-qr`, marcando `email_confirmacion_enviado`. |
+| 12 | La Edge Function `enviar-qr` estaba declarada pero **nunca se invocaba**, `email_confirmacion_enviado` nunca se marcaba, y ningún flujo mostraba/entregaba el QR del asistente (la pantalla de escaneo leía un QR que nadie tenía). | Desde "Ver registrados" se puede abrir el QR de cada asistente (codifica `registrados.id`, lo mismo que lee el escáner) y enviarlo por email y SMS vía `enviar-qr`, marcando `email_confirmacion_enviado` y `sms_confirmacion_enviado`. |
 
 ## Arquitectura
 
@@ -152,15 +152,31 @@ docs/
 |---------|-----|
 | `crear-usuario` | Alta por admin + email de credenciales (Brevo) |
 | `regenerar-password-usuario` | Nueva password por admin + email |
-| `reset-password` | Olvido de contraseña (invocar con `--no-verify-jwt`) |
-| `enviar-qr` | QR de acreditación por email (Brevo) |
+| `reset-password` | Olvido de contraseña (sin sesión) |
+| `enviar-qr` | QR de acreditación por email y SMS (Brevo) |
 | `enviar-push` | Envía FCM al insertar en `notificaciones` (secret `FIREBASE_SERVICE_ACCOUNT_JSON`) |
 | `limpiar-storage` | Vacía la cola `storage_basura`: borra los objetos que ya no referencia ninguna fila |
 
 Desplegar con `supabase functions deploy`. El secret `BREVO_API_KEY` lo
-comparten las funciones de correo. Remitentes: `soporte@transworld.cl`
+comparten las funciones de correo y SMS. Remitentes: `soporte@transworld.cl`
 (credenciales / reset) y `contacto@transworld.cl` (QR y comunicaciones
-de evento). Detalle del webhook y Firebase:
+de evento).
+
+Las functions leen `SUPABASE_PUBLISHABLE_KEYS` y `SUPABASE_SECRET_KEYS`
+(JSON inyectado por el runtime, keyed por el nombre de cada key). La
+secret se toma de `default`. Publishable de la app: `nexus_app`. Del
+formulario: `eventos_web`. Si el JSON no está, caen a las JWT legacy.
+`verify_jwt` está en `false`: las keys nuevas no son JWT y cada función
+autoriza en código (sesión del usuario o `apikey` secret). El webhook de
+`enviar-push` debe mandar `apikey: <sb_secret_…>`, no `Authorization: Bearer`
+con la secret.
+
+SMS transaccional de QR (eventos `cliente`) usa además
+`BREVO_SMS_SENDER` (nombre alfanumérico, máx. 11 caracteres; por defecto
+`Transworld` si el secreto no está). El SMS lleva un enlace a la imagen del
+QR. Hace falta crédito SMS en la cuenta Brevo.
+
+Detalle del webhook y Firebase:
 [`docs/NOTIFICACIONES_PUSH.md`](docs/NOTIFICACIONES_PUSH.md).
 
 ## Pendiente / próximos pasos
@@ -312,4 +328,7 @@ suben a mano a la Release.
 
 ### Variables `.env`
 
-Ver `.env.example`: `GITHUB_OWNER`, `GITHUB_REPO`, `UPDATE_CHANNEL`.
+Ver `.env.example`. Para Supabase: `SUPABASE_URL`, la publishable
+`nexus_app` en `SUPABASE_PUBLISHABLE_KEY` o `SUPABASE_ANON_KEY`, y
+`eventos_web` en `SUPABASE_PUBLISHABLE_KEY_FORM` (si falta, se reusa la
+de la app). OTA: `GITHUB_OWNER`, `GITHUB_REPO`, `UPDATE_CHANNEL`.

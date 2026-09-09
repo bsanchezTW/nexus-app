@@ -28,6 +28,7 @@ class Registrado {
     this.origen = OrigenRegistro.app,
     this.ingresadoPor,
     this.emailConfirmacionEnviado = false,
+    this.smsConfirmacionEnviado = false,
     this.createdAt,
     this.pendienteDeSincronizar = false,
   });
@@ -55,6 +56,7 @@ class Registrado {
   final OrigenRegistro origen;
   final String? ingresadoPor;
   final bool emailConfirmacionEnviado;
+  final bool smsConfirmacionEnviado;
   final DateTime? createdAt;
 
   /// true cuando esta fila tiene algo sin subir: o vive solo en la cola local
@@ -94,6 +96,8 @@ class Registrado {
       ingresadoPor: map['ingresado_por'] as String?,
       emailConfirmacionEnviado:
           (map['email_confirmacion_enviado'] as bool?) ?? false,
+      smsConfirmacionEnviado:
+          (map['sms_confirmacion_enviado'] as bool?) ?? false,
       createdAt: map['created_at'] != null
           ? DateTime.tryParse(map['created_at'] as String)
           : null,
@@ -119,7 +123,7 @@ class Registrado {
 
   /// Serializa la fila completa para la caché offline, de modo que
   /// [Registrado.fromMap] la reconstruya sin pérdidas. No sirve `toInsertMap`:
-  /// ese omite `id`, `created_at` y `email_confirmacion_enviado`
+  /// ese omite `id`, `created_at` y los flags de confirmación
   /// porque los pone la base de datos al insertar.
   Map<String, dynamic> toCacheMap() {
     return {
@@ -138,6 +142,7 @@ class Registrado {
       'origen': origen.name,
       'ingresado_por': ingresadoPor,
       'email_confirmacion_enviado': emailConfirmacionEnviado,
+      'sms_confirmacion_enviado': smsConfirmacionEnviado,
       'created_at': createdAt?.toIso8601String(),
     };
   }
@@ -177,6 +182,10 @@ class Registrado {
         'email_confirmacion_enviado',
         emailConfirmacionEnviado,
       ),
+      smsConfirmacionEnviado: booleano(
+        'sms_confirmacion_enviado',
+        smsConfirmacionEnviado,
+      ),
       createdAt: createdAt,
       pendienteDeSincronizar: true,
     );
@@ -210,6 +219,7 @@ class Registrado {
       origen: origen,
       ingresadoPor: ingresadoPor,
       emailConfirmacionEnviado: emailConfirmacionEnviado,
+      smsConfirmacionEnviado: smsConfirmacionEnviado,
       createdAt: createdAt,
       pendienteDeSincronizar:
           pendienteDeSincronizar ?? this.pendienteDeSincronizar,

@@ -516,3 +516,4 @@ String? validarPatente(String? value, {bool requerido = true}) {
 }
 
 const kMensajeEmailDuplicado = 'Ese correo ya está registrado en este evento.';
+const kMensajeEventoFinalizado = 'Este evento ha finalizado';

@@ -20,12 +20,13 @@ void main() {
     origen: OrigenRegistro.excel,
     ingresadoPor: 'perfil-9',
     emailConfirmacionEnviado: true,
+    smsConfirmacionEnviado: true,
     createdAt: DateTime.utc(2026, 3, 14, 9, 30),
   );
 
   group('Registrado.toCacheMap', () {
     // toInsertMap no sirve para la caché: omite id, created_at y
-    // email_confirmacion_enviado porque los completa la base de datos.
+    // los flags de confirmación porque los completa la base de datos.
     test('sobrevive el viaje de ida y vuelta por la caché', () {
       final revivido = Registrado.fromMap(
         Map<String, dynamic>.from(
@@ -48,6 +49,7 @@ void main() {
       expect(revivido.origen, OrigenRegistro.excel);
       expect(revivido.ingresadoPor, registrado.ingresadoPor);
       expect(revivido.emailConfirmacionEnviado, isTrue);
+      expect(revivido.smsConfirmacionEnviado, isTrue);
       expect(revivido.createdAt, registrado.createdAt);
       expect(revivido.pendienteDeSincronizar, isFalse);
     });
@@ -61,6 +63,7 @@ void main() {
       expect(map.containsKey('id'), isFalse);
       expect(map.containsKey('created_at'), isFalse);
       expect(map.containsKey('email_confirmacion_enviado'), isFalse);
+      expect(map.containsKey('sms_confirmacion_enviado'), isFalse);
     });
 
     test('incluye origen publico para el formulario anónimo', () {
@@ -100,6 +103,18 @@ void main() {
 
       expect(desdeJoin.bloqueId, 'bloque-9');
       expect(desdeJoin.bloqueEtiqueta, 'Bloques 1 y 2');
+    });
+
+    test('tolera filas sin sms_confirmacion_enviado', () {
+      final desdeMap = Registrado.fromMap({
+        'id': 'id-1',
+        'evento_id': 'evento-1',
+        'nombre_completo': 'Ana Díaz',
+        'email': 'ana@empresa.cl',
+      });
+
+      expect(desdeMap.smsConfirmacionEnviado, isFalse);
+      expect(desdeMap.emailConfirmacionEnviado, isFalse);
     });
   });
 
@@ -148,6 +163,7 @@ void main() {
       expect(editado.origen, OrigenRegistro.excel);
       expect(editado.createdAt, registrado.createdAt);
       expect(editado.emailConfirmacionEnviado, isTrue);
+      expect(editado.smsConfirmacionEnviado, isTrue);
     });
   });
 }

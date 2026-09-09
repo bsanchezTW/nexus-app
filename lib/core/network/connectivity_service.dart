@@ -72,7 +72,7 @@ Future<bool> _backendResponde() async {
     final respuesta = await _dioPing.getUri(
       Uri.parse('${Env.supabaseUrl}/auth/v1/health'),
       options: Options(
-        headers: {'apikey': Env.supabaseAnonKey},
+        headers: {'apikey': Env.supabasePublishableKey},
         responseType: ResponseType.plain,
         validateStatus: (_) => true,
       ),

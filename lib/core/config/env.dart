@@ -16,7 +16,25 @@ class Env {
 
   static String get supabaseUrl => _require('SUPABASE_URL');
 
-  static String get supabaseAnonKey => _require('SUPABASE_ANON_KEY');
+  /// Clave pública del cliente (`sb_publishable_…` de `nexus_app`).
+  ///
+  /// Acepta `SUPABASE_PUBLISHABLE_KEY` o, por compatibilidad, el valor que
+  /// ya esté en `SUPABASE_ANON_KEY`.
+  static String get supabasePublishableKey => resolverClavePublicable(
+    publishableKey: dotenv.env['SUPABASE_PUBLISHABLE_KEY'],
+    anonKey: dotenv.env['SUPABASE_ANON_KEY'],
+  );
+
+  /// Publishable del formulario público (`eventos_web`).
+  /// Si no está `SUPABASE_PUBLISHABLE_KEY_FORM`, se reusa la de la app.
+  static String get supabasePublishableKeyForm =>
+      resolverClavePublicableFormulario(
+        formKey: dotenv.env['SUPABASE_PUBLISHABLE_KEY_FORM'],
+        publishableKey: dotenv.env['SUPABASE_PUBLISHABLE_KEY'],
+        anonKey: dotenv.env['SUPABASE_ANON_KEY'],
+      );
+
+  static String get supabaseAnonKey => supabasePublishableKey;
 
   static String get bucketImagenes =>
       dotenv.env['SUPABASE_BUCKET_IMAGENES'] ?? 'imagenes';
@@ -35,8 +53,7 @@ class Env {
       dotenv.env['APP_PUBLIC_BASE_URL'] ?? 'https://eventos.transworld.cl/';
 
   /// Owner del repo GitHub usado como fuente OTA (`/releases/latest`).
-  static String get githubOwner =>
-      dotenv.env['GITHUB_OWNER'] ?? 'bsanchezTW';
+  static String get githubOwner => dotenv.env['GITHUB_OWNER'] ?? 'bsanchezTW';
 
   /// Nombre del repo GitHub usado como fuente OTA.
   static String get githubRepo =>
@@ -47,12 +64,38 @@ class Env {
 
   static String _require(String key) {
     final value = dotenv.env[key];
-    if (value == null || value.isEmpty || value.startsWith('TU_')) {
+    if (!valorEnvConfigurado(value)) {
       throw StateError(
         'Falta configurar "$key" en el archivo .env (copia .env.example a '
         '.env y completa los valores reales de tu proyecto Supabase).',
       );
     }
-    return value;
+    return value!;
   }
+}
+
+bool valorEnvConfigurado(String? value) =>
+    value != null && value.isNotEmpty && !value.startsWith('TU_');
+
+/// Resuelve la clave pública sin tocar dotenv: útil en tests y para aceptar
+/// tanto el nombre nuevo como `SUPABASE_ANON_KEY`.
+String resolverClavePublicable({String? publishableKey, String? anonKey}) {
+  if (valorEnvConfigurado(publishableKey)) return publishableKey!;
+  if (valorEnvConfigurado(anonKey)) return anonKey!;
+  throw StateError(
+    'Falta configurar "SUPABASE_PUBLISHABLE_KEY" o "SUPABASE_ANON_KEY" en '
+    'el archivo .env.',
+  );
+}
+
+String resolverClavePublicableFormulario({
+  String? formKey,
+  String? publishableKey,
+  String? anonKey,
+}) {
+  if (valorEnvConfigurado(formKey)) return formKey!;
+  return resolverClavePublicable(
+    publishableKey: publishableKey,
+    anonKey: anonKey,
+  );
 }

@@ -15,9 +15,7 @@ Deno.serve(async (req) => {
     if (!caller.ok) return caller.response;
     const { callerClient } = caller;
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminClient = createAdminClient(supabaseUrl, serviceRoleKey);
+    const adminClient = createAdminClient();
 
     const { data: isAdmin, error: adminError } = await callerClient.rpc(
       "rpe_is_admin",

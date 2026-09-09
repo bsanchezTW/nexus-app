@@ -12,7 +12,9 @@ import 'package:transworld_nexus/core/constants/app_role.dart';
 import 'package:transworld_nexus/core/network/connectivity_service.dart';
 import 'package:transworld_nexus/core/router/page_transitions.dart';
 import 'package:transworld_nexus/core/router/route_paths.dart';
+import 'package:transworld_nexus/core/utils/registro_asistente.dart';
 import 'package:transworld_nexus/core/widgets/app_widgets.dart';
+import 'package:transworld_nexus/core/widgets/tw_toast.dart';
 import 'package:transworld_nexus/data/models/evento.dart';
 import 'package:transworld_nexus/data/models/perfil.dart';
 import 'package:transworld_nexus/data/offline/sync_queue_service.dart';
@@ -242,6 +244,60 @@ void main() {
         findsOneWidget,
         reason: 'el tile quedó girando y sin onTap tras volver sin pop',
       );
+    },
+  );
+
+  testWidgets(
+    'un evento fuera de vigencia avisa al intentar registrar',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(TwToast.hide);
+
+      final ayer = DateTime.now().subtract(const Duration(days: 1));
+      final finalizado = Evento(
+        id: 'evento-1',
+        nombre: 'Evento cerrado',
+        fecha: DateTime(ayer.year, ayer.month, ayer.day),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(preferences),
+            connectivityStreamProvider.overrideWith(
+              (ref) => Stream.value(true),
+            ),
+            authStateChangesProvider.overrideWith(
+              (ref) => const Stream<AuthState>.empty(),
+            ),
+            currentPerfilProvider.overrideWith((ref) async => perfil),
+            registradosPorEventoProvider.overrideWith((ref, id) async => []),
+            registradosResumenProvider.overrideWith(
+              (ref, id) => const RegistradosResumen(
+                total: 0,
+                acreditados: 0,
+                pendientes: 0,
+              ),
+            ),
+            eventoByIdProvider.overrideWith((ref, id) async => finalizado),
+            eventoLeadInternoProvider.overrideWith((ref, id) async => null),
+          ],
+          child: const MaterialApp(
+            locale: Locale('es'),
+            home: UsarEventoScreen(eventoId: 'evento-1'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Registrar asistente'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      expect(find.text(kMensajeEventoFinalizado), findsOneWidget);
     },
   );
 }

@@ -154,7 +154,6 @@ class _GestionarAccesoEventoBodyState
                       enabled: !_guardando,
                       permiteNuevosExternos:
                           eventoAsync.valueOrNull != null &&
-                          eventoAsync.valueOrNull!.activo &&
                           !eventoAsync.valueOrNull!.yaOcurrio,
                       onChanged: (ids) => setState(() {
                         _usuarioIds

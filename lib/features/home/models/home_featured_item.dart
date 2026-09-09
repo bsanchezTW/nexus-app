@@ -2,7 +2,12 @@ import '../../../core/router/route_paths.dart';
 import '../../../data/models/evento.dart';
 import '../../../data/models/evento_lead.dart';
 
-enum HomeFeaturedKind { proximoEvento, eventoFijado, campanaFijada }
+enum HomeFeaturedKind {
+  proximoEvento,
+  eventoFijado,
+  campanaFijada,
+  proximaActividad,
+}
 
 /// Ítem mostrable en la card/slider del header del home.
 class HomeFeaturedItem {
@@ -34,12 +39,15 @@ class HomeFeaturedItem {
       kind == HomeFeaturedKind.eventoFijado ||
       kind == HomeFeaturedKind.campanaFijada;
 
-  bool get esActividadCaptura => kind == HomeFeaturedKind.campanaFijada;
+  bool get esActividadCaptura =>
+      kind == HomeFeaturedKind.campanaFijada ||
+      kind == HomeFeaturedKind.proximaActividad;
 
   String get etiqueta => switch (kind) {
     HomeFeaturedKind.proximoEvento => 'PRÓXIMO EVENTO',
     HomeFeaturedKind.eventoFijado => 'EVENTO FIJADO',
     HomeFeaturedKind.campanaFijada => 'ACTIVIDAD FIJADA',
+    HomeFeaturedKind.proximaActividad => 'PRÓXIMA ACTIVIDAD',
   };
 
   /// Primario (blanco): hub de la actividad fijada; abrir el evento en el resto.
@@ -69,7 +77,8 @@ class HomeFeaturedItem {
   String get routePath => switch (kind) {
     HomeFeaturedKind.proximoEvento ||
     HomeFeaturedKind.eventoFijado => RoutePaths.usarEvento(id),
-    HomeFeaturedKind.campanaFijada => RoutePaths.usarEventoLead(id),
+    HomeFeaturedKind.campanaFijada ||
+    HomeFeaturedKind.proximaActividad => RoutePaths.usarEventoLead(id),
   };
 
   /// Copia serializable para la caché offline.
@@ -152,10 +161,22 @@ class HomeFeaturedItem {
       imagenUrl: campana.imagenUrl,
     );
   }
+
+  factory HomeFeaturedItem.proximaActividad(EventoLead campana) {
+    return HomeFeaturedItem(
+      kind: HomeFeaturedKind.proximaActividad,
+      id: campana.id,
+      nombre: campana.nombre,
+      fecha: campana.fecha,
+      lugar: campana.pais ?? '',
+      imagenUrl: campana.imagenUrl,
+    );
+  }
 }
 
-/// Slider del home: fijados primero. El próximo evento cierra la lista si no
-/// está ya fijado (si lo está, se muestra como fijado y no se duplica).
+/// Slider del home: fijados primero. El próximo (evento o actividad) cierra
+/// la lista si no está ya fijado (si lo está, se muestra como fijado y no se
+/// duplica).
 List<HomeFeaturedItem> ensamblarHomeFeaturedItems({
   required List<HomeFeaturedItem> fijados,
   HomeFeaturedItem? proximo,
@@ -165,4 +186,30 @@ List<HomeFeaturedItem> ensamblarHomeFeaturedItems({
     return List<HomeFeaturedItem>.of(fijados);
   }
   return [...fijados, proximo];
+}
+
+/// Actividad de captura vigente más cercana, o `null` si todas ya terminaron.
+EventoLead? proximaActividadVigente(Iterable<EventoLead> actividades) {
+  final lista = actividades.where((actividad) => !actividad.yaOcurrio).toList()
+    ..sort((a, b) => a.fecha.compareTo(b.fecha));
+  return lista.isEmpty ? null : lista.first;
+}
+
+/// El slot de próximo del home: el más cercano entre evento de registro y
+/// actividad de captura. Si la actividad es la interna de ese evento, manda
+/// el evento (misma pieza, sin duplicar el hero).
+HomeFeaturedItem? elegirProximoDestacado({
+  Evento? evento,
+  EventoLead? actividad,
+}) {
+  if (evento == null && actividad == null) return null;
+  if (evento == null) return HomeFeaturedItem.proximaActividad(actividad!);
+  if (actividad == null) return HomeFeaturedItem.proximoEvento(evento);
+  if (actividad.eventoOrigenId == evento.id) {
+    return HomeFeaturedItem.proximoEvento(evento);
+  }
+  if (actividad.fecha.isBefore(evento.fecha)) {
+    return HomeFeaturedItem.proximaActividad(actividad);
+  }
+  return HomeFeaturedItem.proximoEvento(evento);
 }

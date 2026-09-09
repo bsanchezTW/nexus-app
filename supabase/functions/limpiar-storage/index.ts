@@ -16,9 +16,6 @@ import { corsHeaders, json } from "../_shared/cors.ts";
  * invocar tras cada borrado y una vez por sesión sin coordinarse con nadie.
  */
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
 /** Tope por invocación: acota el tiempo de la función, y lo que sobra se
  * drena en la siguiente. */
 const LOTE_MAXIMO = 200;
@@ -35,7 +32,7 @@ serve(async (req) => {
   const auth = await resolveCallerAuth(req);
   if (!auth.ok) return auth.response;
 
-  const admin = createAdminClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  const admin = createAdminClient();
 
   const { data, error } = await admin.rpc("rpe_storage_basura_tomar", {
     p_limite: LOTE_MAXIMO,

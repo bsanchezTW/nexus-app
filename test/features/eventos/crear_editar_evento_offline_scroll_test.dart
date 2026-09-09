@@ -21,9 +21,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          connectivityStreamProvider.overrideWith(
-            (ref) => Stream.value(false),
-          ),
+          connectivityStreamProvider.overrideWith((ref) => Stream.value(false)),
           isOnlineProvider.overrideWith((ref) => false),
           currentPerfilProvider.overrideWith(
             (ref) async => const Perfil(
@@ -51,14 +49,23 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Fecha de inicio'), findsOneWidget);
+    expect(find.text('Fecha de término'), findsOneWidget);
+    expect(find.text('Este evento durará 1 día'), findsOneWidget);
+
     final scrollable = tester.state<ScrollableState>(
       find.byType(Scrollable).first,
     );
     expect(scrollable.position.pixels, 0);
 
-    await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -140));
+    await tester.drag(
+      find.byType(SingleChildScrollView),
+      const Offset(0, -140),
+    );
     await tester.pumpAndSettle();
 
     expect(scrollable.position.pixels, greaterThan(0));
+    expect(find.text('Evento activo'), findsNothing);
+    expect(find.text('Requiere certificación'), findsOneWidget);
   });
 }

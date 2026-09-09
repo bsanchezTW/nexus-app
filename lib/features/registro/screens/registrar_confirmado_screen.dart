@@ -10,7 +10,9 @@ import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
 import '../../../core/widgets/nexus_components.dart';
+import '../../../core/widgets/tw_toast.dart';
 import '../../../data/models/registrado.dart';
+import '../../../data/models/resultado_envio_qr.dart';
 import '../../../data/repositories/registrados_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../eventos/providers/eventos_providers.dart';
@@ -20,8 +22,9 @@ import '../../registrados/providers/registrados_providers.dart';
 /// acreditar o capturar un lead, que sí se encolan.
 ///
 /// El alta comprueba el duplicado de correo contra la base y dispara el envío
-/// del QR: encolarla daría por registrada a una persona que quizá ya existe y
-/// que además se quedaría sin su QR. Sin red se avisa y no se guarda nada.
+/// del QR por email y SMS: encolarla daría por registrada a una persona
+/// que quizá ya existe y que además se quedaría sin su QR. Sin red se avisa
+/// y no se guarda nada.
 class RegistrarConfirmadoScreen extends ConsumerStatefulWidget {
   const RegistrarConfirmadoScreen({super.key, required this.eventoId});
 
@@ -106,6 +109,13 @@ class _RegistrarConfirmadoScreenState
       return;
     }
 
+    final evento = ref.read(eventoByIdProvider(widget.eventoId)).valueOrNull;
+    if (evento != null && evento.yaOcurrio) {
+      _guardando = false;
+      if (mounted) TwToast.info(context, kMensajeEventoFinalizado);
+      return;
+    }
+
     try {
       final yaExiste = await ref
           .read(registradosRepositoryProvider)
@@ -130,12 +140,15 @@ class _RegistrarConfirmadoScreenState
         ingresadoPor: userId,
       );
 
-      var correoEnviado = false;
+      ResultadoEnvioQr? envio;
       final repo = ref.read(registradosRepositoryProvider);
       final creado = await repo.crear(registrado);
       try {
-        await repo.enviarQrPorEmail(creado, nombreEvento: nombreEvento);
-        correoEnviado = true;
+        envio = await repo.enviarQr(
+          creado,
+          nombreEvento: nombreEvento,
+          canales: CanalesEnvioQr.ambos,
+        );
       } catch (e) {
         debugPrint('enviar-qr tras registro manual falló: $e');
       }
@@ -143,10 +156,12 @@ class _RegistrarConfirmadoScreenState
       ref.invalidate(registradosPorEventoProvider(widget.eventoId));
 
       if (mounted) {
-        final mensaje = correoEnviado
-            ? 'Registrado con éxito. QR enviado a $email.'
-            : 'Registrado con éxito, pero no se pudo enviar el QR por email.';
-        showAppSnackBar(context, mensaje, isError: !correoEnviado);
+        final mensaje = _mensajeRegistroQr(email: email, envio: envio);
+        final algunEnvio =
+            envio != null && (envio.email.enviado || envio.sms.enviado);
+        final algunFallo =
+            envio == null || envio.email.fallido || envio.sms.fallido;
+        showAppSnackBar(context, mensaje, isError: !algunEnvio && algunFallo);
         _formKey.currentState!.reset();
         _nombreController.clear();
         _emailController.clear();
@@ -340,4 +355,38 @@ class _ToggleRow extends StatelessWidget {
       ),
     );
   }
+}
+
+String _mensajeRegistroQr({
+  required String email,
+  required ResultadoEnvioQr? envio,
+}) {
+  if (envio == null) {
+    return 'Registrado con éxito, pero no se pudo enviar el QR.';
+  }
+  final mail = envio.email;
+  final sms = envio.sms;
+
+  if (mail.enviado && sms.enviado) {
+    return 'Registrado con éxito. QR enviado por email y SMS.';
+  }
+  if (mail.enviado && sms.omitido && sms.reason == 'sin_telefono') {
+    return 'Registrado con éxito. QR enviado a $email. SMS omitido: sin teléfono.';
+  }
+  if (mail.enviado && sms.fallido) {
+    return 'Registrado con éxito. QR enviado a $email, pero no se pudo enviar por SMS.';
+  }
+  if (mail.enviado) {
+    return 'Registrado con éxito. QR enviado a $email.';
+  }
+  if (sms.enviado && mail.fallido) {
+    return 'Registrado con éxito. QR enviado por SMS, pero no se pudo enviar por email.';
+  }
+  if (sms.enviado) {
+    return 'Registrado con éxito. QR enviado por SMS.';
+  }
+  if (mail.fallido || sms.fallido) {
+    return 'Registrado con éxito, pero no se pudo enviar el QR.';
+  }
+  return 'Registrado con éxito.';
 }

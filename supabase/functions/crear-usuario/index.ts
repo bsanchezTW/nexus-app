@@ -21,6 +21,18 @@ function parseEventoIds(body: Record<string, unknown>): string[] {
   return single ? [single] : [];
 }
 
+function eventoYaFinalizo(fecha: unknown, duracionDias: unknown): boolean {
+  const raw = String(fecha ?? "");
+  if (!raw) return false;
+  const dias = Math.max(1, Number(duracionDias) || 1);
+  const termino = new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(termino.getTime())) return false;
+  termino.setDate(termino.getDate() + dias - 1);
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  return termino < hoy;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -31,10 +43,7 @@ Deno.serve(async (req) => {
     if (!caller.ok) return caller.response;
     const { callerClient } = caller;
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    // Evita que el runtime reenvíe el JWT del usuario al Admin API.
-    const adminClient = createAdminClient(supabaseUrl, serviceRoleKey);
+    const adminClient = createAdminClient();
 
     const { data: isAdmin, error: adminError } = await callerClient.rpc(
       "rpe_is_admin",
@@ -80,7 +89,7 @@ Deno.serve(async (req) => {
 
       const { data: eventos, error: eventosError } = await adminClient
         .from("eventos")
-        .select("id, nombre, activo, fecha")
+        .select("id, nombre, fecha, duracion_dias")
         .in("id", eventoIds);
 
       if (eventosError || !eventos || eventos.length !== eventoIds.length) {
@@ -88,18 +97,8 @@ Deno.serve(async (req) => {
       }
 
       if (rol === "externo") {
-        const hoy = new Date();
-        hoy.setHours(0, 0, 0, 0);
-
         for (const evento of eventos) {
-          if (!evento.activo) {
-            return json(
-              { error: `El evento "${evento.nombre}" no está activo` },
-              400,
-            );
-          }
-          const fechaEvento = new Date(`${evento.fecha}T00:00:00`);
-          if (fechaEvento < hoy) {
+          if (eventoYaFinalizo(evento.fecha, evento.duracion_dias)) {
             return json(
               { error: `El evento "${evento.nombre}" ya finalizó` },
               400,

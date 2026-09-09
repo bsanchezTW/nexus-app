@@ -317,9 +317,7 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
               loading: () => _buildHeader(),
               error: (_, _) => _buildHeader(),
               data: (eventos) {
-                final proximos = eventos
-                    .where((e) => !e.yaOcurrio && e.activo)
-                    .length;
+                final proximos = eventos.where((e) => !e.yaOcurrio).length;
                 return _buildHeader(total: eventos.length, proximos: proximos);
               },
             ),
@@ -388,6 +386,12 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
                       finalizado: evento.yaOcurrio,
                       fijado: fijado,
                       sinCache: sinCache,
+                      chip: evento.esMultiDia
+                          ? StatusChip(
+                              label: evento.etiquetaDuracion,
+                              variant: StatusChipVariant.neutral,
+                            )
+                          : null,
                       onTap: () {
                         if (sinCache) {
                           showOfflineUnavailableToast(context);

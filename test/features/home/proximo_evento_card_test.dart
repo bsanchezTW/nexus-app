@@ -36,6 +36,35 @@ void main() {
     expect(homeFeaturedSettledInset(1200), (1200 - AppSpacing.contentMax) / 2);
   });
 
+  testWidgets('sin eventos la card permanece con el mensaje de calma', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 320,
+              child: ProximoEventoCard(items: []),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(ProximoEventoCard), findsOneWidget);
+    expect(find.byKey(const Key('proximo_evento_vacio')), findsOneWidget);
+    expect(find.text('PRÓXIMO EVENTO'), findsOneWidget);
+    expect(find.text('Todo tranquilo por aquí'), findsOneWidget);
+    expect(
+      find.text('No hay próximos eventos programados por ahora'),
+      findsOneWidget,
+    );
+    expect(tester.getSize(find.byType(ProximoEventoCard)).height, greaterThan(0));
+    expect(find.text('Ver evento'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'métricas y CTA quedan anclados abajo aunque el título ocupe dos líneas',
     (tester) async {
@@ -371,6 +400,41 @@ void main() {
       tester.getTopLeft(find.text('Ver actividad')).dy,
       lessThan(tester.getTopLeft(find.text('Capturar lead')).dy),
     );
+    expect(find.text('Escanear QR'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('la próxima actividad ofrece capturar lead y no escanear QR', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 320,
+              child: ProximoEventoCard(
+                items: [
+                  HomeFeaturedItem(
+                    kind: HomeFeaturedKind.proximaActividad,
+                    id: 'evento-lead-1',
+                    nombre: 'Feria retail',
+                    fecha: DateTime(2026, 9, 20),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('proximo_evento_vacio')), findsNothing);
+    expect(find.text('PRÓXIMA ACTIVIDAD'), findsOneWidget);
+    expect(find.text('Feria retail'), findsOneWidget);
+    expect(find.text('Capturar lead'), findsOneWidget);
+    expect(find.text('Ver actividad'), findsOneWidget);
     expect(find.text('Escanear QR'), findsNothing);
     expect(tester.takeException(), isNull);
   });

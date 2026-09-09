@@ -1,14 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createAdminClient } from "../_shared/admin_client.ts";
+import { isSecretKeyRequest } from "../_shared/api_keys.ts";
 import { corsHeaders, json } from "../_shared/cors.ts";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const FIREBASE_SERVICE_ACCOUNT_JSON = Deno.env.get(
   "FIREBASE_SERVICE_ACCOUNT_JSON",
 );
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createAdminClient();
 
 type ServiceAccount = {
   project_id: string;
@@ -34,13 +33,6 @@ type DeviceTokenRow = {
   usuario_id: string;
   perfiles: { rol: string; activo: boolean } | null;
 };
-
-function isServiceRoleRequest(req: Request): boolean {
-  const authorization = req.headers.get("authorization") ?? "";
-  const apiKey = req.headers.get("apikey") ?? "";
-  return authorization === `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` ||
-    apiKey === SUPABASE_SERVICE_ROLE_KEY;
-}
 
 function base64UrlEncode(data: Uint8Array | string): string {
   const bytes = typeof data === "string"
@@ -200,9 +192,9 @@ serve(async (req) => {
   }
 
   try {
-    // Esta función es un destino de Database Webhook, no una API de cliente.
-    // verify_jwt por sí solo también acepta JWT de usuarios autenticados.
-    if (!isServiceRoleRequest(req)) {
+    // Destino de Database Webhook. Autoriza por `apikey` secret (o Bearer
+    // legacy de service_role mientras esa key siga inyectada).
+    if (!isSecretKeyRequest(req)) {
       return json({ ok: false, error: "unauthorized" }, 401);
     }
 

@@ -9,11 +9,13 @@ import '../../../core/router/refresh_on_visible.dart';
 import '../../../core/network/connectivity_service.dart';
 import '../../../core/network/offline_guard.dart';
 import '../../../core/router/route_paths.dart';
+import '../../../core/constants/duracion_actividad.dart';
 import '../../../core/constants/paises_evento.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campo_pais_evento.dart';
+import '../../../core/widgets/campos_fecha_inicio_termino.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/selector_imagen.dart';
 import '../../../core/widgets/require_permission.dart';
@@ -60,9 +62,9 @@ class _CrearEditarEventoFormState
   final _lugarController = TextEditingController();
 
   DateTime _fecha = DateTime.now();
+  int _duracionDias = 1;
   String _pais = kPaisEventoChile;
   bool _certificacion = false;
-  bool _activo = true;
   TipoRegistroEvento _tipoRegistro = TipoRegistroEvento.comercial;
   Uint8List? _imagenBytes;
   String? _imagenUrlExistente;
@@ -75,8 +77,8 @@ class _CrearEditarEventoFormState
   String _direccion0 = '';
   String _lugar0 = '';
   DateTime? _fecha0;
+  int _duracionDias0 = 1;
   bool? _certificacion0;
-  bool? _activo0;
   TipoRegistroEvento? _tipoRegistro0;
   String? _imagenUrl0;
 
@@ -90,8 +92,8 @@ class _CrearEditarEventoFormState
         _direccionController.text != _direccion0 ||
         _lugarController.text != _lugar0 ||
         _fecha != _fecha0 ||
+        _duracionDias != _duracionDias0 ||
         _certificacion != _certificacion0 ||
-        _activo != _activo0 ||
         _tipoRegistro != _tipoRegistro0 ||
         _imagenBytes != null ||
         _imagenUrlExistente != _imagenUrl0;
@@ -115,8 +117,8 @@ class _CrearEditarEventoFormState
     _direccionController.text = evento.direccion ?? '';
     _lugarController.text = evento.lugar ?? '';
     _fecha = evento.fecha;
+    _duracionDias = evento.duracionDias;
     _certificacion = evento.certificacionCapacitacion;
-    _activo = evento.activo;
     _tipoRegistro = evento.tipoRegistro;
     _imagenUrlExistente = evento.imagenUrl;
     _nombre0 = _nombreController.text;
@@ -125,8 +127,8 @@ class _CrearEditarEventoFormState
     _direccion0 = _direccionController.text;
     _lugar0 = _lugarController.text;
     _fecha0 = _fecha;
+    _duracionDias0 = _duracionDias;
     _certificacion0 = _certificacion;
-    _activo0 = _activo;
     _tipoRegistro0 = _tipoRegistro;
     _imagenUrl0 = _imagenUrlExistente;
   }
@@ -148,16 +150,6 @@ class _CrearEditarEventoFormState
     });
   }
 
-  Future<void> _elegirFecha() async {
-    final seleccionada = await showDatePicker(
-      context: context,
-      initialDate: _fecha,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (seleccionada != null) setState(() => _fecha = seleccionada);
-  }
-
   Future<void> _guardar() async {
     if (!requireOnline(context, ref)) return;
     if (!_formKey.currentState!.validate()) return;
@@ -176,12 +168,12 @@ class _CrearEditarEventoFormState
         id: widget.eventoId ?? '',
         nombre: _nombreController.text.trim(),
         fecha: _fecha,
+        duracionDias: _duracionDias,
         pais: _pais,
         tematica: _tematicaController.text.trim(),
         direccion: _direccionController.text.trim(),
         lugar: _lugarController.text.trim(),
         certificacionCapacitacion: _certificacion,
-        activo: _activo,
         imagenUrl: imagenUrl,
         tipoRegistro: _tipoRegistro,
       );
@@ -326,12 +318,22 @@ class _CrearEditarEventoFormState
                             : null,
                       ),
                       const SizedBox(height: 14),
-                      _FieldLabel('Fecha'),
-                      const SizedBox(height: 6),
-                      FechaPickerField(
-                        fecha: _fecha,
-                        onTap: _elegirFecha,
-                        enabled: !_guardando && hayRed,
+                      CamposFechaInicioTermino(
+                        fechaInicio: _fecha,
+                        duracionDias: _duracionDias,
+                        textoDuracion: textoDuracionEvento(_duracionDias),
+                        enabledInicio: !_guardando && hayRed,
+                        enabledTermino: !_guardando && hayRed,
+                        onInicioChanged: (fecha) => setState(() {
+                          _fecha = fecha;
+                          _duracionDias = 1;
+                        }),
+                        onTerminoChanged: (termino) => setState(
+                          () => _duracionDias = duracionDesdeRango(
+                            _fecha,
+                            termino,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 14),
                       Row(
@@ -420,16 +422,6 @@ class _CrearEditarEventoFormState
                         value: _certificacion,
                         onChanged: (v) => setState(() => _certificacion = v),
                       ),
-                      if (_esEdicion) ...[
-                        const SizedBox(height: 14),
-                        _ToggleCard(
-                          title: 'Evento activo',
-                          subtitle:
-                              'Los eventos inactivos no reciben autoregistro público',
-                          value: _activo,
-                          onChanged: (v) => setState(() => _activo = v),
-                        ),
-                      ],
                       const SizedBox(height: 20),
                       PrimaryGradientButton(
                         label: _esEdicion ? 'Guardar' : 'Crear evento',

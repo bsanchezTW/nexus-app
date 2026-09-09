@@ -7,6 +7,13 @@ class SupabaseRowParsers {
 
   static String? asStringOrNull(dynamic value) => value?.toString();
 
+  static int asInt(dynamic value, {int fallback = 0}) {
+    if (value == null) return fallback;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString()) ?? fallback;
+  }
+
   static DateTime parseDate(dynamic value) {
     if (value is DateTime) return value;
     return DateTime.parse(value.toString());

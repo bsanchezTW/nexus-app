@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { enviarCorreoBrevo, remitenteContacto } from "../_shared/brevo.ts";
+import { createAdminClient } from "../_shared/admin_client.ts";
+import {
+  enviarCorreoBrevo,
+  enviarSmsBrevo,
+  remitenteContacto,
+  telefonoSms,
+} from "../_shared/brevo.ts";
 
 // --- 1. CABECERAS CORS (Obligatorias para llamar desde React) ---
 const corsHeaders = {
@@ -9,14 +14,42 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-// Ambas las inyecta el runtime de Supabase; mismo criterio que el resto de
-// las funciones (crear-usuario, reset-password, ...).
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+type Canal = "email" | "sms";
+type EstadoCanal = "sent" | "skipped" | "failed" | "not_requested";
+type ResultadoCanal = { status: EstadoCanal; reason?: string };
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createAdminClient();
 const PIE_DE_FIRMA_URL =
   "https://evjocwzmlsyjixzihxep.supabase.co/storage/v1/object/public/imagenes/PIE-DE-FIRMA.png";
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status,
+  });
+}
+
+/** Si el caller manda `canales`, se respeta tal cual (nunca se agrega email). */
+function parseCanales(raw: unknown): Set<Canal> {
+  if (Array.isArray(raw)) {
+    const out = new Set<Canal>();
+    for (const c of raw) {
+      if (c === "email" || c === "sms") out.add(c);
+    }
+    return out;
+  }
+  return new Set<Canal>(["email"]);
+}
+
+function urlQr(id: string): string {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${
+    encodeURIComponent(id)
+  }`;
+}
+
+function mensajeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 serve(async (req) => {
   // --- 2. MANEJO DE PREFLIGHT (CORS) ---
@@ -27,12 +60,13 @@ serve(async (req) => {
   try {
     const payload = await req.json();
     const registro = payload.record;
+    if (!registro) {
+      return jsonResponse({ error: "Sin registro" }, 400);
+    }
 
-    if (!registro || !registro.email) {
-      return new Response("Sin email destinatario", {
-        status: 200,
-        headers: corsHeaders,
-      });
+    const canales = parseCanales(payload.canales);
+    if (canales.size === 0) {
+      return jsonResponse({ error: "Sin canales" }, 400);
     }
 
     // 2. Obtener info del evento
@@ -105,25 +139,74 @@ serve(async (req) => {
       }&location=${encodeURIComponent(ubicacion)}`;
     // ------------------------------------------
 
-    // 5. CONSTRUCCIÓN DEL CORREO (DOS PLANTILLAS)
-    let htmlContent = "";
+    const resultado: { email: ResultadoCanal; sms: ResultadoCanal } = {
+      email: { status: "not_requested" },
+      sms: { status: "not_requested" },
+    };
 
-    if (evento?.tipo_registro === "cliente") {
-      // ==========================================
-      // PLANTILLA 1: EVENTO CON QR (Cliente)
-      // ==========================================
-      const qrUrl =
-        `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${registro.id}`;
+    if (canales.has("email")) {
+      resultado.email = await enviarCanalEmail({
+        registro,
+        evento,
+        nombreEvento,
+        nombreRegistrador,
+        fechaTexto,
+        lugarEvento,
+        direccionEvento,
+        googleCalUrl,
+        outlookCalUrl,
+      });
+    }
 
-      htmlContent = `
+    if (canales.has("sms")) {
+      resultado.sms = await enviarCanalSms({
+        registro,
+        tipoRegistro: evento?.tipo_registro,
+        nombreEvento,
+        fechaTexto,
+      });
+    }
+
+    return jsonResponse(resultado, 200);
+  } catch (error) {
+    const mensaje = mensajeError(error);
+    console.error("Error Edge Function:", mensaje);
+    return jsonResponse({ error: mensaje }, 500);
+  }
+});
+
+async function enviarCanalEmail(args: {
+  registro: Record<string, unknown>;
+  evento: { tipo_registro?: string } | null;
+  nombreEvento: string;
+  nombreRegistrador: string;
+  fechaTexto: string;
+  lugarEvento: string;
+  direccionEvento: string;
+  googleCalUrl: string;
+  outlookCalUrl: string;
+}): Promise<ResultadoCanal> {
+  const email = typeof args.registro.email === "string"
+    ? args.registro.email.trim()
+    : "";
+  if (!email) {
+    return { status: "skipped", reason: "sin_email" };
+  }
+
+  const nombreCompleto = String(args.registro.nombre_completo ?? "");
+  let htmlContent = "";
+
+  if (args.evento?.tipo_registro === "cliente") {
+    const qrUrl = urlQr(String(args.registro.id ?? ""));
+    htmlContent = `
           <!DOCTYPE html>
           <html>
             <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; color: #000; margin: 0;">
               <div style="max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f4f4;">
                 
-                <p style="font-size: 16px; margin-bottom: 5px;">Hola <strong>${registro.nombre_completo}</strong>.</p>
+                <p style="font-size: 16px; margin-bottom: 5px;">Hola <strong>${nombreCompleto}</strong>.</p>
                 <p style="font-size: 16px; line-height: 1.5; margin-top: 5px;">
-                  Tu registro ha finalizado exitosamente para asistir a <strong>${nombreEvento}</strong> a realizarse el <strong>${fechaTexto}</strong> en <strong>${lugarEvento}</strong>, ubicado en <strong>${direccionEvento}</strong>.
+                  Tu registro ha finalizado exitosamente para asistir a <strong>${args.nombreEvento}</strong> a realizarse el <strong>${args.fechaTexto}</strong> en <strong>${args.lugarEvento}</strong>, ubicado en <strong>${args.direccionEvento}</strong>.
                 </p>
                 
 
@@ -149,7 +232,7 @@ serve(async (req) => {
                         <table border="0" cellspacing="0" cellpadding="0">
                           <tr>
                             <td align="center" bgcolor="#0078D4" style="border-radius: 6px;">
-                              <a href="${outlookCalUrl}" target="_blank" style="font-size: 15px; font-family: Arial, sans-serif; color: #ffffff; text-decoration: none; padding: 12px 24px; display: inline-block; font-weight: bold; border-radius: 6px; border: 1px solid #0078D4;">
+                              <a href="${args.outlookCalUrl}" target="_blank" style="font-size: 15px; font-family: Arial, sans-serif; color: #ffffff; text-decoration: none; padding: 12px 24px; display: inline-block; font-weight: bold; border-radius: 6px; border: 1px solid #0078D4;">
                                 📅 Outlook
                               </a>
                             </td>
@@ -160,7 +243,7 @@ serve(async (req) => {
                         <table border="0" cellspacing="0" cellpadding="0">
                           <tr>
                             <td align="center" bgcolor="#4285F4" style="border-radius: 6px;">
-                              <a href="${googleCalUrl}" target="_blank" style="font-size: 15px; font-family: Arial, sans-serif; color: #ffffff; text-decoration: none; padding: 12px 24px; display: inline-block; font-weight: bold; border-radius: 6px; border: 1px solid #4285F4;">
+                              <a href="${args.googleCalUrl}" target="_blank" style="font-size: 15px; font-family: Arial, sans-serif; color: #ffffff; text-decoration: none; padding: 12px 24px; display: inline-block; font-weight: bold; border-radius: 6px; border: 1px solid #4285F4;">
                                 📅 Google Calendar
                               </a>
                             </td>
@@ -185,24 +268,21 @@ serve(async (req) => {
             </body>
           </html>
         `;
-    } else {
-      // ==========================================
-      // PLANTILLA 2: EVENTO SIN QR (Comercial)
-      // ==========================================
-      htmlContent = `
+  } else {
+    htmlContent = `
           <!DOCTYPE html>
           <html>
             <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; color: #000; margin: 0;">
               <div style="max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f4f4;">
                 
-                <p style="font-size: 16px; margin-bottom: 5px;">Hola <strong>${registro.nombre_completo}</strong>.</p>
+                <p style="font-size: 16px; margin-bottom: 5px;">Hola <strong>${nombreCompleto}</strong>.</p>
                 
                 <p style="font-size: 16px; line-height: 1.5; margin-top: 5px;">
-                  Te informamos que <strong>${nombreRegistrador}</strong> te ha registrado para participar en el evento/actividad <strong>${nombreEvento}</strong> a realizarse el <strong>${fechaTexto}</strong> en <strong>${lugarEvento}</strong>, ubicado en <strong>${direccionEvento}</strong>.
+                  Te informamos que <strong>${args.nombreRegistrador}</strong> te ha registrado para participar en el evento/actividad <strong>${args.nombreEvento}</strong> a realizarse el <strong>${args.fechaTexto}</strong> en <strong>${args.lugarEvento}</strong>, ubicado en <strong>${args.direccionEvento}</strong>.
                 </p>
                 
                 <p style="font-size: 16px; line-height: 1.5; margin-top: 15px;">
-                  Si tienes alguna consulta, comunícate con <strong>${nombreRegistrador}</strong> o escríbenos a <a href="mailto:contacto@transworld.cl" style="color: #206591; text-decoration: underline;">contacto@transworld.cl</a>.
+                  Si tienes alguna consulta, comunícate con <strong>${args.nombreRegistrador}</strong> o escríbenos a <a href="mailto:contacto@transworld.cl" style="color: #206591; text-decoration: underline;">contacto@transworld.cl</a>.
                 </p>
 
                 <div style="margin-top: 35px; margin-bottom: 55px; text-align: center;">
@@ -214,7 +294,7 @@ serve(async (req) => {
                         <table border="0" cellspacing="0" cellpadding="0">
                           <tr>
                             <td align="center" bgcolor="#0078D4" style="border-radius: 6px;">
-                              <a href="${outlookCalUrl}" target="_blank" style="font-size: 15px; font-family: Arial, sans-serif; color: #ffffff; text-decoration: none; padding: 12px 24px; display: inline-block; font-weight: bold; border-radius: 6px; border: 1px solid #0078D4;">
+                              <a href="${args.outlookCalUrl}" target="_blank" style="font-size: 15px; font-family: Arial, sans-serif; color: #ffffff; text-decoration: none; padding: 12px 24px; display: inline-block; font-weight: bold; border-radius: 6px; border: 1px solid #0078D4;">
                                 📅 Outlook
                               </a>
                             </td>
@@ -225,7 +305,7 @@ serve(async (req) => {
                         <table border="0" cellspacing="0" cellpadding="0">
                           <tr>
                             <td align="center" bgcolor="#4285F4" style="border-radius: 6px;">
-                              <a href="${googleCalUrl}" target="_blank" style="font-size: 15px; font-family: Arial, sans-serif; color: #ffffff; text-decoration: none; padding: 12px 24px; display: inline-block; font-weight: bold; border-radius: 6px; border: 1px solid #4285F4;">
+                              <a href="${args.googleCalUrl}" target="_blank" style="font-size: 15px; font-family: Arial, sans-serif; color: #ffffff; text-decoration: none; padding: 12px 24px; display: inline-block; font-weight: bold; border-radius: 6px; border: 1px solid #4285F4;">
                                 📅 Google Calendar
                               </a>
                             </td>
@@ -250,40 +330,77 @@ serve(async (req) => {
             </body>
           </html>
         `;
-    }
+  }
 
-    // 6. Enviar correo usando BREVO API (prioridad alta para Outlook)
+  try {
     const res = await enviarCorreoBrevo({
       sender: {
-        name: `Registro evento ${nombreEvento}`,
+        name: `Registro evento ${args.nombreEvento}`,
         email: remitenteContacto.email,
       },
       replyTo: remitenteContacto,
       to: [
-        { email: registro.email, name: registro.nombre_completo },
+        { email, name: nombreCompleto },
       ],
-      subject: `Confirmación de Registro a ${nombreEvento}`,
+      subject: `Confirmación de Registro a ${args.nombreEvento}`,
       htmlContent: htmlContent,
       tags: ["confirmacion-registro"],
     });
 
     if (!res.ok) {
       const errorData = await res.text();
-      console.error("Error Brevo:", errorData);
-      throw new Error(`Error enviando email: ${errorData}`);
+      console.error("Error Brevo email:", errorData);
+      return { status: "failed", reason: errorData };
     }
-
-    const data = await res.json();
-    return new Response(JSON.stringify(data), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+    return { status: "sent" };
   } catch (error) {
-    const mensaje = error instanceof Error ? error.message : String(error);
-    console.error("Error Edge Function:", mensaje);
-    return new Response(JSON.stringify({ error: mensaje }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    const mensaje = mensajeError(error);
+    console.error("Error Brevo email:", mensaje);
+    return { status: "failed", reason: mensaje };
   }
-});
+}
+
+async function enviarCanalSms(args: {
+  registro: Record<string, unknown>;
+  tipoRegistro: string | undefined;
+  nombreEvento: string;
+  fechaTexto: string;
+}): Promise<ResultadoCanal> {
+  if (args.tipoRegistro !== "cliente") {
+    return { status: "skipped", reason: "evento_comercial" };
+  }
+
+  const numero = telefonoSms(args.registro.telefono);
+  if (!numero) {
+    return { status: "skipped", reason: "sin_telefono" };
+  }
+
+  const id = typeof args.registro.id === "string" ? args.registro.id.trim() : "";
+  if (!id) {
+    return { status: "skipped", reason: "sin_id" };
+  }
+
+  const nombre = String(args.registro.nombre_completo ?? "").trim();
+  const content =
+    `Hola ${nombre}. Registro a ${args.nombreEvento} (${args.fechaTexto}) confirmado. QR acreditacion: ${
+      urlQr(id)
+    }`;
+
+  try {
+    const res = await enviarSmsBrevo({
+      recipient: numero,
+      content,
+    });
+
+    if (!res.ok) {
+      const errorData = await res.text();
+      console.error("Error Brevo SMS:", errorData);
+      return { status: "failed", reason: errorData };
+    }
+    return { status: "sent" };
+  } catch (error) {
+    const mensaje = mensajeError(error);
+    console.error("Error Brevo SMS:", mensaje);
+    return { status: "failed", reason: mensaje };
+  }
+}

@@ -10,6 +10,7 @@ import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../data/models/registrado.dart';
+import '../../../data/models/resultado_envio_qr.dart';
 import '../../../data/offline/sync_queue_service.dart';
 import '../../../data/repositories/registrados_repository.dart';
 import '../../eventos/providers/eventos_providers.dart';
@@ -21,7 +22,7 @@ import '../../eventos/providers/eventos_providers.dart';
 /// la auditoría). Al vivir en la misma app Flutter Web, comparte esquema,
 /// validaciones y estilo con el resto del sistema, y su alcance queda
 /// acotado por la política `rpe_registrados_insert_publico` de
-/// `supabase/schema.sql` (solo INSERT, solo si el evento está activo).
+/// `supabase/schema.sql` (solo INSERT, solo si el evento sigue vigente).
 class RegistroPublicoScreen extends ConsumerStatefulWidget {
   const RegistroPublicoScreen({super.key, required this.eventoId});
 
@@ -80,6 +81,15 @@ class _RegistroPublicoScreenState extends ConsumerState<RegistroPublicoScreen> {
       return;
     }
 
+    final eventoCargado = ref
+        .read(eventoPublicoByIdProvider(widget.eventoId))
+        .valueOrNull;
+    if (eventoCargado != null && eventoCargado.yaOcurrio) {
+      _guardando = false;
+      if (mounted) setState(() {});
+      return;
+    }
+
     if (!mounted) {
       _guardando = false;
       return;
@@ -99,13 +109,25 @@ class _RegistroPublicoScreenState extends ConsumerState<RegistroPublicoScreen> {
     );
 
     try {
-      final repo = ref.read(registradosRepositoryProvider);
+      final repo = ref.read(registradosRepositoryPublicoProvider);
       if (ref.read(isOnlineProvider)) {
         final yaExiste = await repo.existeEmailEnEvento(widget.eventoId, email);
         if (yaExiste) {
           throw Exception(kMensajeEmailDuplicado);
         }
-        await repo.crear(registrado);
+        final creado = await repo.crear(registrado);
+        try {
+          final evento = ref
+              .read(eventoPublicoByIdProvider(widget.eventoId))
+              .valueOrNull;
+          await repo.enviarQr(
+            creado,
+            nombreEvento: evento?.nombre,
+            canales: CanalesEnvioQr.ambos,
+          );
+        } catch (e) {
+          debugPrint('enviar-qr tras registro público falló: $e');
+        }
       } else {
         await ref
             .read(syncQueueServiceProvider.notifier)
@@ -134,7 +156,7 @@ class _RegistroPublicoScreenState extends ConsumerState<RegistroPublicoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final eventoAsync = ref.watch(eventoByIdProvider(widget.eventoId));
+    final eventoAsync = ref.watch(eventoPublicoByIdProvider(widget.eventoId));
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -158,6 +180,36 @@ class _RegistroPublicoScreenState extends ConsumerState<RegistroPublicoScreen> {
                       ),
                       data: (evento) {
                         _inicializarPais(evento.pais);
+                        if (evento.yaOcurrio) {
+                          return const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Symbols.event_busy_rounded,
+                                size: 64,
+                                color: AppColors.textSecondary,
+                              ),
+                              SizedBox(height: 16),
+                              Text(
+                                'Evento finalizado',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 21,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.ink,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                'Este evento ya no acepta registros.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          );
+                        }
                         if (_enviado) {
                           return Column(
                             mainAxisSize: MainAxisSize.min,
@@ -187,7 +239,7 @@ class _RegistroPublicoScreenState extends ConsumerState<RegistroPublicoScreen> {
                               ),
                               const SizedBox(height: 8),
                               const Text(
-                                'Tu registro fue recibido. Te esperamos en el evento.',
+                                'Tu registro fue recibido. Te enviamos la confirmación por email y SMS.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: AppColors.textSecondary,

@@ -389,7 +389,19 @@ class _ListarEventosLeadsScreenState
                       finalizado: evento.yaOcurrio,
                       fijado: fijado,
                       sinCache: sinCache,
-                      chip: TwOriginPill(interno: evento.esInterno),
+                      chip: evento.esMultiDia
+                          ? Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                TwOriginPill(interno: evento.esInterno),
+                                StatusChip(
+                                  label: evento.etiquetaDuracion,
+                                  variant: StatusChipVariant.neutral,
+                                ),
+                              ],
+                            )
+                          : TwOriginPill(interno: evento.esInterno),
                       onTap: () {
                         if (sinCache) {
                           showOfflineUnavailableToast(context);

@@ -151,10 +151,9 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
 
   /// Eventos que se bajan enteros (listas y fotos).
   ///
-  /// Mismo criterio que `eventoExternoOperable`: activo y no finalizado. Un
-  /// evento pausado por el admin no ocupa disco en el teléfono.
+  /// Mismo criterio que `eventoExternoOperable`: no finalizado.
   static List<Evento> eventosDelSnapshot(List<Evento> catalogo) {
-    return catalogo.where((e) => e.activo && !e.yaOcurrio).toList();
+    return catalogo.where((e) => !e.yaOcurrio).toList();
   }
 
   /// Actividades de captura que se bajan enteras.
@@ -493,7 +492,7 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
     return idsVigentes(
       catalogo,
       id: (Evento e) => e.id,
-      fecha: (Evento e) => e.fecha,
+      fecha: (Evento e) => e.fechaFin,
       ahora: ahora,
     )..addAll(protegidos);
   }
@@ -506,7 +505,7 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
     return idsVigentes(
       actividades,
       id: (EventoLead e) => e.id,
-      fecha: (EventoLead e) => e.fecha,
+      fecha: (EventoLead e) => e.fechaFin,
       ahora: ahora,
     )..addAll(protegidos);
   }

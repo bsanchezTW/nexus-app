@@ -171,7 +171,7 @@ final usuarioEventosAutorizadosIdsProvider = Provider<Set<String>?>((ref) {
   return async.valueOrNull ?? const {};
 });
 
-bool eventoExternoOperable(Evento e) => e.activo && !e.yaOcurrio;
+bool eventoExternoOperable(Evento e) => !e.yaOcurrio;
 
 /// Override de sesión para el evento activo (tras switcher), antes de que
 /// el perfil se refresque desde la DB.

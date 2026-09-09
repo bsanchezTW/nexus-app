@@ -204,10 +204,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 onMiPerfil: () => context.push(RoutePaths.perfil),
               ),
             ),
-            if (featuredItems.isNotEmpty) ...[
-              const SizedBox(height: 18),
-              ProximoEventoCard(items: featuredItems),
-            ],
+            const SizedBox(height: 18),
+            ProximoEventoCard(items: featuredItems),
             const SizedBox(height: 20),
             _HomeColumn(
               child: Column(

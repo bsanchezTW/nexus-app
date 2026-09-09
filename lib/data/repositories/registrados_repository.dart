@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -5,6 +7,7 @@ import '../../core/constants/supabase_tables.dart';
 import '../../core/utils/registro_asistente.dart';
 import '../models/mi_acreditacion.dart';
 import '../models/registrado.dart';
+import '../models/resultado_envio_qr.dart';
 import '../offline/sync_queue_service.dart';
 import '../supabase/supabase_client_provider.dart';
 
@@ -173,19 +176,19 @@ class RegistradosRepository implements SyncExecutor {
     await _client.from(SupabaseTables.registrados).delete().eq('id', id);
   }
 
-  /// Envía el QR de acreditación al correo del registrado a través de la
-  /// Edge Function `enviar-qr` (la misma que usaba el proyecto legado, ver
-  /// Secciones 3.11/4.11 de la auditoría) y deja constancia en
-  /// `email_confirmacion_enviado`. El QR codifica `registrados.id`, que es
-  /// lo que lee la pantalla de acreditación por cámara.
+  /// Envía el QR de acreditación (UUID de `registrados.id`) por email y/o
+  /// SMS a través de la Edge Function `enviar-qr`.
   ///
-  /// El body debe ir envuelto en `{ record: {...} }` con las columnas de
-  /// `public.registrados`, exactamente como lo invocaban `EditarRegistrado`
-  /// (web/móvil legado). Un body plano (`registrado_id`/`email`/…) no es
-  /// compatible con la función desplegada.
-  Future<void> enviarQrPorEmail(
+  /// [canales] es `email`, `sms` o ambos. La función responde por canal
+  /// (`sent` / `skipped` / `failed`) y acá solo se marcan los flags de los
+  /// que realmente salieron. Eventos comerciales omiten SMS.
+  ///
+  /// El body va envuelto en `{ record: {...}, canales: [...] }` con las
+  /// columnas de `public.registrados`, como lo invocaba el legado.
+  Future<ResultadoEnvioQr> enviarQr(
     Registrado registrado, {
     String? nombreEvento,
+    required List<String> canales,
   }) async {
     final record = <String, dynamic>{
       'id': registrado.id,
@@ -200,13 +203,63 @@ class RegistradosRepository implements SyncExecutor {
       'telefono': registrado.telefono,
       'ingresado_por': registrado.ingresadoPor,
       'email_confirmacion_enviado': registrado.emailConfirmacionEnviado,
+      'sms_confirmacion_enviado': registrado.smsConfirmacionEnviado,
       'evento': ?nombreEvento,
     };
-    await _client.functions.invoke(
-      SupabaseFunctions.enviarQr,
-      body: {'record': record},
-    );
-    await actualizar(registrado.id, {'email_confirmacion_enviado': true});
+    FunctionResponse response;
+    try {
+      response = await _client.functions.invoke(
+        SupabaseFunctions.enviarQr,
+        body: {'record': record, 'canales': canales},
+      );
+    } on FunctionException catch (e) {
+      final resultado = ResultadoEnvioQr.fromJson(_mapaRespuesta(e.details));
+      if (resultado.email.fallido ||
+          resultado.sms.fallido ||
+          resultado.email.enviado ||
+          resultado.sms.enviado ||
+          resultado.email.omitido ||
+          resultado.sms.omitido) {
+        return resultado;
+      }
+      final details = e.details;
+      throw Exception(
+        details is Map && details['error'] != null
+            ? details['error'].toString()
+            : 'No se pudo enviar el QR.',
+      );
+    }
+    if (response.status >= 400) {
+      final data = response.data;
+      final message = data is Map && data['error'] != null
+          ? data['error'].toString()
+          : 'No se pudo enviar el QR.';
+      throw Exception(message);
+    }
+    final resultado = ResultadoEnvioQr.fromJson(_mapaRespuesta(response.data));
+    final pideEmail = canales.contains(CanalesEnvioQr.email);
+    final pideSms = canales.contains(CanalesEnvioQr.sms);
+    final cambios = <String, dynamic>{};
+    if (pideEmail && resultado.email.enviado) {
+      cambios['email_confirmacion_enviado'] = true;
+    }
+    if (pideSms && resultado.sms.enviado) {
+      cambios['sms_confirmacion_enviado'] = true;
+    }
+    if (cambios.isNotEmpty) {
+      await actualizar(registrado.id, cambios);
+    }
+    return resultado;
+  }
+
+  Map<String, dynamic> _mapaRespuesta(dynamic data) {
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    if (data is String && data.isNotEmpty) {
+      final decoded = jsonDecode(data);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    }
+    return {};
   }
 
   // ---- SyncExecutor: puente entre la cola offline y esta tabla ----
@@ -291,4 +344,10 @@ class RegistradosRepository implements SyncExecutor {
 
 final registradosRepositoryProvider = Provider<RegistradosRepository>((ref) {
   return RegistradosRepository(ref.watch(supabaseClientProvider));
+});
+
+final registradosRepositoryPublicoProvider = Provider<RegistradosRepository>((
+  ref,
+) {
+  return RegistradosRepository(ref.watch(supabasePublicClientProvider));
 });

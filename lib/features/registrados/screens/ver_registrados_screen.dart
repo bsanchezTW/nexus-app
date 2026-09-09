@@ -17,7 +17,9 @@ import '../../../core/widgets/app_modals.dart';
 import '../../../core/widgets/collapsing_nav.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
+import '../../../data/models/evento.dart';
 import '../../../data/models/registrado.dart';
+import '../../../data/models/resultado_envio_qr.dart';
 import '../../../data/offline/sync_queue_service.dart';
 import '../../../data/repositories/registrados_repository.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -386,17 +388,36 @@ class _RegistradoTile extends ConsumerWidget {
                 ],
               ),
             ),
-            if (registrado.emailConfirmacionEnviado)
-              const Padding(
-                padding: EdgeInsets.only(right: 2),
-                child: Tooltip(
-                  message: 'QR enviado por email',
-                  child: Icon(
-                    Symbols.mark_email_read_rounded,
-                    size: 18,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
+            if (registrado.emailConfirmacionEnviado ||
+                registrado.smsConfirmacionEnviado)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (registrado.emailConfirmacionEnviado)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 2),
+                      child: Tooltip(
+                        message: 'QR enviado por email',
+                        child: Icon(
+                          Symbols.mark_email_read_rounded,
+                          size: 18,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  if (registrado.smsConfirmacionEnviado)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 2),
+                      child: Tooltip(
+                        message: 'QR enviado por SMS',
+                        child: Icon(
+                          Symbols.sms_rounded,
+                          size: 18,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             // Mismo chip que el botón de acreditar de al lado: antes era un
             // IconButton pelado, con ripple y 48 de alto, y desalineaba la fila.
@@ -541,9 +562,8 @@ class _RegistradoTile extends ConsumerWidget {
 }
 
 /// QR de acreditación de un registrado (codifica `registrados.id`, lo que
-/// lee `AcreditarQrScreen`). Permite además enviarlo al correo del asistente
-/// mediante la Edge Function `enviar-qr` (regla 6.7 de la documentación de
-/// negocio; en el legado esta función existía pero acá nunca se invocaba).
+/// lee `AcreditarQrScreen`). Permite enviarlo por email y SMS vía
+/// la Edge Function `enviar-qr`.
 class _QrSheet extends ConsumerStatefulWidget {
   const _QrSheet({required this.registrado, required this.eventoId});
 
@@ -555,55 +575,132 @@ class _QrSheet extends ConsumerStatefulWidget {
 }
 
 class _QrSheetState extends ConsumerState<_QrSheet> {
-  bool _enviando = false;
+  bool _enviandoEmail = false;
+  bool _enviandoSms = false;
+
+  bool get _ocupado => _enviandoEmail || _enviandoSms;
 
   String _correoVisible({required bool puedeVerContacto}) {
     final correo = widget.registrado.email;
     return puedeVerContacto ? correo : enmascararEmail(correo);
   }
 
-  Future<void> _enviarPorEmail() async {
+  String _telefonoVisible({required bool puedeVerContacto}) {
+    final telefono = widget.registrado.telefono?.trim() ?? '';
+    if (telefono.isEmpty) return '';
+    return puedeVerContacto ? telefono : enmascararTelefono(telefono);
+  }
+
+  Future<void> _enviar({required String canal}) async {
     if (!requireOnline(context, ref)) return;
     final puedeVerContacto = ref.read(canViewContactDataProvider);
-    setState(() => _enviando = true);
+    setState(() {
+      if (canal == CanalesEnvioQr.email) {
+        _enviandoEmail = true;
+      } else {
+        _enviandoSms = true;
+      }
+    });
     try {
       final evento = await ref.read(eventoByIdProvider(widget.eventoId).future);
-      await ref
+      final resultado = await ref
           .read(registradosRepositoryProvider)
-          .enviarQrPorEmail(widget.registrado, nombreEvento: evento.nombre);
+          .enviarQr(
+            widget.registrado,
+            nombreEvento: evento.nombre,
+            canales: [canal],
+          );
       ref.invalidate(registradosPorEventoProvider(widget.eventoId));
-      if (mounted) {
-        Navigator.of(context).pop();
-        showAppSnackBar(
-          context,
-          'QR enviado a ${_correoVisible(puedeVerContacto: puedeVerContacto)}.',
-        );
-      }
+      if (!mounted) return;
+      final canalResultado = canal == CanalesEnvioQr.email
+          ? resultado.email
+          : resultado.sms;
+      _mostrarResultadoCanal(
+        resultado: canalResultado,
+        canal: canal,
+        destinoVisible: canal == CanalesEnvioQr.email
+            ? _correoVisible(puedeVerContacto: puedeVerContacto)
+            : _telefonoVisible(puedeVerContacto: puedeVerContacto),
+      );
     } catch (e) {
       if (mounted) {
-        debugPrint('enviar-qr falló: $e');
+        debugPrint('enviar-qr ($canal) falló: $e');
         showAppSnackBar(
           context,
-          'No se pudo enviar el QR por email. Verifica que la Edge Function enviar-qr esté desplegada.',
+          canal == CanalesEnvioQr.email
+              ? 'No se pudo enviar el QR por email. Verifica que la Edge Function enviar-qr esté desplegada.'
+              : 'No se pudo enviar el QR por SMS. Verifica créditos SMS de Brevo y que enviar-qr esté desplegada.',
           isError: true,
         );
       }
     } finally {
-      if (mounted) setState(() => _enviando = false);
+      if (mounted) {
+        setState(() {
+          _enviandoEmail = false;
+          _enviandoSms = false;
+        });
+      }
     }
+  }
+
+  void _mostrarResultadoCanal({
+    required ResultadoCanalQr resultado,
+    required String canal,
+    required String destinoVisible,
+  }) {
+    if (resultado.enviado) {
+      Navigator.of(context).pop();
+      final porSms = canal == CanalesEnvioQr.sms;
+      showAppSnackBar(
+        context,
+        porSms
+            ? (destinoVisible.isEmpty
+                  ? 'QR enviado por SMS.'
+                  : 'QR enviado por SMS a $destinoVisible.')
+            : 'QR enviado a $destinoVisible.',
+      );
+      return;
+    }
+    if (resultado.omitido) {
+      final motivo = switch (resultado.reason) {
+        'sin_telefono' => 'Este asistente no tiene teléfono.',
+        'sin_email' => 'Este asistente no tiene email.',
+        'evento_comercial' => 'Este evento no envía QR por SMS.',
+        _ => 'No se envió el QR.',
+      };
+      showAppSnackBar(context, motivo);
+      return;
+    }
+    showAppSnackBar(
+      context,
+      canal == CanalesEnvioQr.sms
+          ? (resultado.mensajeBrevo.isEmpty
+                ? 'No se pudo enviar el QR por SMS.'
+                : resultado.mensajeBrevo)
+          : (resultado.mensajeBrevo.isEmpty
+                ? 'No se pudo enviar el QR por email.'
+                : resultado.mensajeBrevo),
+      isError: true,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final isOnline = ref.watch(isOnlineProvider);
     final puedeVerContacto = ref.watch(canViewContactDataProvider);
+    final evento = ref.watch(eventoByIdProvider(widget.eventoId)).valueOrNull;
+    final mostrarSms = evento?.tipoRegistro == TipoRegistroEvento.cliente;
     final r = widget.registrado;
     // Un registro que solo existe en la cola local todavía no tiene id real
     // en el servidor: su QR no serviría para acreditar ni para el email. Se
     // mira el id y no la insignia de pendiente, porque una fila ya
     // sincronizada que solo tiene una edición en cola sí tiene QR válido.
     final soloEnLaCola = esIdSoloLocal(r.id);
-    final puedeEnviar = isOnline && !soloEnLaCola;
+    final puedeEnviar = isOnline && !soloEnLaCola && !_ocupado;
+    final telefono = r.telefono?.trim() ?? '';
+    final telefonoVisible = _telefonoVisible(
+      puedeVerContacto: puedeVerContacto,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -628,6 +725,11 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
                 _correoVisible(puedeVerContacto: puedeVerContacto),
                 style: const TextStyle(color: AppColors.textSecondary),
               ),
+              if (telefonoVisible.isNotEmpty)
+                Text(
+                  telefonoVisible,
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
               const SizedBox(height: 16),
               if (soloEnLaCola)
                 Container(
@@ -667,9 +769,45 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
                 label: r.emailConfirmacionEnviado
                     ? 'Reenviar por email'
                     : 'Enviar por email',
-                loading: _enviando,
-                onPressed: (_enviando || !puedeEnviar) ? null : _enviarPorEmail,
+                loading: _enviandoEmail,
+                onPressed: puedeEnviar
+                    ? () => _enviar(canal: CanalesEnvioQr.email)
+                    : null,
               ),
+              if (mostrarSms) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton(
+                    onPressed: (puedeEnviar && telefono.isNotEmpty)
+                        ? () => _enviar(canal: CanalesEnvioQr.sms)
+                        : null,
+                    child: _enviandoSms
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(
+                            r.smsConfirmacionEnviado
+                                ? 'Reenviar por SMS'
+                                : 'Enviar por SMS',
+                          ),
+                  ),
+                ),
+                if (telefono.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Este asistente no tiene teléfono.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+              ],
               if (!isOnline)
                 const Padding(
                   padding: EdgeInsets.only(top: 8),

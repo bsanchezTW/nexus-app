@@ -1,9 +1,6 @@
-import {
-  createClient,
-  type SupabaseClient,
-  type User,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient, type User } from "./supabase_js.ts";
 import { json } from "./cors.ts";
+import { fetchConSesionUsuario, readPublishableKey } from "./api_keys.ts";
 
 export type CallerAuthOk = {
   ok: true;
@@ -35,16 +32,22 @@ export async function resolveCallerAuth(
   if (!jwt) {
     return { ok: false, response: json({ error: "No autorizado" }, 401) };
   }
+  if (jwt.startsWith("sb_")) {
+    return { ok: false, response: json({ error: "Sesión inválida" }, 401) };
+  }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const publishableKey = readPublishableKey();
 
-  const callerClient = createClient(supabaseUrl, anonKey, {
+  const callerClient = createClient(supabaseUrl, publishableKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
-    global: { headers: { Authorization: authHeader } },
+    global: {
+      headers: { Authorization: authHeader, apikey: publishableKey },
+      fetch: fetchConSesionUsuario(publishableKey, authHeader),
+    },
   });
 
   const { data: callerData, error: callerError } = await callerClient.auth

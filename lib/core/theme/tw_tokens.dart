@@ -632,6 +632,24 @@ String formatearFechaLarga(DateTime fecha) {
   return DateFormat("EEEE d '·' MMMM y", 'es').format(fecha).toLowerCase();
 }
 
+/// Rango de una actividad de captura: un día usa [formatearFechaLarga];
+/// varios días, `12–14 · septiembre 2026` (o meses distintos si cruza).
+String formatearFechaActividad(DateTime fecha, int duracionDias) {
+  if (duracionDias <= 1) return formatearFechaLarga(fecha);
+  final inicio = DateTime(fecha.year, fecha.month, fecha.day);
+  final fin = inicio.add(Duration(days: duracionDias - 1));
+  if (inicio.year == fin.year && inicio.month == fin.month) {
+    final mesAnio = DateFormat('MMMM y', 'es').format(inicio);
+    return '${inicio.day}–${fin.day} · $mesAnio'.toLowerCase();
+  }
+  if (inicio.year == fin.year) {
+    final desde = DateFormat("d '·' MMMM", 'es').format(inicio);
+    final hasta = DateFormat("d '·' MMMM y", 'es').format(fin);
+    return '$desde – $hasta'.toLowerCase();
+  }
+  return '${formatearFechaLarga(inicio)} – ${formatearFechaLarga(fin)}';
+}
+
 /// `25 AGO` — píldora corta del hero del home.
 String formatearDiaMesCorto(DateTime fecha) {
   final dia = DateFormat('d', 'es').format(fecha);

@@ -9,20 +9,22 @@ import '../../../core/router/refresh_on_visible.dart';
 import '../../../core/network/connectivity_service.dart';
 import '../../../core/network/offline_guard.dart';
 import '../../../core/router/route_paths.dart';
+import '../../../core/constants/duracion_actividad.dart';
 import '../../../core/constants/paises_evento.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campo_pais_evento.dart';
+import '../../../core/widgets/campos_fecha_inicio_termino.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/require_permission.dart';
 import '../../../core/widgets/selector_imagen.dart';
 import '../../../data/models/evento_lead.dart';
 import '../../../data/repositories/eventos_leads_repository.dart';
+import '../../../data/repositories/storage_cleanup_service.dart';
 import '../../../data/repositories/storage_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../providers/capturador_providers.dart';
-import '../../../data/repositories/storage_cleanup_service.dart';
 
 class CrearEditarEventoLeadScreen extends StatelessWidget {
   const CrearEditarEventoLeadScreen({super.key, this.eventoId});
@@ -58,6 +60,7 @@ class _CrearEditarEventoLeadFormState
   final _tematicaController = TextEditingController();
 
   DateTime _fecha = DateTime.now();
+  int _duracionDias = 1;
   String _pais = kPaisEventoChile;
   Uint8List? _imagenBytes;
   String? _imagenUrlExistente;
@@ -69,17 +72,19 @@ class _CrearEditarEventoLeadFormState
   String _pais0 = '';
   String _tematica0 = '';
   DateTime? _fecha0;
+  int _duracionDias0 = 1;
   String? _imagenUrl0;
 
   bool get _esEdicion => widget.eventoId != null;
-  bool get _soloLectura => _heredada;
+  bool get _fichaSoloLectura => _heredada;
 
   bool get _hayCambios {
-    if (!_esEdicion || !_cargado || _soloLectura) return false;
+    if (!_esEdicion || !_cargado || _fichaSoloLectura) return false;
     return _nombreController.text != _nombre0 ||
         _pais != _pais0 ||
         _tematicaController.text != _tematica0 ||
         _fecha != _fecha0 ||
+        _duracionDias != _duracionDias0 ||
         _imagenBytes != null ||
         _imagenUrlExistente != _imagenUrl0;
   }
@@ -98,12 +103,14 @@ class _CrearEditarEventoLeadFormState
     _pais = normalizarPaisEvento(evento.pais);
     _tematicaController.text = evento.tematica ?? '';
     _fecha = evento.fecha;
+    _duracionDias = evento.duracionDias;
     _imagenUrlExistente = evento.imagenUrl;
     _heredada = evento.esInterno;
     _nombre0 = _nombreController.text;
     _pais0 = _pais;
     _tematica0 = _tematicaController.text;
     _fecha0 = _fecha;
+    _duracionDias0 = _duracionDias;
     _imagenUrl0 = _imagenUrlExistente;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(() {});
@@ -111,7 +118,7 @@ class _CrearEditarEventoLeadFormState
   }
 
   Future<void> _elegirImagen() async {
-    if (_soloLectura) return;
+    if (_fichaSoloLectura) return;
     final bytes = await elegirImagenComprimida(
       context,
       recorteProporcion: kProporcionImagenEvento,
@@ -122,48 +129,40 @@ class _CrearEditarEventoLeadFormState
   }
 
   void _quitarImagen() {
-    if (_soloLectura) return;
+    if (_fichaSoloLectura) return;
     setState(() {
       _imagenBytes = null;
       _imagenUrlExistente = null;
     });
   }
 
-  Future<void> _elegirFecha() async {
-    if (_soloLectura) return;
-    final seleccionada = await showDatePicker(
-      context: context,
-      initialDate: _fecha,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (seleccionada != null) setState(() => _fecha = seleccionada);
-  }
-
   Future<void> _guardar() async {
-    if (_soloLectura) return;
+    if (_fichaSoloLectura) return;
     if (!requireOnline(context, ref)) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() => _guardando = true);
 
     try {
       var imagenUrl = _imagenUrlExistente;
-      if (_imagenBytes != null) {
+      if (!_fichaSoloLectura && _imagenBytes != null) {
         imagenUrl = await ref
             .read(storageRepositoryProvider)
             .subirImagenEvento(_imagenBytes!, 'jpg');
       }
-      final cambioImagen = _esEdicion && imagenUrl != _imagenUrl0;
+      final cambioImagen =
+          !_fichaSoloLectura && _esEdicion && imagenUrl != _imagenUrl0;
 
       final evento = EventoLead(
         id: widget.eventoId ?? '',
         nombre: _nombreController.text.trim(),
         fecha: _fecha,
+        duracionDias: _duracionDias,
         pais: _pais,
         tematica: _tematicaController.text.trim().isEmpty
             ? null
             : _tematicaController.text.trim(),
         imagenUrl: imagenUrl,
+        tipo: _heredada ? TipoEventoLead.interno : TipoEventoLead.externo,
       );
 
       final repo = ref.read(eventosLeadsRepositoryProvider);
@@ -246,7 +245,7 @@ class _CrearEditarEventoLeadFormState
 
     return AppScaffold(
       title: _esEdicion
-          ? (_soloLectura
+          ? (_fichaSoloLectura
                 ? 'Actividad de captura'
                 : 'Editar actividad de captura')
           : 'Nueva actividad',
@@ -254,7 +253,7 @@ class _CrearEditarEventoLeadFormState
         context: context,
         isCreate: !_esEdicion,
         isDirty: _hayCambios,
-        readOnly: _soloLectura || !hayRed,
+        readOnly: _fichaSoloLectura || !hayRed,
         save: _guardar,
       ),
       actions: [
@@ -277,7 +276,7 @@ class _CrearEditarEventoLeadFormState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (_soloLectura) ...[
+                      if (_fichaSoloLectura) ...[
                         const _HerenciaBanner(),
                         const SizedBox(height: 16),
                       ],
@@ -286,13 +285,13 @@ class _CrearEditarEventoLeadFormState
                       SelectorImagen(
                         bytes: _imagenBytes,
                         urlExistente: _imagenUrlExistente,
-                        enabled: !_guardando && !_soloLectura && hayRed,
+                        enabled: !_guardando && !_fichaSoloLectura && hayRed,
                         aspectRatio: 16 / 9,
                         anchoMaximo: kAnchoSelectorImagenEvento,
                         etiquetaVacio: 'Agregar imagen de la actividad',
                         onElegir: _elegirImagen,
                         onQuitar:
-                            _soloLectura ||
+                            _fichaSoloLectura ||
                                 (_imagenBytes == null &&
                                     _imagenUrlExistente == null)
                             ? null
@@ -303,28 +302,43 @@ class _CrearEditarEventoLeadFormState
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _nombreController,
-                        enabled: !_guardando && !_soloLectura && hayRed,
+                        enabled: !_guardando && !_fichaSoloLectura && hayRed,
                         decoration: const InputDecoration(
                           hintText: 'Ej. Feria retail 2026',
                         ),
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Requerido'
-                            : null,
+                        validator: (v) {
+                          if (_fichaSoloLectura) return null;
+                          return (v == null || v.trim().isEmpty)
+                              ? 'Requerido'
+                              : null;
+                        },
                       ),
                       const SizedBox(height: 14),
-                      const _FieldLabel('Fecha'),
-                      const SizedBox(height: 6),
-                      FechaPickerField(
-                        fecha: _fecha,
-                        onTap: _elegirFecha,
-                        enabled: !_guardando && !_soloLectura && hayRed,
+                      CamposFechaInicioTermino(
+                        fechaInicio: _fecha,
+                        duracionDias: _duracionDias,
+                        textoDuracion: textoDuracionActividad(_duracionDias),
+                        enabledInicio:
+                            !_guardando && !_fichaSoloLectura && hayRed,
+                        enabledTermino:
+                            !_guardando && !_fichaSoloLectura && hayRed,
+                        onInicioChanged: (fecha) => setState(() {
+                          _fecha = fecha;
+                          _duracionDias = 1;
+                        }),
+                        onTerminoChanged: (termino) => setState(
+                          () => _duracionDias = duracionDesdeRango(
+                            _fecha,
+                            termino,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 14),
                       const _FieldLabel('País'),
                       const SizedBox(height: 6),
                       CampoPaisEvento(
                         value: _pais,
-                        enabled: !_guardando && !_soloLectura && hayRed,
+                        enabled: !_guardando && !_fichaSoloLectura && hayRed,
                         onChanged: (pais) => setState(() => _pais = pais),
                       ),
                       const SizedBox(height: 14),
@@ -332,15 +346,18 @@ class _CrearEditarEventoLeadFormState
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: _tematicaController,
-                        enabled: !_guardando && !_soloLectura && hayRed,
+                        enabled: !_guardando && !_fichaSoloLectura && hayRed,
                         decoration: const InputDecoration(
                           hintText: 'Ej. Telecomunicaciones',
                         ),
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Requerido'
-                            : null,
+                        validator: (v) {
+                          if (_fichaSoloLectura) return null;
+                          return (v == null || v.trim().isEmpty)
+                              ? 'Requerido'
+                              : null;
+                        },
                       ),
-                      if (!_soloLectura) ...[
+                      if (!_fichaSoloLectura) ...[
                         const SizedBox(height: 24),
                         PrimaryGradientButton(
                           label: _esEdicion

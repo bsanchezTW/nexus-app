@@ -53,6 +53,7 @@ Future<EventoLead> obtenerOCrearEventoLeadInterno(
       eventoOrigenId: evento.id,
       nombre: evento.nombre,
       fecha: evento.fecha,
+      duracionDias: evento.duracionDias,
       pais: evento.pais,
       tematica: evento.tematica,
       certificacionCapacitacion: evento.certificacionCapacitacion,

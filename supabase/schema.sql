@@ -44,7 +44,7 @@
 --      'externo' para autorizaciones de usuarios externos).
 --   5. Política dedicada y acotada de INSERT anónimo en registrados
 --      para el flujo de "registro por cliente" (autoregistro público),
---      limitada a eventos activos y con columnas mínimas obligatorias,
+--      limitada a eventos vigentes (fecha ≥ hoy) y con columnas mínimas obligatorias,
 --      en vez de depender de un formulario externo fuera de este
 --      repositorio (ver Sección 17.5 de la auditoría).
 --   6. Función helper is_admin() SECURITY DEFINER para no repetir
@@ -104,10 +104,10 @@ CREATE TABLE IF NOT EXISTS public.eventos (
   direccion                   text,
   lugar                       text,
   certificacion_capacitacion  boolean NOT NULL DEFAULT false,
-  activo                      boolean NOT NULL DEFAULT true,
   imagen_url                  text,
   tipo_registro               text NOT NULL DEFAULT 'comercial'
                                  CHECK (tipo_registro = ANY (ARRAY['comercial', 'cliente'])),
+  duracion_dias               integer NOT NULL DEFAULT 1,
   created_at                  timestamptz NOT NULL DEFAULT timezone('utc', now()),
   updated_at                  timestamptz NOT NULL DEFAULT timezone('utc', now()),
   CONSTRAINT eventos_pkey PRIMARY KEY (id),
@@ -121,12 +121,29 @@ ALTER TABLE public.eventos ALTER COLUMN certificacion_capacitacion SET DEFAULT f
 UPDATE public.eventos SET certificacion_capacitacion = false
   WHERE certificacion_capacitacion IS NULL;
 ALTER TABLE public.eventos ALTER COLUMN certificacion_capacitacion SET NOT NULL;
-ALTER TABLE public.eventos ALTER COLUMN activo SET DEFAULT true;
-UPDATE public.eventos SET activo = true WHERE activo IS NULL;
-ALTER TABLE public.eventos ALTER COLUMN activo SET NOT NULL;
 ALTER TABLE public.eventos ALTER COLUMN tipo_registro SET DEFAULT 'comercial';
 UPDATE public.eventos SET tipo_registro = 'comercial' WHERE tipo_registro IS NULL;
 ALTER TABLE public.eventos ALTER COLUMN tipo_registro SET NOT NULL;
+
+-- Duración: [fecha] es el primer día. Los eventos actuales duran 1 día.
+ALTER TABLE public.eventos
+  ADD COLUMN IF NOT EXISTS duracion_dias integer NOT NULL DEFAULT 1;
+ALTER TABLE public.eventos
+  DROP CONSTRAINT IF EXISTS eventos_duracion_dias_check;
+ALTER TABLE public.eventos
+  ADD CONSTRAINT eventos_duracion_dias_check
+  CHECK (duracion_dias >= 1 AND duracion_dias <= 366);
+
+CREATE OR REPLACE FUNCTION public.rpe_fecha_termino_evento(
+  p_fecha date,
+  p_duracion_dias integer
+)
+RETURNS date
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT p_fecha + (GREATEST(COALESCE(p_duracion_dias, 1), 1) - 1);
+$$;
 ALTER TABLE public.eventos DROP CONSTRAINT IF EXISTS eventos_creado_por_fkey;
 ALTER TABLE public.eventos
   ADD CONSTRAINT eventos_creado_por_fkey
@@ -169,6 +186,7 @@ CREATE TABLE IF NOT EXISTS public.registrados (
                                  CHECK (origen = ANY (ARRAY['app', 'excel', 'publico'])),
   ingresado_por               uuid,
   email_confirmacion_enviado  boolean NOT NULL DEFAULT false,
+  sms_confirmacion_enviado    boolean NOT NULL DEFAULT false,
   utm_source                  text,
   utm_medium                  text,
   utm_campaign                text,
@@ -191,6 +209,8 @@ ALTER TABLE public.registrados ALTER COLUMN email_confirmacion_enviado SET DEFAU
 UPDATE public.registrados SET email_confirmacion_enviado = false
   WHERE email_confirmacion_enviado IS NULL;
 ALTER TABLE public.registrados ALTER COLUMN email_confirmacion_enviado SET NOT NULL;
+ALTER TABLE public.registrados
+  ADD COLUMN IF NOT EXISTS sms_confirmacion_enviado boolean NOT NULL DEFAULT false;
 ALTER TABLE public.registrados DROP CONSTRAINT IF EXISTS registrados_ingresado_por_fkey;
 ALTER TABLE public.registrados
   ADD CONSTRAINT registrados_ingresado_por_fkey
@@ -318,6 +338,7 @@ CREATE TABLE IF NOT EXISTS public.eventos_leads (
   perfil_id                   uuid,
   evento_origen_id            uuid,
   tipo_evento_lead            text NOT NULL DEFAULT 'externo',
+  duracion_dias               integer NOT NULL DEFAULT 1,
   created_at                  timestamptz DEFAULT now(),
   CONSTRAINT eventos_leads_pkey PRIMARY KEY (id),
   CONSTRAINT eventos_leads_perfil_id_fkey FOREIGN KEY (perfil_id)
@@ -358,10 +379,20 @@ ALTER TABLE public.eventos_leads
 ALTER TABLE public.eventos_leads
   ADD COLUMN IF NOT EXISTS imagen_url text;
 
+-- Duración de la captura: [fecha] es el primer día; puede ser 1, 3 o más.
+ALTER TABLE public.eventos_leads
+  ADD COLUMN IF NOT EXISTS duracion_dias integer NOT NULL DEFAULT 1;
+ALTER TABLE public.eventos_leads
+  DROP CONSTRAINT IF EXISTS eventos_leads_duracion_dias_check;
+ALTER TABLE public.eventos_leads
+  ADD CONSTRAINT eventos_leads_duracion_dias_check
+  CHECK (duracion_dias >= 1 AND duracion_dias <= 366);
+
 UPDATE public.eventos_leads el
 SET
   nombre = e.nombre,
   fecha = e.fecha,
+  duracion_dias = e.duracion_dias,
   pais = e.pais,
   tematica = e.tematica,
   certificacion_capacitacion = e.certificacion_capacitacion,
@@ -502,7 +533,8 @@ CREATE INDEX IF NOT EXISTS idx_registrados_evento_id     ON public.registrados (
 CREATE INDEX IF NOT EXISTS idx_registrados_email         ON public.registrados (email);
 CREATE INDEX IF NOT EXISTS idx_registrados_acreditado     ON public.registrados (evento_id, acreditado);
 CREATE INDEX IF NOT EXISTS idx_eventos_creado_por         ON public.eventos (creado_por);
-CREATE INDEX IF NOT EXISTS idx_eventos_activo_fecha       ON public.eventos (activo, fecha DESC);
+DROP INDEX IF EXISTS idx_eventos_activo_fecha;
+CREATE INDEX IF NOT EXISTS idx_eventos_fecha              ON public.eventos (fecha DESC);
 CREATE INDEX IF NOT EXISTS idx_usuarios_eventos_evento_id ON public.usuarios_eventos (evento_id);
 CREATE INDEX IF NOT EXISTS idx_eventos_leads_perfil_id ON public.eventos_leads (perfil_id);
 -- Un evento de registro no puede tener dos eventos de leads internos.
@@ -1045,6 +1077,7 @@ BEGIN
   SET
     nombre = NEW.nombre,
     fecha = NEW.fecha,
+    duracion_dias = NEW.duracion_dias,
     pais = NEW.pais,
     tematica = NEW.tematica,
     certificacion_capacitacion = NEW.certificacion_capacitacion,
@@ -1057,7 +1090,7 @@ $$;
 
 DROP TRIGGER IF EXISTS trg_eventos_sync_actividad_interna ON public.eventos;
 CREATE TRIGGER trg_eventos_sync_actividad_interna
-  AFTER UPDATE OF nombre, fecha, pais, tematica,
+  AFTER UPDATE OF nombre, fecha, duracion_dias, pais, tematica,
     certificacion_capacitacion, imagen_url
   ON public.eventos
   FOR EACH ROW
@@ -1084,6 +1117,7 @@ BEGIN
 
   IF NEW.nombre IS NOT DISTINCT FROM OLD.nombre
      AND NEW.fecha IS NOT DISTINCT FROM OLD.fecha
+     AND NEW.duracion_dias IS NOT DISTINCT FROM OLD.duracion_dias
      AND NEW.pais IS NOT DISTINCT FROM OLD.pais
      AND NEW.tematica IS NOT DISTINCT FROM OLD.tematica
      AND NEW.certificacion_capacitacion
@@ -1098,6 +1132,7 @@ BEGIN
     WHERE e.id = NEW.evento_origen_id
       AND e.nombre IS NOT DISTINCT FROM NEW.nombre
       AND e.fecha IS NOT DISTINCT FROM NEW.fecha
+      AND e.duracion_dias IS NOT DISTINCT FROM NEW.duracion_dias
       AND e.pais IS NOT DISTINCT FROM NEW.pais
       AND e.tematica IS NOT DISTINCT FROM NEW.tematica
       AND e.certificacion_capacitacion
@@ -1366,9 +1401,10 @@ BEGIN
     SELECT 1
     FROM public.eventos e
     WHERE e.id = ANY(v_evento_ids)
-      AND (e.activo IS NOT TRUE OR e.fecha < CURRENT_DATE)
+      AND public.rpe_fecha_termino_evento(e.fecha, e.duracion_dias)
+            < CURRENT_DATE
   ) THEN
-    RAISE EXCEPTION 'Los externos solo pueden usar eventos activos y no finalizados';
+    RAISE EXCEPTION 'Los externos solo pueden usar eventos no finalizados';
   END IF;
 
   v_primer_evento := v_evento_ids[1];
@@ -1502,7 +1538,6 @@ SET search_path = public
 AS $$
 DECLARE
   v_usuario_ids uuid[];
-  v_evento_activo boolean;
   v_evento_fecha date;
   r record;
 BEGIN
@@ -1510,8 +1545,8 @@ BEGIN
     RAISE EXCEPTION 'Solo un administrador puede configurar accesos';
   END IF;
 
-  SELECT e.activo, e.fecha
-  INTO v_evento_activo, v_evento_fecha
+  SELECT public.rpe_fecha_termino_evento(e.fecha, e.duracion_dias)
+  INTO v_evento_fecha
   FROM public.eventos e
   WHERE e.id = p_evento_id
   FOR UPDATE;
@@ -1539,7 +1574,7 @@ BEGIN
     RAISE EXCEPTION 'Solo se puede asignar acceso a usuarios o usuarios externos';
   END IF;
 
-  IF v_evento_activo IS NOT TRUE OR v_evento_fecha < CURRENT_DATE THEN
+  IF v_evento_fecha < CURRENT_DATE THEN
     IF EXISTS (
       SELECT 1
       FROM unnest(v_usuario_ids) AS uid
@@ -1552,7 +1587,7 @@ BEGIN
             AND ue.evento_id = p_evento_id
         )
     ) THEN
-      RAISE EXCEPTION 'Los externos solo pueden usar eventos activos y no finalizados';
+      RAISE EXCEPTION 'Los externos solo pueden usar eventos no finalizados';
     END IF;
   END IF;
 
@@ -2159,10 +2194,11 @@ CREATE POLICY rpe_eventos_delete ON public.eventos
   USING (public.rpe_is_admin());
 
 -- Lectura pública mínima para que el formulario de autoregistro (anon)
--- pueda validar que el evento existe y está activo antes de insertar.
+-- pueda validar que el evento existe y, si ya venció, mostrar «Evento
+-- finalizado» en vez de un 404.
 DROP POLICY IF EXISTS rpe_eventos_select_publico ON public.eventos;
 CREATE POLICY rpe_eventos_select_publico ON public.eventos
-  FOR SELECT TO anon USING (activo = true);
+  FOR SELECT TO anon USING (true);
 
 -- --- registrados: acceso acotado al evento; externo continúa limitado por el
 -- trigger de actualización a la acreditación y no puede insertar.
@@ -2181,6 +2217,12 @@ CREATE POLICY rpe_registrados_insert ON public.registrados
   WITH CHECK (
     public.rpe_is_internal_user()
     AND public.rpe_puede_operar_evento(evento_id)
+    AND EXISTS (
+      SELECT 1 FROM public.eventos e
+      WHERE e.id = evento_id
+        AND public.rpe_fecha_termino_evento(e.fecha, e.duracion_dias)
+              >= CURRENT_DATE
+    )
   );
 
 DROP POLICY IF EXISTS rpe_registrados_update ON public.registrados;
@@ -2196,7 +2238,7 @@ CREATE POLICY rpe_registrados_delete ON public.registrados
 
 -- Autoregistro público (reemplaza al formulario externo "Transworld" fuera
 -- del repo, doc Sección 17.5): un visitante anónimo puede INSERTAR su propio
--- registro solo si el evento está activo, y solo con origen='publico'.
+-- registro solo si el evento sigue vigente, y solo con origen='publico'.
 -- No puede leer, actualizar ni eliminar registros de nadie.
 DROP POLICY IF EXISTS rpe_registrados_insert_publico ON public.registrados;
 CREATE POLICY rpe_registrados_insert_publico ON public.registrados
@@ -2205,7 +2247,12 @@ CREATE POLICY rpe_registrados_insert_publico ON public.registrados
     origen = 'publico'
     AND acreditado = false
     AND ingresado_por IS NULL
-    AND EXISTS (SELECT 1 FROM public.eventos e WHERE e.id = evento_id AND e.activo = true)
+    AND EXISTS (
+      SELECT 1 FROM public.eventos e
+      WHERE e.id = evento_id
+        AND public.rpe_fecha_termino_evento(e.fecha, e.duracion_dias)
+              >= CURRENT_DATE
+    )
   );
 
 -- --- evento_bloques: lectura para resolver etiqueta en listados/export;
@@ -2225,7 +2272,12 @@ CREATE POLICY rpe_evento_bloques_select_publico ON public.evento_bloques
   FOR SELECT TO anon
   USING (
     (activo = true OR activo IS NULL)
-    AND EXISTS (SELECT 1 FROM public.eventos e WHERE e.id = evento_id AND e.activo = true)
+    AND EXISTS (
+      SELECT 1 FROM public.eventos e
+      WHERE e.id = evento_id
+        AND public.rpe_fecha_termino_evento(e.fecha, e.duracion_dias)
+              >= CURRENT_DATE
+    )
   );
 
 DROP POLICY IF EXISTS rpe_evento_bloques_write ON public.evento_bloques;
@@ -2233,6 +2285,9 @@ CREATE POLICY rpe_evento_bloques_write ON public.evento_bloques
   FOR ALL TO authenticated
   USING (public.rpe_can_create_content())
   WITH CHECK (public.rpe_can_create_content());
+
+-- La vigencia la marca el rango de fechas: se deja de usar eventos.activo.
+ALTER TABLE public.eventos DROP COLUMN IF EXISTS activo;
 
 -- --- usuarios_eventos ---
 DROP POLICY IF EXISTS rpe_usuarios_eventos_select ON public.usuarios_eventos;

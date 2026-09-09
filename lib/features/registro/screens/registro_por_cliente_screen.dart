@@ -11,10 +11,12 @@ import '../../../core/config/env.dart';
 import '../../../core/network/offline_guard.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/registro_asistente.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
+import '../../../core/widgets/tw_toast.dart';
 import '../../../data/repositories/registrados_repository.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../../exportacion/services/excel_import_registrados.dart';
@@ -77,6 +79,11 @@ class _RegistroPorClienteScreenState
 
   Future<void> _cargarExcel() async {
     if (!requireOnline(context, ref)) return;
+    final evento = ref.read(eventoByIdProvider(widget.eventoId)).valueOrNull;
+    if (evento != null && evento.yaOcurrio) {
+      TwToast.info(context, kMensajeEventoFinalizado);
+      return;
+    }
 
     final archivo = await openFile(
       acceptedTypeGroups: const [

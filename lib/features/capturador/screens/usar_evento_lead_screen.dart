@@ -192,7 +192,7 @@ class _UsarEventoLeadScreenState extends ConsumerState<UsarEventoLeadScreen>
     ].join(' · ');
 
     return TwHeroCard(
-      dateText: formatearFechaLarga(evento.fecha),
+      dateText: formatearFechaActividad(evento.fecha, evento.duracionDias),
       status: evento.yaOcurrio ? TwStatus.finalizado : TwStatus.activo,
       title: evento.nombre,
       titleHeight: 1.22,

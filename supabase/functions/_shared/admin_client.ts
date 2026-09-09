@@ -1,27 +1,30 @@
-import {
-  createClient,
-  type SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "./supabase_js.ts";
+import { esApiKeyNueva, fetchConSecret, readSecretKey } from "./api_keys.ts";
 
 /**
- * Cliente admin con service role.
- * En Edge Functions el runtime reenvía el Authorization del request original;
- * hay que forzar Bearer del service role o Auth Admin usa el JWT del usuario
- * (ES256) y falla con "unrecognized JWT kid <nil>".
+ * Cliente admin (secret / service_role).
+ *
+ * El runtime de Edge reenvía el `Authorization` del request original; hay
+ * que forzar la credencial de servicio. Con JWT `service_role` eso iba en
+ * Bearer. Con `sb_secret_…` solo va en `apikey` (no es un JWT).
  */
 export function createAdminClient(
-  supabaseUrl: string,
-  serviceRoleKey: string,
+  supabaseUrl = Deno.env.get("SUPABASE_URL")!,
+  secretKey = readSecretKey(),
 ): SupabaseClient {
-  return createClient(supabaseUrl, serviceRoleKey, {
+  const headers: Record<string, string> = { apikey: secretKey };
+  if (!esApiKeyNueva(secretKey)) {
+    headers.Authorization = `Bearer ${secretKey}`;
+  }
+
+  return createClient(supabaseUrl, secretKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
     global: {
-      headers: {
-        Authorization: `Bearer ${serviceRoleKey}`,
-      },
+      headers,
+      fetch: fetchConSecret(secretKey),
     },
   });
 }

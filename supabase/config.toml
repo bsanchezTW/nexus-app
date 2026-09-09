@@ -414,11 +414,24 @@ enabled = true
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
 
-# Olvidé mi contraseña: se invoca sin sesión iniciada.
+# Las keys publishable/secret no son JWT. El `verify_jwt` del gateway no
+# autentica al caller; cada función autoriza en código (sesión de usuario
+# o `apikey` secret del webhook).
 [functions.reset-password]
 verify_jwt = false
 
-# Destino privado del Database Webhook de notificaciones. El gateway valida
-# primero el JWT service_role y la función vuelve a comprobar esa credencial.
+[functions.crear-usuario]
+verify_jwt = false
+
+[functions.regenerar-password-usuario]
+verify_jwt = false
+
+[functions.enviar-qr]
+verify_jwt = false
+
+[functions.limpiar-storage]
+verify_jwt = false
+
+# Webhook de Database: mandar `apikey: <sb_secret_…>`, no Bearer de la key.
 [functions.enviar-push]
-verify_jwt = true
+verify_jwt = false

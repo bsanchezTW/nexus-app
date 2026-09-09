@@ -82,6 +82,7 @@ void main() {
     expect(insert['tipo_evento_lead'], 'externo');
     expect(insert['evento_origen_id'], isNull);
     expect(insert['imagen_url'], 'https://cdn.example/feria.jpg');
+    expect(insert['duracion_dias'], 1);
   });
 
   test('editar un interno no lo puede convertir en externo', () {
@@ -139,6 +140,7 @@ void main() {
     expect(update['nombre'], 'Feria retail');
     expect(update['pais'], 'Chile');
     expect(update['imagen_url'], 'https://cdn.example/feria.jpg');
+    expect(update['duracion_dias'], 1);
     expect(update.containsKey('tipo_evento_lead'), isFalse);
   });
 
@@ -151,5 +153,65 @@ void main() {
     );
 
     expect(interno.copyWith().toUpdateMap(), isEmpty);
+  });
+
+  test('sin duración en la fila se asume un día', () {
+    final evento = EventoLead.fromMap({
+      'id': 'el-1',
+      'nombre': 'Feria retail',
+      'fecha': '2026-09-12',
+    });
+
+    expect(evento.duracionDias, 1);
+    expect(evento.esMultiDia, isFalse);
+    expect(
+      evento.fechaFin,
+      DateTime(evento.fecha.year, evento.fecha.month, evento.fecha.day),
+    );
+    expect(evento.etiquetaDuracion, '1 día');
+  });
+
+  test('una actividad de 3 días termina el segundo día siguiente', () {
+    final evento = EventoLead.fromMap({
+      'id': 'el-1',
+      'nombre': 'Feria retail',
+      'fecha': '2026-09-12',
+      'duracion_dias': 3,
+    });
+
+    expect(evento.duracionDias, 3);
+    expect(evento.esMultiDia, isTrue);
+    expect(
+      evento.fechaFin
+          .difference(
+            DateTime(evento.fecha.year, evento.fecha.month, evento.fecha.day),
+          )
+          .inDays,
+      2,
+    );
+    expect(evento.etiquetaDuracion, '3 días');
+    expect(evento.toInsertMap()['duracion_dias'], 3);
+    expect(evento.toUpdateMap()['duracion_dias'], 3);
+    expect(evento.toCacheMap()['duracion_dias'], 3);
+  });
+
+  test('el interno no persiste la duración: la hereda del evento', () {
+    final update = EventoLead.internoDesdeEvento(
+      eventoOrigenId: 'evento-1',
+      nombre: 'Transworld Connect',
+      fecha: DateTime(2026, 9, 12),
+      duracionDias: 5,
+    ).toUpdateMap();
+
+    expect(update, isEmpty);
+    expect(
+      EventoLead.internoDesdeEvento(
+        eventoOrigenId: 'evento-1',
+        nombre: 'Transworld Connect',
+        fecha: DateTime(2026, 9, 12),
+        duracionDias: 5,
+      ).duracionDias,
+      5,
+    );
   });
 }

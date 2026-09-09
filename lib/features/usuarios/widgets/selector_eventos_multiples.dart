@@ -6,7 +6,7 @@ import '../../../data/models/evento.dart';
 
 /// Selector multi-evento con búsqueda y lista.
 ///
-/// En modo creación solo se ofrecen eventos activos no finalizados.
+/// En modo creación solo se ofrecen eventos no finalizados.
 /// En edición, los ya autorizados siguen visibles aunque hayan finalizado
 /// (para poder quitarlos).
 class SelectorEventosMultiples extends StatefulWidget {
@@ -50,7 +50,7 @@ class _SelectorEventosMultiplesState extends State<SelectorEventosMultiples> {
         widget.eventos.where((e) {
           if (seleccionados.contains(e.id)) return true;
           if (!widget.soloActivosDisponibles) return true;
-          return e.activo && !e.yaOcurrio;
+          return !e.yaOcurrio;
         }).toList()..sort(
           (a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()),
         );
@@ -128,7 +128,7 @@ class _SelectorEventosMultiplesState extends State<SelectorEventosMultiples> {
                     itemBuilder: (context, index) {
                       final e = filtrados[index];
                       final checked = widget.seleccionados.contains(e.id);
-                      final inactivo = !e.activo || e.yaOcurrio;
+                      final finalizado = e.yaOcurrio;
                       return CheckboxListTile(
                         dense: true,
                         value: checked,
@@ -141,15 +141,15 @@ class _SelectorEventosMultiplesState extends State<SelectorEventosMultiples> {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: inactivo && !checked
+                            color: finalizado && !checked
                                 ? AppColors.textTertiary
                                 : AppColors.ink,
                           ),
                         ),
-                        subtitle: inactivo
-                            ? Text(
-                                e.yaOcurrio ? 'Finalizado' : 'Inactivo',
-                                style: const TextStyle(
+                        subtitle: finalizado
+                            ? const Text(
+                                'Finalizado',
+                                style: TextStyle(
                                   fontSize: 11,
                                   color: AppColors.textSecondary,
                                 ),
