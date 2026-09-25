@@ -105,8 +105,15 @@ CREATE TABLE IF NOT EXISTS public.eventos (
   lugar                       text,
   certificacion_capacitacion  boolean NOT NULL DEFAULT false,
   imagen_url                  text,
-  tipo_registro               text NOT NULL DEFAULT 'comercial'
-                                 CHECK (tipo_registro = ANY (ARRAY['comercial', 'cliente'])),
+  slug                        text,
+  acceso_qr                   boolean NOT NULL DEFAULT false,
+  cupo_maximo                 int,
+  descripcion                 text,
+  hora_inicio                 time,
+  hora_fin                    time,
+  inscripciones_cierre        timestamp,
+  mapa_url                    text,
+  banner_url                  text,
   duracion_dias               integer NOT NULL DEFAULT 1,
   created_at                  timestamptz NOT NULL DEFAULT timezone('utc', now()),
   updated_at                  timestamptz NOT NULL DEFAULT timezone('utc', now()),
@@ -121,9 +128,6 @@ ALTER TABLE public.eventos ALTER COLUMN certificacion_capacitacion SET DEFAULT f
 UPDATE public.eventos SET certificacion_capacitacion = false
   WHERE certificacion_capacitacion IS NULL;
 ALTER TABLE public.eventos ALTER COLUMN certificacion_capacitacion SET NOT NULL;
-ALTER TABLE public.eventos ALTER COLUMN tipo_registro SET DEFAULT 'comercial';
-UPDATE public.eventos SET tipo_registro = 'comercial' WHERE tipo_registro IS NULL;
-ALTER TABLE public.eventos ALTER COLUMN tipo_registro SET NOT NULL;
 
 -- Duración: [fecha] es el primer día. Los eventos actuales duran 1 día.
 ALTER TABLE public.eventos
@@ -187,6 +191,9 @@ CREATE TABLE IF NOT EXISTS public.registrados (
   ingresado_por               uuid,
   email_confirmacion_enviado  boolean NOT NULL DEFAULT false,
   sms_confirmacion_enviado    boolean NOT NULL DEFAULT false,
+  whatsapp_confirmacion_enviado boolean NOT NULL DEFAULT false,
+  codigo_qr                   text,
+  sobrecupo                   boolean NOT NULL DEFAULT false,
   utm_source                  text,
   utm_medium                  text,
   utm_campaign                text,
@@ -225,62 +232,13 @@ BEGIN
   END IF;
 END $$;
 
--- Bloques de asistencia por evento (cupos / franjas del formulario público).
--- `registrados.bloque_id` referencia esta tabla; el nombre visible es `etiqueta`.
-CREATE TABLE IF NOT EXISTS public.evento_bloques (
-  id           uuid NOT NULL DEFAULT gen_random_uuid(),
-  evento_id    uuid NOT NULL REFERENCES public.eventos (id) ON DELETE CASCADE,
-  etiqueta     text NOT NULL,
-  orden        int NOT NULL DEFAULT 0,
-  cupo_maximo  int,
-  activo       boolean NOT NULL DEFAULT true,
-  created_at   timestamptz NOT NULL DEFAULT timezone('utc', now()),
-  CONSTRAINT evento_bloques_pkey PRIMARY KEY (id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_evento_bloques_evento_id
-  ON public.evento_bloques (evento_id, orden);
-CREATE INDEX IF NOT EXISTS idx_evento_bloques_evento_activo
-  ON public.evento_bloques (evento_id, activo, orden);
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'evento_bloques_cupo_positivo'
-  ) THEN
-    ALTER TABLE public.evento_bloques
-      ADD CONSTRAINT evento_bloques_cupo_positivo
-      CHECK (cupo_maximo IS NULL OR cupo_maximo > 0);
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'evento_bloques_etiqueta_unica'
-  ) THEN
-    ALTER TABLE public.evento_bloques
-      ADD CONSTRAINT evento_bloques_etiqueta_unica UNIQUE (evento_id, etiqueta);
-  END IF;
-END $$;
-
--- Columna añadida después del CREATE original de registrados: idempotente
--- para bases ya desplegadas.
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'registrados'
-      AND column_name = 'bloque_id'
-  ) THEN
-    ALTER TABLE public.registrados
-      ADD COLUMN bloque_id uuid REFERENCES public.evento_bloques (id) ON DELETE RESTRICT;
-  END IF;
-END $$;
-
--- Producción ya usa RESTRICT: no se puede borrar un bloque con registrados.
-ALTER TABLE public.registrados
-  DROP CONSTRAINT IF EXISTS registrados_bloque_id_fkey;
-ALTER TABLE public.registrados
-  ADD CONSTRAINT registrados_bloque_id_fkey
-  FOREIGN KEY (bloque_id) REFERENCES public.evento_bloques (id) ON DELETE RESTRICT;
+-- evento_bloques y registrados.bloque_id se eliminan. El modelo nuevo
+-- (subeventos, inscripciones, envíos, RPC) está en
+-- supabase/migrations/202609251200_subeventos_cupos_ids_opacos.sql.
+-- Este DROP evita que reaplicar el schema recree la tabla vieja.
+DROP TABLE IF EXISTS public.evento_bloques CASCADE;
+ALTER TABLE public.registrados DROP CONSTRAINT IF EXISTS registrados_bloque_id_fkey;
+ALTER TABLE public.registrados DROP COLUMN IF EXISTS bloque_id CASCADE;
 
 -- UTM (migración 20260729172353): opcionales; la app aún no las escribe.
 ALTER TABLE public.registrados
@@ -291,11 +249,6 @@ ALTER TABLE public.registrados
   ADD COLUMN IF NOT EXISTS utm_campaign text;
 ALTER TABLE public.registrados
   ADD COLUMN IF NOT EXISTS utm_content text;
-
-CREATE INDEX IF NOT EXISTS idx_registrados_bloque_id
-  ON public.registrados (bloque_id);
-CREATE INDEX IF NOT EXISTS idx_registrados_evento_bloque
-  ON public.registrados (evento_id, bloque_id);
 
 -- Autorizaciones usuario↔evento (M:N). Para rol global `externo`,
 -- `rol_evento = 'externo'` define los eventos operables; el activo/preferido
@@ -2076,6 +2029,19 @@ BEGIN
     SET autor_id = v_sentinel
     WHERE autor_id = usuario_id;
   END IF;
+  IF to_regclass('public.inscripciones_subevento') IS NOT NULL THEN
+    UPDATE public.inscripciones_subevento
+    SET inscrito_por = v_sentinel
+    WHERE inscrito_por = usuario_id;
+    UPDATE public.inscripciones_subevento
+    SET asistio_por = v_sentinel
+    WHERE asistio_por = usuario_id;
+  END IF;
+  IF to_regclass('public.envios_qr') IS NOT NULL THEN
+    UPDATE public.envios_qr
+    SET solicitado_por = v_sentinel
+    WHERE solicitado_por = usuario_id;
+  END IF;
 
   DELETE FROM public.perfiles WHERE id = usuario_id;
 
@@ -2104,9 +2070,9 @@ GRANT EXECUTE ON FUNCTION public.rpe_sincronizar_eventos_externo(uuid, uuid[]) T
 GRANT EXECUTE ON FUNCTION public.rpe_configurar_acceso_usuario(uuid, text, uuid[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpe_sincronizar_eventos_usuario(uuid, uuid[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpe_configurar_acceso_evento(uuid, uuid[]) TO authenticated;
-REVOKE ALL ON FUNCTION public.rpe_existe_email_registrado(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.rpe_existe_email_registrado(uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.rpe_existe_email_registrado(uuid, text)
-  TO anon, authenticated;
+  TO authenticated;
 REVOKE ALL ON FUNCTION public.rpe_actualizar_rol_usuario(uuid, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.rpe_sincronizar_eventos_externo(uuid, uuid[]) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.rpe_configurar_acceso_usuario(uuid, text, uuid[]) FROM PUBLIC;
@@ -2193,12 +2159,8 @@ CREATE POLICY rpe_eventos_delete ON public.eventos
   FOR DELETE TO authenticated
   USING (public.rpe_is_admin());
 
--- Lectura pública mínima para que el formulario de autoregistro (anon)
--- pueda validar que el evento existe y, si ya venció, mostrar «Evento
--- finalizado» en vez de un 404.
+-- El anónimo ya no lee eventos: usa las RPC rpe_publico_*.
 DROP POLICY IF EXISTS rpe_eventos_select_publico ON public.eventos;
-CREATE POLICY rpe_eventos_select_publico ON public.eventos
-  FOR SELECT TO anon USING (true);
 
 -- --- registrados: acceso acotado al evento; externo continúa limitado por el
 -- trigger de actualización a la acreditación y no puede insertar.
@@ -2211,19 +2173,8 @@ CREATE POLICY rpe_registrados_select ON public.registrados
   FOR SELECT TO authenticated
   USING (public.rpe_puede_operar_evento(evento_id));
 
+-- INSERT de registrados solo por RPC (D3).
 DROP POLICY IF EXISTS rpe_registrados_insert ON public.registrados;
-CREATE POLICY rpe_registrados_insert ON public.registrados
-  FOR INSERT TO authenticated
-  WITH CHECK (
-    public.rpe_is_internal_user()
-    AND public.rpe_puede_operar_evento(evento_id)
-    AND EXISTS (
-      SELECT 1 FROM public.eventos e
-      WHERE e.id = evento_id
-        AND public.rpe_fecha_termino_evento(e.fecha, e.duracion_dias)
-              >= CURRENT_DATE
-    )
-  );
 
 DROP POLICY IF EXISTS rpe_registrados_update ON public.registrados;
 CREATE POLICY rpe_registrados_update ON public.registrados
@@ -2236,55 +2187,11 @@ CREATE POLICY rpe_registrados_delete ON public.registrados
   FOR DELETE TO authenticated
   USING (public.rpe_is_admin());
 
--- Autoregistro público (reemplaza al formulario externo "Transworld" fuera
--- del repo, doc Sección 17.5): un visitante anónimo puede INSERTAR su propio
--- registro solo si el evento sigue vigente, y solo con origen='publico'.
--- No puede leer, actualizar ni eliminar registros de nadie.
 DROP POLICY IF EXISTS rpe_registrados_insert_publico ON public.registrados;
-CREATE POLICY rpe_registrados_insert_publico ON public.registrados
-  FOR INSERT TO anon
-  WITH CHECK (
-    origen = 'publico'
-    AND acreditado = false
-    AND ingresado_por IS NULL
-    AND EXISTS (
-      SELECT 1 FROM public.eventos e
-      WHERE e.id = evento_id
-        AND public.rpe_fecha_termino_evento(e.fecha, e.duracion_dias)
-              >= CURRENT_DATE
-    )
-  );
+DROP POLICY IF EXISTS "Permitir registro público anónimo" ON public.registrados;
+DROP POLICY IF EXISTS anon_insert_registrados ON public.registrados;
 
--- --- evento_bloques: lectura para resolver etiqueta en listados/export;
--- el formulario público (anon) también necesita ver los bloques activos.
-ALTER TABLE public.evento_bloques ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Lectura pública de bloques activos" ON public.evento_bloques;
-DROP POLICY IF EXISTS anon_select_evento_bloques ON public.evento_bloques;
-
-DROP POLICY IF EXISTS rpe_evento_bloques_select ON public.evento_bloques;
-CREATE POLICY rpe_evento_bloques_select ON public.evento_bloques
-  FOR SELECT TO authenticated
-  USING (public.rpe_puede_operar_evento(evento_id));
-
-DROP POLICY IF EXISTS rpe_evento_bloques_select_publico ON public.evento_bloques;
-CREATE POLICY rpe_evento_bloques_select_publico ON public.evento_bloques
-  FOR SELECT TO anon
-  USING (
-    (activo = true OR activo IS NULL)
-    AND EXISTS (
-      SELECT 1 FROM public.eventos e
-      WHERE e.id = evento_id
-        AND public.rpe_fecha_termino_evento(e.fecha, e.duracion_dias)
-              >= CURRENT_DATE
-    )
-  );
-
-DROP POLICY IF EXISTS rpe_evento_bloques_write ON public.evento_bloques;
-CREATE POLICY rpe_evento_bloques_write ON public.evento_bloques
-  FOR ALL TO authenticated
-  USING (public.rpe_can_create_content())
-  WITH CHECK (public.rpe_can_create_content());
+REVOKE INSERT ON TABLE public.registrados FROM PUBLIC, anon, authenticated;
 
 -- La vigencia la marca el rango de fechas: se deja de usar eventos.activo.
 ALTER TABLE public.eventos DROP COLUMN IF EXISTS activo;
@@ -3475,12 +3382,26 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 STABLE
 AS $$
+DECLARE
+  v_en_uso boolean := false;
 BEGIN
   IF p_bucket = 'imagenes' THEN
-    RETURN EXISTS (
+    v_en_uso := EXISTS (
       SELECT 1 FROM public.eventos
       WHERE public.rpe_storage_path(imagen_url) = p_path
-    ) OR EXISTS (
+    );
+    IF NOT v_en_uso AND EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'eventos' AND column_name = 'banner_url'
+    ) THEN
+      EXECUTE 'SELECT EXISTS (SELECT 1 FROM public.eventos WHERE public.rpe_storage_path(banner_url) = $1)'
+        INTO v_en_uso USING p_path;
+    END IF;
+    IF NOT v_en_uso AND to_regclass('public.subeventos') IS NOT NULL THEN
+      EXECUTE 'SELECT EXISTS (SELECT 1 FROM public.subeventos WHERE public.rpe_storage_path(imagen_url) = $1)'
+        INTO v_en_uso USING p_path;
+    END IF;
+    RETURN v_en_uso OR EXISTS (
       SELECT 1 FROM public.eventos_leads
       WHERE public.rpe_storage_path(imagen_url) = p_path
     ) OR EXISTS (

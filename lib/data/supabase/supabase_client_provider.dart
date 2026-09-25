@@ -30,19 +30,6 @@ final supabaseClientProvider = Provider<SupabaseClient>((ref) {
   return Supabase.instance.client;
 });
 
-/// Cliente sin sesión para el formulario público (otra publishable).
-///
-/// No reusa [Supabase.instance]: si alguien abre el form logueado, el
-/// cliente principal mandaría el JWT de staff y no el rol `anon`.
-final supabasePublicClientProvider = Provider<SupabaseClient>((ref) {
-  return SupabaseClient(
-    Env.supabaseUrl,
-    Env.supabasePublishableKeyForm,
-    httpClient: OmitirApiKeyEnBearerClient(),
-    authOptions: const AuthClientOptions(autoRefreshToken: false),
-  );
-});
-
 /// Todas las tablas de negocio viven en el esquema `public` (a diferencia
 /// del legado, que mezclaba `public` y un `registro_eventos` inconsistente,
 /// ver documentacion_zips_registro_pro.md Sección 7.2/17.2). No hace falta

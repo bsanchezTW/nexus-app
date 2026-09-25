@@ -88,7 +88,3 @@ class EventosRepository {
 final eventosRepositoryProvider = Provider<EventosRepository>((ref) {
   return EventosRepository(ref.watch(supabaseClientProvider));
 });
-
-final eventosRepositoryPublicoProvider = Provider<EventosRepository>((ref) {
-  return EventosRepository(ref.watch(supabasePublicClientProvider));
-});

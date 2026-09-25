@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../core/config/env.dart';
 import '../../../core/network/offline_guard.dart';
 import '../../../core/router/refresh_on_visible.dart';
 import '../../../core/router/route_paths.dart';
@@ -117,8 +116,8 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
 
   Future<void> _compartir(String nombreEvento) async {
     if (!requireOnline(context, ref)) return;
-    final base = Env.appPublicBaseUrl.replaceAll(RegExp(r'/$'), '');
-    final link = '$base${RoutePaths.registroPublico(widget.eventoId)}';
+    final evento = ref.read(eventoByIdProvider(widget.eventoId)).valueOrNull;
+    final link = RoutePaths.urlPublicaEvento(evento?.slug ?? '');
     final esMovil =
         !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.android ||
@@ -251,6 +250,16 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
                     onTap: () => _crearEventoLead(evento),
                   ),
                 ],
+                if (puedeEditar) ...[
+                  const SizedBox(height: TwSpacing.tileGap),
+                  TwActionTile(
+                    icon: Symbols.calendar_view_day_rounded,
+                    title: 'Subeventos',
+                    subtitle: 'Talleres de este evento',
+                    onTap: () =>
+                        context.push(RoutePaths.subeventos(widget.eventoId)),
+                  ),
+                ],
                 const TwSectionLabel('Administración'),
                 if (esAdmin) ...[
                   TwActionTile(
@@ -329,6 +338,7 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
       ],
       ctaLabel: 'Escanear QR',
       ctaIcon: Symbols.qr_code_scanner_rounded,
+      mostrarCta: evento.accesoQr,
       onCta: () => context.push(RoutePaths.acreditarQr(widget.eventoId)),
     );
   }

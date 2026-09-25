@@ -8,6 +8,7 @@ import 'package:transworld_nexus/data/models/perfil.dart';
 import 'package:transworld_nexus/features/auth/providers/auth_providers.dart';
 import 'package:transworld_nexus/features/eventos/providers/eventos_providers.dart';
 import 'package:transworld_nexus/features/eventos/screens/crear_editar_evento_screen.dart';
+import 'package:transworld_nexus/features/subeventos/providers/subeventos_providers.dart';
 
 void main() {
   testWidgets('sin red el formulario de edición sigue scrolleable', (
@@ -41,6 +42,7 @@ void main() {
               lugar: 'Santiago',
             ),
           ),
+          subeventosPorEventoProvider.overrideWith((ref, id) async => const []),
         ],
         child: const MaterialApp(
           home: CrearEditarEventoScreen(eventoId: 'evento-1'),

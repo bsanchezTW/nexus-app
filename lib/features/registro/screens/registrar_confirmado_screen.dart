@@ -11,10 +11,8 @@ import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/tw_toast.dart';
-import '../../../data/models/registrado.dart';
-import '../../../data/models/resultado_envio_qr.dart';
+import '../../../data/models/resultado_registro.dart';
 import '../../../data/repositories/registrados_repository.dart';
-import '../../auth/providers/auth_providers.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
 
@@ -71,10 +69,7 @@ class _RegistrarConfirmadoScreenState
     _paisInicializado = true;
   }
 
-  Future<void> _guardar({
-    required bool requiereCertificacion,
-    required String nombreEvento,
-  }) async {
+  Future<void> _guardar({required bool requiereCertificacion}) async {
     if (_guardando) return;
     _guardando = true;
 
@@ -102,7 +97,6 @@ class _RegistrarConfirmadoScreenState
     setState(() => _autovalidar = true);
 
     final email = formatearEmail(_emailController.text);
-    final userId = ref.read(currentPerfilProvider).valueOrNull?.id;
 
     if (!requireOnline(context, ref)) {
       _guardando = false;
@@ -117,65 +111,64 @@ class _RegistrarConfirmadoScreenState
     }
 
     try {
-      final yaExiste = await ref
-          .read(registradosRepositoryProvider)
-          .existeEmailEnEvento(widget.eventoId, email);
-      if (yaExiste) {
-        throw Exception(kMensajeEmailDuplicado);
-      }
-
-      final registrado = Registrado(
-        id: '',
+      final repo = ref.read(registradosRepositoryProvider);
+      final resultado = await repo.registrar(
         eventoId: widget.eventoId,
-        nombreCompleto: formatearNombreCompleto(_nombreController.text),
-        email: email,
-        acreditado: _acreditarAhora,
-        rut: requiereCertificacion ? formatearRut(_rutController.text) : null,
-        patente: requiereCertificacion
-            ? formatearPatente(_patenteController.text)
-            : null,
-        empresa: formatearEmpresa(_empresaController.text),
-        cargo: formatearCargo(_cargoController.text),
-        telefono: telefonoInternacional(_telefonoController.text, _pais),
-        ingresadoPor: userId,
+        acreditar: _acreditarAhora,
+        datos: {
+          'nombre_completo': formatearNombreCompleto(_nombreController.text),
+          'email': email,
+          'empresa': formatearEmpresa(_empresaController.text),
+          'cargo': formatearCargo(_cargoController.text),
+          'telefono': telefonoInternacional(_telefonoController.text, _pais),
+          if (requiereCertificacion) 'rut': formatearRut(_rutController.text),
+          if (requiereCertificacion)
+            'patente': formatearPatente(_patenteController.text),
+        },
       );
 
-      ResultadoEnvioQr? envio;
-      final repo = ref.read(registradosRepositoryProvider);
-      final creado = await repo.crear(registrado);
-      try {
-        envio = await repo.enviarQr(
-          creado,
-          nombreEvento: nombreEvento,
-          canales: CanalesEnvioQr.ambos,
+      if (resultado is RegistroRechazado) {
+        if (resultado.motivo == 'sin_cupo_evento' &&
+            resultado.puedeForzar &&
+            mounted) {
+          final forzar = await confirmDialog(
+            context,
+            title: 'Cupo completo',
+            message: 'El evento no tiene cupo. ¿Registrar igual en sobrecupo?',
+            confirmLabel: 'Registrar',
+          );
+          if (forzar && mounted) {
+            final forzado = await repo.registrar(
+              eventoId: widget.eventoId,
+              acreditar: _acreditarAhora,
+              forzarSobrecupo: true,
+              datos: {
+                'nombre_completo': formatearNombreCompleto(_nombreController.text),
+                'email': email,
+                'empresa': formatearEmpresa(_empresaController.text),
+                'cargo': formatearCargo(_cargoController.text),
+                'telefono': telefonoInternacional(_telefonoController.text, _pais),
+                if (requiereCertificacion) 'rut': formatearRut(_rutController.text),
+                if (requiereCertificacion)
+                  'patente': formatearPatente(_patenteController.text),
+              },
+            );
+            if (forzado is RegistroOk) {
+              _avisarRegistro();
+              return;
+            }
+          }
+        }
+        throw Exception(
+          resultado.motivo == 'email_duplicado'
+              ? kMensajeEmailDuplicado
+              : resultado.motivo == 'sin_cupo_evento'
+              ? 'No queda cupo en este evento.'
+              : 'No se pudo registrar.',
         );
-      } catch (e) {
-        debugPrint('enviar-qr tras registro manual falló: $e');
       }
 
-      ref.invalidate(registradosPorEventoProvider(widget.eventoId));
-
-      if (mounted) {
-        final mensaje = _mensajeRegistroQr(email: email, envio: envio);
-        final algunEnvio =
-            envio != null && (envio.email.enviado || envio.sms.enviado);
-        final algunFallo =
-            envio == null || envio.email.fallido || envio.sms.fallido;
-        showAppSnackBar(context, mensaje, isError: !algunEnvio && algunFallo);
-        _formKey.currentState!.reset();
-        _nombreController.clear();
-        _emailController.clear();
-        _empresaController.clear();
-        _cargoController.clear();
-        _telefonoController.clear();
-        _rutController.clear();
-        _patenteController.clear();
-        setState(() {
-          _acreditarAhora = false;
-          _pais = _paisEvento;
-          _autovalidar = false;
-        });
-      }
+      _avisarRegistro();
     } catch (e) {
       if (mounted) {
         showAppSnackBar(
@@ -187,6 +180,25 @@ class _RegistrarConfirmadoScreenState
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
+  }
+
+  void _avisarRegistro() {
+    ref.invalidate(registradosPorEventoProvider(widget.eventoId));
+    if (!mounted) return;
+    showAppSnackBar(context, 'Confirmación en camino');
+    _formKey.currentState!.reset();
+    _nombreController.clear();
+    _emailController.clear();
+    _empresaController.clear();
+    _cargoController.clear();
+    _telefonoController.clear();
+    _rutController.clear();
+    _patenteController.clear();
+    setState(() {
+      _acreditarAhora = false;
+      _pais = _paisEvento;
+      _autovalidar = false;
+    });
   }
 
   @override
@@ -244,7 +256,6 @@ class _RegistrarConfirmadoScreenState
                         ? null
                         : () => _guardar(
                             requiereCertificacion: requiereCertificacion,
-                            nombreEvento: evento.nombre,
                           ),
                   ),
                 ],
@@ -355,38 +366,4 @@ class _ToggleRow extends StatelessWidget {
       ),
     );
   }
-}
-
-String _mensajeRegistroQr({
-  required String email,
-  required ResultadoEnvioQr? envio,
-}) {
-  if (envio == null) {
-    return 'Registrado con éxito, pero no se pudo enviar el QR.';
-  }
-  final mail = envio.email;
-  final sms = envio.sms;
-
-  if (mail.enviado && sms.enviado) {
-    return 'Registrado con éxito. QR enviado por email y SMS.';
-  }
-  if (mail.enviado && sms.omitido && sms.reason == 'sin_telefono') {
-    return 'Registrado con éxito. QR enviado a $email. SMS omitido: sin teléfono.';
-  }
-  if (mail.enviado && sms.fallido) {
-    return 'Registrado con éxito. QR enviado a $email, pero no se pudo enviar por SMS.';
-  }
-  if (mail.enviado) {
-    return 'Registrado con éxito. QR enviado a $email.';
-  }
-  if (sms.enviado && mail.fallido) {
-    return 'Registrado con éxito. QR enviado por SMS, pero no se pudo enviar por email.';
-  }
-  if (sms.enviado) {
-    return 'Registrado con éxito. QR enviado por SMS.';
-  }
-  if (mail.fallido || sms.fallido) {
-    return 'Registrado con éxito, pero no se pudo enviar el QR.';
-  }
-  return 'Registrado con éxito.';
 }

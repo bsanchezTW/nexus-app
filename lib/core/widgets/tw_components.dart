@@ -1073,6 +1073,7 @@ class TwHeroCard extends StatelessWidget {
     required this.ctaLabel,
     required this.ctaIcon,
     required this.onCta,
+    this.mostrarCta = true,
     this.photo,
     this.titleHeight,
   });
@@ -1085,6 +1086,7 @@ class TwHeroCard extends StatelessWidget {
   final String ctaLabel;
   final IconData ctaIcon;
   final VoidCallback onCta;
+  final bool mostrarCta;
   final Widget? photo;
 
   /// El evento de leads usa 1.22 en vez del 1.20 por defecto (§9).
@@ -1152,7 +1154,8 @@ class TwHeroCard extends StatelessWidget {
                   ),
                 ],
                 TwStatsRow(stats),
-                TwHeroButton(label: ctaLabel, icon: ctaIcon, onTap: onCta),
+                if (mostrarCta)
+                  TwHeroButton(label: ctaLabel, icon: ctaIcon, onTap: onCta),
               ],
             ),
           ),

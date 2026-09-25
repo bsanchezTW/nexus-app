@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../../../core/errors/rpe_exception.dart';
 import '../../../core/router/refresh_on_visible.dart';
 import '../../../core/network/connectivity_service.dart';
 import '../../../core/network/offline_guard.dart';
@@ -24,6 +25,7 @@ import '../../../data/repositories/eventos_repository.dart';
 import '../../../data/repositories/storage_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../providers/eventos_providers.dart';
+import '../../subeventos/providers/subeventos_providers.dart';
 import '../../../data/repositories/storage_cleanup_service.dart';
 
 /// Crear o editar un evento. Disponible para cualquier usuario autenticado.
@@ -65,7 +67,16 @@ class _CrearEditarEventoFormState
   int _duracionDias = 1;
   String _pais = kPaisEventoChile;
   bool _certificacion = false;
-  TipoRegistroEvento _tipoRegistro = TipoRegistroEvento.comercial;
+  bool _accesoQr = false;
+  final _cupoController = TextEditingController();
+  final _descripcionController = TextEditingController();
+  final _mapaController = TextEditingController();
+  final _slugController = TextEditingController();
+  TimeOfDay? _horaInicio;
+  TimeOfDay? _horaFin;
+  DateTime? _cierre;
+  Uint8List? _bannerBytes;
+  String? _bannerUrl;
   Uint8List? _imagenBytes;
   String? _imagenUrlExistente;
   bool _guardando = false;
@@ -79,7 +90,7 @@ class _CrearEditarEventoFormState
   DateTime? _fecha0;
   int _duracionDias0 = 1;
   bool? _certificacion0;
-  TipoRegistroEvento? _tipoRegistro0;
+  bool? _accesoQr0;
   String? _imagenUrl0;
 
   bool get _esEdicion => widget.eventoId != null;
@@ -94,7 +105,7 @@ class _CrearEditarEventoFormState
         _fecha != _fecha0 ||
         _duracionDias != _duracionDias0 ||
         _certificacion != _certificacion0 ||
-        _tipoRegistro != _tipoRegistro0 ||
+        _accesoQr != _accesoQr0 ||
         _imagenBytes != null ||
         _imagenUrlExistente != _imagenUrl0;
   }
@@ -105,6 +116,10 @@ class _CrearEditarEventoFormState
     _tematicaController.dispose();
     _direccionController.dispose();
     _lugarController.dispose();
+    _cupoController.dispose();
+    _descripcionController.dispose();
+    _mapaController.dispose();
+    _slugController.dispose();
     super.dispose();
   }
 
@@ -119,7 +134,15 @@ class _CrearEditarEventoFormState
     _fecha = evento.fecha;
     _duracionDias = evento.duracionDias;
     _certificacion = evento.certificacionCapacitacion;
-    _tipoRegistro = evento.tipoRegistro;
+    _accesoQr = evento.accesoQr;
+    _cupoController.text = evento.cupoMaximo?.toString() ?? '';
+    _descripcionController.text = evento.descripcion ?? '';
+    _mapaController.text = evento.mapaUrl ?? '';
+    _slugController.text = evento.slug;
+    _horaInicio = evento.horaInicio;
+    _horaFin = evento.horaFin;
+    _cierre = evento.inscripcionesCierre;
+    _bannerUrl = evento.bannerUrl;
     _imagenUrlExistente = evento.imagenUrl;
     _nombre0 = _nombreController.text;
     _pais0 = _pais;
@@ -129,7 +152,7 @@ class _CrearEditarEventoFormState
     _fecha0 = _fecha;
     _duracionDias0 = _duracionDias;
     _certificacion0 = _certificacion;
-    _tipoRegistro0 = _tipoRegistro;
+    _accesoQr0 = _accesoQr;
     _imagenUrl0 = _imagenUrlExistente;
   }
 
@@ -164,6 +187,13 @@ class _CrearEditarEventoFormState
       }
       final cambioImagen = _esEdicion && imagenUrl != _imagenUrl0;
 
+      var bannerUrl = _bannerUrl;
+      if (_bannerBytes != null) {
+        bannerUrl = await ref
+            .read(storageRepositoryProvider)
+            .subirImagenEvento(_bannerBytes!, 'jpg');
+      }
+
       final evento = Evento(
         id: widget.eventoId ?? '',
         nombre: _nombreController.text.trim(),
@@ -175,14 +205,28 @@ class _CrearEditarEventoFormState
         lugar: _lugarController.text.trim(),
         certificacionCapacitacion: _certificacion,
         imagenUrl: imagenUrl,
-        tipoRegistro: _tipoRegistro,
+        accesoQr: _accesoQr,
+        slug: _slugController.text.trim(),
+        cupoMaximo: int.tryParse(_cupoController.text.trim()),
+        descripcion: _descripcionController.text.trim().isEmpty
+            ? null
+            : _descripcionController.text.trim(),
+        horaInicio: _horaInicio,
+        horaFin: _horaFin,
+        inscripcionesCierre: _cierre,
+        mapaUrl: _mapaController.text.trim().isEmpty
+            ? null
+            : _mapaController.text.trim(),
+        bannerUrl: bannerUrl,
       );
 
       final repo = ref.read(eventosRepositoryProvider);
       if (_esEdicion) {
-        await repo.actualizar(widget.eventoId!, evento.toInsertMap());
+        await conErroresRpe(
+          () => repo.actualizar(widget.eventoId!, evento.toInsertMap()),
+        );
       } else {
-        await repo.crear(evento);
+        await conErroresRpe(() => repo.crear(evento));
       }
 
       ref.invalidate(eventosListProvider);
@@ -394,27 +438,164 @@ class _CrearEditarEventoFormState
                         ),
                       ),
                       const SizedBox(height: 14),
-                      _FieldLabel('Tipo de registro'),
+                      _FieldLabel('Acceso con QR'),
                       const SizedBox(height: 6),
-                      DropdownButtonFormField<TipoRegistroEvento>(
-                        initialValue: _tipoRegistro,
-                        decoration: const InputDecoration(),
-                        items: const [
-                          DropdownMenuItem(
-                            value: TipoRegistroEvento.comercial,
-                            child: Text('Comercial'),
-                          ),
-                          DropdownMenuItem(
-                            value: TipoRegistroEvento.cliente,
-                            child: Text('Cliente'),
-                          ),
-                        ],
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Los asistentes reciben un código QR'),
+                        value: _accesoQr,
                         onChanged: (_guardando || !hayRed)
                             ? null
-                            : (value) => setState(
-                                () => _tipoRegistro = value ?? _tipoRegistro,
-                              ),
+                            : (value) => setState(() => _accesoQr = value),
                       ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Cupo máximo'),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _cupoController,
+                        enabled: !_guardando && hayRed,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          hintText: 'Vacío si no hay límite',
+                        ),
+                        validator: (valor) {
+                          final texto = valor?.trim() ?? '';
+                          if (texto.isEmpty) return null;
+                          final cupo = int.tryParse(texto);
+                          if (cupo == null || cupo <= 0) {
+                            return 'El cupo debe ser mayor que 0.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Descripción'),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _descripcionController,
+                        enabled: !_guardando && hayRed,
+                        maxLines: 4,
+                        decoration: const InputDecoration(
+                          hintText: 'Texto para la web pública',
+                        ),
+                        validator: (valor) => (valor ?? '').length > 5000
+                            ? 'Máximo 5000 caracteres.'
+                            : null,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Horario'),
+                      const SizedBox(height: 6),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          _horaInicio == null
+                              ? 'Hora de inicio'
+                              : 'Inicio ${_horaInicio!.format(context)}',
+                        ),
+                        onTap: !_guardando && hayRed
+                            ? () async {
+                                final hora = await showTimePicker(
+                                  context: context,
+                                  initialTime: _horaInicio ??
+                                      const TimeOfDay(hour: 9, minute: 0),
+                                );
+                                if (hora != null) {
+                                  setState(() => _horaInicio = hora);
+                                }
+                              }
+                            : null,
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          _horaFin == null
+                              ? 'Hora de término'
+                              : 'Término ${_horaFin!.format(context)}',
+                        ),
+                        onTap: !_guardando && hayRed
+                            ? () async {
+                                final hora = await showTimePicker(
+                                  context: context,
+                                  initialTime:
+                                      _horaFin ?? const TimeOfDay(hour: 18, minute: 0),
+                                );
+                                if (hora != null) setState(() => _horaFin = hora);
+                              }
+                            : null,
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Mapa'),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _mapaController,
+                        enabled: !_guardando && hayRed,
+                        decoration: const InputDecoration(
+                          hintText: 'https://maps.google.com/...',
+                        ),
+                        validator: (valor) {
+                          final texto = valor?.trim() ?? '';
+                          if (texto.isEmpty || texto.startsWith('https://')) {
+                            return null;
+                          }
+                          return 'El mapa debe empezar con https://';
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Banner'),
+                      const SizedBox(height: 6),
+                      SelectorImagen(
+                        bytes: _bannerBytes,
+                        urlExistente: _bannerUrl,
+                        enabled: !_guardando && hayRed,
+                        etiquetaVacio: 'Agregar banner',
+                        onElegir: () async {
+                          final bytes = await elegirImagenComprimida(
+                            context,
+                            recorteProporcion: kProporcionImagenEvento,
+                            tituloRecorte: 'Recortar banner',
+                          );
+                          if (bytes == null || !mounted) return;
+                          setState(() => _bannerBytes = bytes);
+                        },
+                        onQuitar: _bannerBytes == null && _bannerUrl == null
+                            ? null
+                            : () => setState(() {
+                                _bannerBytes = null;
+                                _bannerUrl = null;
+                              }),
+                      ),
+                      const SizedBox(height: 14),
+                      _FieldLabel('Avanzado'),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _slugController,
+                        enabled: !_guardando && hayRed,
+                        decoration: const InputDecoration(
+                          hintText: 'Se genera solo si lo dejas vacío',
+                          helperText:
+                              'Cambiar el slug rompe los links ya compartidos.',
+                        ),
+                        validator: (valor) {
+                          final texto = valor?.trim() ?? '';
+                          if (texto.isEmpty) return null;
+                          final ok = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$')
+                                  .hasMatch(texto) &&
+                              texto.length >= 3 &&
+                              texto.length <= 80;
+                          return ok ? null : 'Slug inválido.';
+                        },
+                      ),
+                      if (_esEdicion) ...[
+                        const SizedBox(height: 14),
+                        OutlinedButton(
+                          onPressed: () => context.push(
+                            RoutePaths.subeventos(widget.eventoId!),
+                          ),
+                          child: Text(
+                            'Subeventos (${ref.watch(subeventosPorEventoProvider(widget.eventoId!)).valueOrNull?.length ?? 0})',
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 14),
                       _ToggleCard(
                         title: 'Requiere certificación',

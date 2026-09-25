@@ -45,12 +45,9 @@ class Env {
   static String get bucketPlantillas =>
       dotenv.env['SUPABASE_BUCKET_PLANTILLAS'] ?? 'plantillas';
 
-  /// Base URL del subdominio de eventos, usada para armar el enlace de
-  /// autoregistro público (ver
-  /// features/registro/screens/registro_por_cliente_screen.dart).
-  /// La app de administración vive en https://regispro.transworld.cl/.
-  static String get appPublicBaseUrl =>
-      dotenv.env['APP_PUBLIC_BASE_URL'] ?? 'https://eventos.transworld.cl/';
+  /// Base de la web pública de eventos (`https://eventos.transworld.cl`).
+  static String get publicWebBaseUrl =>
+      dotenv.env['PUBLIC_WEB_BASE_URL'] ?? 'https://eventos.transworld.cl';
 
   /// Owner del repo GitHub usado como fuente OTA (`/releases/latest`).
   static String get githubOwner => dotenv.env['GITHUB_OWNER'] ?? 'bsanchezTW';

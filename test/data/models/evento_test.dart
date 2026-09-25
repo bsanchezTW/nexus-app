@@ -64,4 +64,22 @@ void main() {
       isFalse,
     );
   });
+
+  test('una caché vieja con tipo_registro cliente marca acceso QR', () {
+    final evento = Evento.fromMap({
+      'id': 'e-1',
+      'nombre': 'Taller',
+      'fecha': '2026-11-12',
+      'tipo_registro': 'cliente',
+      'hora_inicio': '09:00:00',
+      'inscripciones_cierre': '2026-11-11T23:59:00',
+    });
+
+    expect(evento.accesoQr, isTrue);
+    expect(evento.slug, isEmpty);
+    expect(evento.horaInicio?.hour, 9);
+    expect(evento.inscripcionesCierre?.hour, 23);
+    expect(evento.toInsertMap().containsKey('tipo_registro'), isFalse);
+    expect(evento.toInsertMap()['acceso_qr'], isTrue);
+  });
 }

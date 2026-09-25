@@ -1,17 +1,7 @@
+import 'package:flutter/material.dart';
+
 import '../../core/constants/duracion_actividad.dart';
 import 'supabase_row_parsers.dart';
-
-enum TipoRegistroEvento {
-  comercial,
-  cliente;
-
-  static TipoRegistroEvento fromString(String? raw) {
-    return TipoRegistroEvento.values.firstWhere(
-      (t) => t.name == raw,
-      orElse: () => TipoRegistroEvento.comercial,
-    );
-  }
-}
 
 class Evento {
   const Evento({
@@ -26,7 +16,15 @@ class Evento {
     this.lugar,
     this.certificacionCapacitacion = false,
     this.imagenUrl,
-    this.tipoRegistro = TipoRegistroEvento.comercial,
+    this.slug = '',
+    this.accesoQr = false,
+    this.cupoMaximo,
+    this.descripcion,
+    this.horaInicio,
+    this.horaFin,
+    this.inscripcionesCierre,
+    this.mapaUrl,
+    this.bannerUrl,
   });
 
   final String id;
@@ -40,7 +38,15 @@ class Evento {
   final String? lugar;
   final bool certificacionCapacitacion;
   final String? imagenUrl;
-  final TipoRegistroEvento tipoRegistro;
+  final String slug;
+  final bool accesoQr;
+  final int? cupoMaximo;
+  final String? descripcion;
+  final TimeOfDay? horaInicio;
+  final TimeOfDay? horaFin;
+  final DateTime? inscripcionesCierre;
+  final String? mapaUrl;
+  final String? bannerUrl;
 
   bool get esMultiDia => duracionDias > 1;
 
@@ -59,6 +65,10 @@ class Evento {
   bool cubreMes(DateTime mes) => rangoCubreMes(fecha, duracionDias, mes);
 
   factory Evento.fromMap(Map<String, dynamic> map) {
+    final accesoExplicito = map['acceso_qr'];
+    final accesoQr = accesoExplicito is bool
+        ? accesoExplicito
+        : map['tipo_registro'] == 'cliente';
     return Evento(
       id: map['id'] as String,
       nombre: map['nombre'] as String,
@@ -74,15 +84,20 @@ class Evento {
       certificacionCapacitacion:
           (map['certificacion_capacitacion'] as bool?) ?? false,
       imagenUrl: map['imagen_url'] as String?,
-      tipoRegistro: TipoRegistroEvento.fromString(
-        map['tipo_registro'] as String?,
+      slug: map['slug'] as String? ?? '',
+      accesoQr: accesoQr,
+      cupoMaximo: map['cupo_maximo'] as int?,
+      descripcion: map['descripcion'] as String?,
+      horaInicio: horaDesdeTexto(map['hora_inicio'] as String?),
+      horaFin: horaDesdeTexto(map['hora_fin'] as String?),
+      inscripcionesCierre: fechaLocalDesdeTexto(
+        map['inscripciones_cierre'] as String?,
       ),
+      mapaUrl: map['mapa_url'] as String?,
+      bannerUrl: map['banner_url'] as String?,
     );
   }
 
-  /// Copia serializable para la caché offline. Usa las claves de
-  /// [Evento.fromMap] para rehidratar por el mismo camino que la fila de
-  /// `eventos` (a diferencia de [toInsertMap], que omite el id).
   Map<String, dynamic> toCacheMap() {
     return {
       'id': id,
@@ -96,7 +111,15 @@ class Evento {
       'lugar': lugar,
       'certificacion_capacitacion': certificacionCapacitacion,
       'imagen_url': imagenUrl,
-      'tipo_registro': tipoRegistro.name,
+      'slug': slug,
+      'acceso_qr': accesoQr,
+      'cupo_maximo': cupoMaximo,
+      'descripcion': descripcion,
+      'hora_inicio': horaATexto(horaInicio),
+      'hora_fin': horaATexto(horaFin),
+      'inscripciones_cierre': fechaLocalATexto(inscripcionesCierre),
+      'mapa_url': mapaUrl,
+      'banner_url': bannerUrl,
     };
   }
 
@@ -111,7 +134,15 @@ class Evento {
       'lugar': lugar,
       'certificacion_capacitacion': certificacionCapacitacion,
       'imagen_url': imagenUrl,
-      'tipo_registro': tipoRegistro.name,
+      'acceso_qr': accesoQr,
+      'cupo_maximo': cupoMaximo,
+      'descripcion': descripcion,
+      'hora_inicio': horaATexto(horaInicio),
+      'hora_fin': horaATexto(horaFin),
+      'inscripciones_cierre': fechaLocalATexto(inscripcionesCierre),
+      'mapa_url': mapaUrl,
+      'banner_url': bannerUrl,
+      if (slug.isNotEmpty) 'slug': slug,
     };
   }
 
@@ -125,7 +156,7 @@ class Evento {
     String? lugar,
     bool? certificacionCapacitacion,
     String? imagenUrl,
-    TipoRegistroEvento? tipoRegistro,
+    bool? accesoQr,
   }) {
     return Evento(
       id: id,
@@ -140,7 +171,43 @@ class Evento {
       certificacionCapacitacion:
           certificacionCapacitacion ?? this.certificacionCapacitacion,
       imagenUrl: imagenUrl ?? this.imagenUrl,
-      tipoRegistro: tipoRegistro ?? this.tipoRegistro,
+      slug: slug,
+      accesoQr: accesoQr ?? this.accesoQr,
+      cupoMaximo: cupoMaximo,
+      descripcion: descripcion,
+      horaInicio: horaInicio,
+      horaFin: horaFin,
+      inscripcionesCierre: inscripcionesCierre,
+      mapaUrl: mapaUrl,
+      bannerUrl: bannerUrl,
     );
   }
+}
+
+TimeOfDay? horaDesdeTexto(String? raw) {
+  if (raw == null || raw.isEmpty) return null;
+  final partes = raw.split(':');
+  if (partes.length < 2) return null;
+  final hora = int.tryParse(partes[0]);
+  final minuto = int.tryParse(partes[1]);
+  if (hora == null || minuto == null) return null;
+  return TimeOfDay(hour: hora, minute: minuto);
+}
+
+String? horaATexto(TimeOfDay? hora) {
+  if (hora == null) return null;
+  final h = hora.hour.toString().padLeft(2, '0');
+  final m = hora.minute.toString().padLeft(2, '0');
+  return '$h:$m:00';
+}
+
+DateTime? fechaLocalDesdeTexto(String? raw) {
+  if (raw == null || raw.isEmpty) return null;
+  return DateTime.parse(raw.replaceFirst(RegExp(r'Z$'), ''));
+}
+
+String? fechaLocalATexto(DateTime? fecha) {
+  if (fecha == null) return null;
+  String dos(int n) => n.toString().padLeft(2, '0');
+  return '${fecha.year}-${dos(fecha.month)}-${dos(fecha.day)}T${dos(fecha.hour)}:${dos(fecha.minute)}:${dos(fecha.second)}';
 }

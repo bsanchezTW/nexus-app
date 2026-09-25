@@ -1,41 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:transworld_nexus/features/acreditacion/qr_codigo_parser.dart';
 
 void main() {
-  const uuid = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+  const codigo = 'TW1-3F2A9C0B7D1E4F5A8B6C2D0E9F1A7B3C';
+  const uuid = 'A1B2C3D4-E5F6-7890-ABCD-EF1234567890';
 
-  group('extraerRegistradoIdDeTexto', () {
-    test('acepta UUID plano', () {
-      expect(extraerRegistradoIdDeTexto(uuid), uuid);
-    });
-
-    test('acepta UUID con espacios', () {
-      expect(extraerRegistradoIdDeTexto('  $uuid  '), uuid);
-    });
-
-    test('acepta JSON con registrado_id', () {
-      expect(extraerRegistradoIdDeTexto('{"registrado_id":"$uuid"}'), uuid);
-    });
-
-    test('acepta URL con query param', () {
-      expect(
-        extraerRegistradoIdDeTexto(
-          'https://app.com/acreditar?registrado_id=$uuid',
-        ),
-        uuid,
-      );
-    });
-
-    test('rechaza texto sin UUID', () {
-      expect(extraerRegistradoIdDeTexto('hola mundo'), isNull);
-    });
+  test('acepta un código válido', () {
+    final lectura = interpretarQr(codigo);
+    expect(lectura.tipo, QrLecturaTipo.valido);
+    expect(lectura.codigo, codigo);
   });
 
-  group('extraerRegistradoIdDeBarcode', () {
-    test('usa displayValue si rawValue es null', () {
-      const barcode = Barcode(displayValue: uuid);
-      expect(extraerRegistradoIdDeBarcode(barcode), uuid);
-    });
+  test('normaliza minúsculas', () {
+    final lectura = interpretarQr(codigo.toLowerCase());
+    expect(lectura.tipo, QrLecturaTipo.valido);
+    expect(lectura.codigo, codigo);
+  });
+
+  test('un UUID es formato antiguo', () {
+    expect(interpretarQr(uuid).tipo, QrLecturaTipo.formatoAntiguo);
+  });
+
+  test('basura es inválida', () {
+    expect(interpretarQr('hola mundo').tipo, QrLecturaTipo.invalido);
   });
 }

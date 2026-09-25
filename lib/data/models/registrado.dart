@@ -23,8 +23,9 @@ class Registrado {
     this.empresa,
     this.cargo,
     this.telefono,
-    this.bloqueId,
-    this.bloqueEtiqueta,
+    this.codigoQr = '',
+    this.sobrecupo = false,
+    this.acreditadoEn,
     this.origen = OrigenRegistro.app,
     this.ingresadoPor,
     this.emailConfirmacionEnviado = false,
@@ -43,16 +44,11 @@ class Registrado {
   final String? empresa;
   final String? cargo;
   final String? telefono;
-
-  /// FK a `public.evento_bloques`. El nombre visible para UI/Excel es
-  /// [bloqueEtiqueta] (`evento_bloques.etiqueta`), no este id.
-  final String? bloqueId;
-
-  /// Etiqueta del bloque resuelta vía join / caché. Vacía si no hay bloque.
-  final String? bloqueEtiqueta;
+  final String codigoQr;
+  final bool sobrecupo;
+  final DateTime? acreditadoEn;
 
   /// Origen lógico del registro (app / excel / formulario público).
-  /// Se envía en el insert: la RLS anónima exige `origen = 'publico'`.
   final OrigenRegistro origen;
   final String? ingresadoPor;
   final bool emailConfirmacionEnviado;
@@ -68,16 +64,6 @@ class Registrado {
   /// el id, con `esIdSoloLocal` (ver data/offline/sync_queue_service.dart).
   final bool pendienteDeSincronizar;
 
-  /// Resuelve `evento_bloques.etiqueta` desde el join de PostgREST o desde
-  /// el campo plano que guarda la caché offline.
-  static String? _etiquetaDesdeMap(Map<String, dynamic> map) {
-    final nested = map['evento_bloques'];
-    if (nested is Map) {
-      return nested['etiqueta'] as String?;
-    }
-    return map['bloque_etiqueta'] as String?;
-  }
-
   factory Registrado.fromMap(Map<String, dynamic> map) {
     return Registrado(
       id: map['id'] as String,
@@ -90,8 +76,11 @@ class Registrado {
       empresa: map['empresa'] as String?,
       cargo: map['cargo'] as String?,
       telefono: map['telefono'] as String?,
-      bloqueId: map['bloque_id'] as String?,
-      bloqueEtiqueta: _etiquetaDesdeMap(map),
+      codigoQr: map['codigo_qr'] as String? ?? '',
+      sobrecupo: (map['sobrecupo'] as bool?) ?? false,
+      acreditadoEn: map['acreditado_en'] != null
+          ? DateTime.tryParse(map['acreditado_en'] as String)
+          : null,
       origen: OrigenRegistro.fromString(map['origen'] as String?),
       ingresadoPor: map['ingresado_por'] as String?,
       emailConfirmacionEnviado:
@@ -115,7 +104,6 @@ class Registrado {
       'empresa': empresa,
       'cargo': cargo,
       'telefono': telefono,
-      'bloque_id': bloqueId,
       'origen': origen.name,
       'ingresado_por': ingresadoPor,
     };
@@ -137,8 +125,9 @@ class Registrado {
       'empresa': empresa,
       'cargo': cargo,
       'telefono': telefono,
-      'bloque_id': bloqueId,
-      'bloque_etiqueta': bloqueEtiqueta,
+      'codigo_qr': codigoQr,
+      'sobrecupo': sobrecupo,
+      'acreditado_en': acreditadoEn?.toIso8601String(),
       'origen': origen.name,
       'ingresado_por': ingresadoPor,
       'email_confirmacion_enviado': emailConfirmacionEnviado,
@@ -174,8 +163,9 @@ class Registrado {
       empresa: texto('empresa', empresa),
       cargo: texto('cargo', cargo),
       telefono: texto('telefono', telefono),
-      bloqueId: texto('bloque_id', bloqueId),
-      bloqueEtiqueta: texto('bloque_etiqueta', bloqueEtiqueta),
+      codigoQr: texto('codigo_qr', codigoQr) ?? codigoQr,
+      sobrecupo: booleano('sobrecupo', sobrecupo),
+      acreditadoEn: acreditadoEn,
       origen: origen,
       ingresadoPor: ingresadoPor,
       emailConfirmacionEnviado: booleano(
@@ -199,8 +189,7 @@ class Registrado {
     String? telefono,
     String? rut,
     String? patente,
-    String? bloqueId,
-    String? bloqueEtiqueta,
+    String? codigoQr,
     bool? pendienteDeSincronizar,
   }) {
     return Registrado(
@@ -214,8 +203,9 @@ class Registrado {
       empresa: empresa ?? this.empresa,
       cargo: cargo ?? this.cargo,
       telefono: telefono ?? this.telefono,
-      bloqueId: bloqueId ?? this.bloqueId,
-      bloqueEtiqueta: bloqueEtiqueta ?? this.bloqueEtiqueta,
+      codigoQr: codigoQr ?? this.codigoQr,
+      sobrecupo: sobrecupo,
+      acreditadoEn: acreditadoEn,
       origen: origen,
       ingresadoPor: ingresadoPor,
       emailConfirmacionEnviado: emailConfirmacionEnviado,

@@ -429,6 +429,9 @@ verify_jwt = false
 [functions.enviar-qr]
 verify_jwt = false
 
+[functions.qr-imagen]
+verify_jwt = false
+
 [functions.limpiar-storage]
 verify_jwt = false
 

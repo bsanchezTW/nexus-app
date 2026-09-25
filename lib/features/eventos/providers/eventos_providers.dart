@@ -70,10 +70,3 @@ final eventoByIdProvider = FutureProvider.autoDispose.family<Evento, String>((
   }
   throw Exception('No se pudo cargar el evento.');
 });
-
-/// Detalle para el formulario anónimo: otra publishable, sin sesión ni caché
-/// de staff.
-final eventoPublicoByIdProvider = FutureProvider.autoDispose
-    .family<Evento, String>((ref, id) {
-      return ref.watch(eventosRepositoryPublicoProvider).obtenerPorId(id);
-    });

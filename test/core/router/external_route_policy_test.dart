@@ -95,7 +95,6 @@ void main() {
       RoutePaths.eventos,
       RoutePaths.capturador,
       RoutePaths.usuarios,
-      RoutePaths.registroForms,
       RoutePaths.home,
     ];
 

@@ -153,7 +153,8 @@ docs/
 | `crear-usuario` | Alta por admin + email de credenciales (Brevo) |
 | `regenerar-password-usuario` | Nueva password por admin + email |
 | `reset-password` | Olvido de contraseña (sin sesión) |
-| `enviar-qr` | QR de acreditación por email y SMS (Brevo) |
+| `enviar-qr` | Confirmación por email y SMS. El staff llama con JWT; el webhook de `envios_qr` usa la apikey secreta. Ver `docs/ENVIO_QR.md`. |
+| `qr-imagen` | PNG público del código `TW1-…`, sin base de datos (`verify_jwt = false`) |
 | `enviar-push` | Envía FCM al insertar en `notificaciones` (secret `FIREBASE_SERVICE_ACCOUNT_JSON`) |
 | `limpiar-storage` | Vacía la cola `storage_basura`: borra los objetos que ya no referencia ninguna fila |
 
@@ -171,7 +172,7 @@ autoriza en código (sesión del usuario o `apikey` secret). El webhook de
 `enviar-push` debe mandar `apikey: <sb_secret_…>`, no `Authorization: Bearer`
 con la secret.
 
-SMS transaccional de QR (eventos `cliente`) usa además
+SMS transaccional de QR (eventos con acceso QR) usa además
 `BREVO_SMS_SENDER` (nombre alfanumérico, máx. 11 caracteres; por defecto
 `Transworld` si el secreto no está). El SMS lleva un enlace a la imagen del
 QR. Hace falta crédito SMS en la cuenta Brevo.

@@ -8,7 +8,7 @@ void main() {
       '202608211600_actividades_captura_por_evento_autorizado.sql';
 
   test('externas son globales e internas exigen evento autorizado', () {
-    final sql = File(migracion).readAsStringSync();
+    final sql = File(migracion).readAsStringSync().replaceAll('\r\n', '\n');
 
     expect(sql, contains('public.cl_campana_autorizada(evento_id)'));
     expect(sql, contains('evento_origen_id IS NULL'));
@@ -21,7 +21,7 @@ void main() {
   });
 
   test('los RPC originales quedan privados detrás de wrappers autorizados', () {
-    final sql = File(migracion).readAsStringSync();
+    final sql = File(migracion).readAsStringSync().replaceAll('\r\n', '\n');
 
     expect(
       sql,
@@ -50,7 +50,7 @@ void main() {
   test(
     'notificaciones heredan el alcance externo o interno de la actividad',
     () {
-      final sql = File(migracion).readAsStringSync();
+      final sql = File(migracion).readAsStringSync().replaceAll('\r\n', '\n');
 
       expect(sql, contains('public.cl_campana_autorizada(p_evento_lead_id)'));
       expect(sql, contains('n.evento_lead_id'));
@@ -61,7 +61,7 @@ void main() {
   );
 
   test('las fotos privadas de leads heredan el permiso de la campaña', () {
-    final sql = File(migracion).readAsStringSync();
+    final sql = File(migracion).readAsStringSync().replaceAll('\r\n', '\n');
 
     expect(sql, contains('public.rpe_puede_escribir_imagen'));
     expect(sql, contains('public.cl_campana_autorizada(l.evento_id)'));

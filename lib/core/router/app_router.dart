@@ -32,10 +32,10 @@ import '../../features/registrados/screens/editar_registrado_screen.dart';
 import '../../features/registrados/screens/ver_registrados_screen.dart';
 import '../../features/registro/screens/registrar_confirmado_screen.dart';
 import '../../features/registro/screens/registro_por_cliente_screen.dart';
-import '../../features/registro_publico/screens/registro_publico_screen.dart';
 import '../../features/sincronizacion/screens/sincronizacion_screen.dart';
 import '../../features/externo/screens/evento_finalizado_screen.dart';
 import '../../features/externo/screens/usar_evento_externo_screen.dart';
+import '../../features/subeventos/screens/subeventos_evento_screen.dart';
 import '../../features/usar_app/screens/usar_evento_screen.dart';
 import '../../features/usuarios/screens/editar_usuario_screen.dart';
 import '../../features/usuarios/screens/gestionar_usuarios_screen.dart';
@@ -58,7 +58,6 @@ import '../widgets/sheet_depth_observer.dart';
 bool _esRutaPublica(String location) {
   return location == RoutePaths.login ||
       location == RoutePaths.recuperarPassword ||
-      location == RoutePaths.registroForms ||
       location == RoutePaths.eventoFinalizado;
 }
 
@@ -124,14 +123,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     refreshListenable: refreshListenable,
     redirect: (context, state) {
       final location = state.matchedLocation;
-
-      // Compatibilidad con enlaces antiguos compartidos como /#/r/:eventoId.
-      if (location.startsWith('/r/')) {
-        final eventoId = state.pathParameters['eventoId'];
-        if (eventoId != null && eventoId.isNotEmpty) {
-          return RoutePaths.registroPublico(eventoId);
-        }
-      }
 
       final session = authClient.currentSession;
       final esPublica = _esRutaPublica(location);
@@ -328,7 +319,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         if (!isUserEventRouteAllowed(
           location: location,
           authorizedEventIds: autorizados,
-          publicRegistrationEventId: state.uri.queryParameters['id'],
         )) {
           return RoutePaths.eventos;
         }
@@ -457,6 +447,32 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => sharedAxisPage(
           key: state.pageKey,
           child: UsarEventoScreen(eventoId: state.pathParameters['id']!),
+        ),
+      ),
+      GoRoute(
+        path: '/eventos/:id/subeventos',
+        pageBuilder: (context, state) => sharedAxisPage(
+          key: state.pageKey,
+          child: SubeventosEventoScreen(eventoId: state.pathParameters['id']!),
+        ),
+      ),
+      GoRoute(
+        path: '/eventos/:id/subeventos/crear',
+        pageBuilder: (context, state) => sharedAxisPage(
+          key: state.pageKey,
+          child: CrearEditarSubeventoScreen(
+            eventoId: state.pathParameters['id']!,
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/eventos/:id/subeventos/:subeventoId/editar',
+        pageBuilder: (context, state) => sharedAxisPage(
+          key: state.pageKey,
+          child: CrearEditarSubeventoScreen(
+            eventoId: state.pathParameters['id']!,
+            subeventoId: state.pathParameters['subeventoId'],
+          ),
         ),
       ),
       GoRoute(
@@ -647,21 +663,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           key: state.pageKey,
           child: EditarUsuarioScreen(usuarioId: state.pathParameters['id']!),
         ),
-      ),
-      GoRoute(
-        path: '/r/:eventoId',
-        redirect: (context, state) =>
-            RoutePaths.registroPublico(state.pathParameters['eventoId']!),
-      ),
-      GoRoute(
-        path: RoutePaths.registroForms,
-        builder: (context, state) {
-          final eventoId = state.uri.queryParameters['id'];
-          if (eventoId == null || eventoId.isEmpty) {
-            return const RegistroPublicoScreen(eventoId: '');
-          }
-          return RegistroPublicoScreen(eventoId: eventoId);
-        },
       ),
     ],
   );

@@ -3,16 +3,16 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/errors/rpe_exception.dart';
 import '../../core/constants/supabase_tables.dart';
 import '../../core/utils/registro_asistente.dart';
 import '../models/mi_acreditacion.dart';
 import '../models/registrado.dart';
 import '../models/resultado_envio_qr.dart';
+import '../models/resultado_registro.dart';
+import '../offline/sync_queue_item.dart';
 import '../offline/sync_queue_service.dart';
 import '../supabase/supabase_client_provider.dart';
-
-/// Código de error de Postgres para violación de constraint UNIQUE.
-const _uniqueViolation = '23505';
 
 class RegistradosRepository implements SyncExecutor {
   RegistradosRepository(this._client);
@@ -22,27 +22,19 @@ class RegistradosRepository implements SyncExecutor {
   @override
   String get table => SupabaseTables.registrados;
 
-  /// Incluye el join a `evento_bloques` para resolver la etiqueta del bloque
-  /// (el Excel y la UI no deben mostrar el UUID de `bloque_id`).
-  static const _selectConBloque =
-      '*, ${SupabaseTables.eventoBloques}(etiqueta)';
-
   Future<List<Registrado>> listarPorEvento(String eventoId) async {
     final rows = await _client
         .from(SupabaseTables.registrados)
-        .select(_selectConBloque)
+        .select()
         .eq('evento_id', eventoId)
         .order('created_at', ascending: false);
     return rows.map(Registrado.fromMap).toList();
   }
 
-  /// Busca un asistente por id dentro de un evento concreto. Lo usa el
-  /// escáner QR como respaldo cuando la lista cacheada aún no está lista
-  /// o quedó desactualizada.
   Future<Registrado?> obtenerPorIdEnEvento(String id, String eventoId) async {
     final row = await _client
         .from(SupabaseTables.registrados)
-        .select(_selectConBloque)
+        .select()
         .eq('id', id)
         .eq('evento_id', eventoId)
         .maybeSingle();
@@ -50,110 +42,110 @@ class RegistradosRepository implements SyncExecutor {
     return Registrado.fromMap(row);
   }
 
-  /// Antes de insertar, revisa si ya existe alguien con ese correo en el
-  /// evento. Compara en minúsculas porque el email es el identificador
-  /// irrepetible y en producción hay filas históricas con distinta capitalización.
-  ///
-  /// Refuerza (no reemplaza) el `UNIQUE(evento_id, email)` de la base: la
-  /// constraint es la última línea de defensa ante doble click / carrera;
-  /// este chequeo evita el viaje redondo con error en el caso común.
-  Future<bool> existeEmailEnEvento(String eventoId, String email) async {
-    final normalizado = email.trim().toLowerCase();
-    if (normalizado.isEmpty) return false;
-    try {
-      final result = await _client.rpc(
-        SupabaseRpc.existeEmailRegistrado,
-        params: {'p_evento_id': eventoId, 'p_email': normalizado},
-      );
-      return result == true;
-    } catch (_) {
-      // Fallback si el RPC aún no está desplegado. `ilike` sin comodines
-      // equivale a igualdad case-insensitive. El rol `anon` no puede leer
-      // la tabla: en ese caso devolvemos false y `crear` se apoya en UNIQUE.
-      final escaped = normalizado
-          .replaceAll(r'\', r'\\')
-          .replaceAll('%', r'\%')
-          .replaceAll('_', r'\_');
-      try {
-        final rows = await _client
-            .from(SupabaseTables.registrados)
-            .select('id')
-            .eq('evento_id', eventoId)
-            .ilike('email', escaped)
-            .limit(1);
-        return rows.isNotEmpty;
-      } catch (_) {
-        return false;
-      }
-    }
-  }
-
-  Future<Registrado> crear(Registrado registrado) async {
-    try {
-      final row = await _client
-          .from(SupabaseTables.registrados)
-          .insert(registrado.toInsertMap())
-          .select()
-          .single();
-      return Registrado.fromMap(row);
-    } on PostgrestException catch (e) {
-      if (e.code == _uniqueViolation) {
-        throw Exception(kMensajeEmailDuplicado);
-      }
-      rethrow;
-    }
-  }
-
-  /// Inserción masiva (carga por Excel). Filtra localmente los correos que
-  /// ya existen en el evento y los duplicados internos del propio archivo,
-  /// y deja que el `UNIQUE(evento_id, email)` de la base de datos actúe
-  /// como respaldo final.
-  Future<({int insertados, int omitidos})> importarLote(
+  Future<Registrado?> obtenerPorCodigoQrEnEvento(
+    String codigo,
     String eventoId,
-    List<Registrado> registros,
   ) async {
-    final vistos = <String>{};
-    final unicosDelArchivo = <Registrado>[];
-    for (final r in registros) {
-      final email = r.email.trim().toLowerCase();
-      if (email.isEmpty || vistos.contains(email)) continue;
-      vistos.add(email);
-      unicosDelArchivo.add(r);
-    }
-
-    if (unicosDelArchivo.isEmpty) {
-      return (insertados: 0, omitidos: registros.length);
-    }
-
-    final existentesRows = await _client
-        .from(SupabaseTables.registrados)
-        .select('email')
-        .eq('evento_id', eventoId)
-        .inFilter(
-          'email',
-          unicosDelArchivo.map((r) => r.email.trim().toLowerCase()).toList(),
-        );
-
-    final emailsExistentes = existentesRows
-        .map((r) => (r['email'] as String).trim().toLowerCase())
-        .toSet();
-
-    final aInsertar = unicosDelArchivo
-        .where((r) => !emailsExistentes.contains(r.email.trim().toLowerCase()))
-        .toList();
-
-    if (aInsertar.isEmpty) {
-      return (insertados: 0, omitidos: registros.length);
-    }
-
-    await _client
-        .from(SupabaseTables.registrados)
-        .insert(aInsertar.map((r) => r.toInsertMap()).toList());
-
-    return (
-      insertados: aInsertar.length,
-      omitidos: registros.length - aInsertar.length,
+    final row = await conErroresRpe(
+      () => _client
+          .from(SupabaseTables.registrados)
+          .select()
+          .eq('codigo_qr', codigo)
+          .eq('evento_id', eventoId)
+          .maybeSingle(),
     );
+    if (row == null) return null;
+    return Registrado.fromMap(row);
+  }
+
+  Future<ResultadoRegistro> registrar({
+    required String eventoId,
+    required Map<String, dynamic> datos,
+    List<String> subeventoIds = const [],
+    bool acreditar = false,
+    bool forzarSobrecupo = false,
+    bool enviarQr = true,
+  }) async {
+    final raw = await conErroresRpe(
+      () => _client.rpc(
+        SupabaseRpc.registrarAsistente,
+        params: {
+          'p_evento_id': eventoId,
+          'p_datos': datos,
+          'p_subevento_ids': subeventoIds,
+          'p_acreditar': acreditar,
+          'p_forzar_sobrecupo': forzarSobrecupo,
+          'p_enviar_qr': enviarQr,
+        },
+      ),
+    );
+    return _resultadoRegistro(raw);
+  }
+
+  Future<ResultadoImportacion> importar({
+    required String eventoId,
+    required List<Map<String, dynamic>> filas,
+    bool forzarSobrecupo = false,
+  }) async {
+    final raw = await conErroresRpe(
+      () => _client.rpc(
+        SupabaseRpc.importarRegistrados,
+        params: {
+          'p_evento_id': eventoId,
+          'p_filas': filas,
+          'p_forzar_sobrecupo': forzarSobrecupo,
+        },
+      ),
+    );
+    if (raw is! Map) {
+      throw const RpeException(RpeErrorCode.desconocido);
+    }
+    return ResultadoImportacion.fromJson(Map<String, dynamic>.from(raw));
+  }
+
+  Future<String> regenerarCodigoQr(String registradoId, {bool reenviar = true}) async {
+    final raw = await conErroresRpe(
+      () => _client.rpc(
+        SupabaseRpc.regenerarCodigoQr,
+        params: {'p_registrado_id': registradoId, 'p_reenviar': reenviar},
+      ),
+    );
+    if (raw is Map && raw['codigo_qr'] is String) return raw['codigo_qr'] as String;
+    throw const RpeException(RpeErrorCode.desconocido);
+  }
+
+  Future<ResultadoEnvioQr> enviarQr(
+    String registradoId, {
+    required List<String> canales,
+  }) async {
+    FunctionResponse response;
+    try {
+      response = await _client.functions.invoke(
+        SupabaseFunctions.enviarQr,
+        body: {
+          'registrado_id': registradoId,
+          'canales': canales,
+          'motivo': 'reenvio',
+        },
+      );
+    } on FunctionException catch (e) {
+      final mapeado = rpeExceptionDesde(e);
+      if (mapeado != null) throw mapeado;
+      final resultado = ResultadoEnvioQr.fromJson(_mapaRespuesta(e.details));
+      if (resultado.email.fallido ||
+          resultado.sms.fallido ||
+          resultado.email.enviado ||
+          resultado.sms.enviado ||
+          resultado.email.omitido ||
+          resultado.sms.omitido) {
+        return resultado;
+      }
+      throw Exception('No se pudo enviar la confirmación.');
+    }
+    if (response.status >= 400) {
+      throw Exception('No se pudo enviar la confirmación.');
+    }
+    return ResultadoEnvioQr.fromJson(_mapaRespuesta(response.data));
   }
 
   Future<void> actualizar(String id, Map<String, dynamic> changes) async {
@@ -176,82 +168,6 @@ class RegistradosRepository implements SyncExecutor {
     await _client.from(SupabaseTables.registrados).delete().eq('id', id);
   }
 
-  /// Envía el QR de acreditación (UUID de `registrados.id`) por email y/o
-  /// SMS a través de la Edge Function `enviar-qr`.
-  ///
-  /// [canales] es `email`, `sms` o ambos. La función responde por canal
-  /// (`sent` / `skipped` / `failed`) y acá solo se marcan los flags de los
-  /// que realmente salieron. Eventos comerciales omiten SMS.
-  ///
-  /// El body va envuelto en `{ record: {...}, canales: [...] }` con las
-  /// columnas de `public.registrados`, como lo invocaba el legado.
-  Future<ResultadoEnvioQr> enviarQr(
-    Registrado registrado, {
-    String? nombreEvento,
-    required List<String> canales,
-  }) async {
-    final record = <String, dynamic>{
-      'id': registrado.id,
-      'evento_id': registrado.eventoId,
-      'nombre_completo': registrado.nombreCompleto,
-      'email': registrado.email,
-      'acreditado': registrado.acreditado,
-      'rut': registrado.rut,
-      'patente': registrado.patente,
-      'empresa': registrado.empresa,
-      'cargo': registrado.cargo,
-      'telefono': registrado.telefono,
-      'ingresado_por': registrado.ingresadoPor,
-      'email_confirmacion_enviado': registrado.emailConfirmacionEnviado,
-      'sms_confirmacion_enviado': registrado.smsConfirmacionEnviado,
-      'evento': ?nombreEvento,
-    };
-    FunctionResponse response;
-    try {
-      response = await _client.functions.invoke(
-        SupabaseFunctions.enviarQr,
-        body: {'record': record, 'canales': canales},
-      );
-    } on FunctionException catch (e) {
-      final resultado = ResultadoEnvioQr.fromJson(_mapaRespuesta(e.details));
-      if (resultado.email.fallido ||
-          resultado.sms.fallido ||
-          resultado.email.enviado ||
-          resultado.sms.enviado ||
-          resultado.email.omitido ||
-          resultado.sms.omitido) {
-        return resultado;
-      }
-      final details = e.details;
-      throw Exception(
-        details is Map && details['error'] != null
-            ? details['error'].toString()
-            : 'No se pudo enviar el QR.',
-      );
-    }
-    if (response.status >= 400) {
-      final data = response.data;
-      final message = data is Map && data['error'] != null
-          ? data['error'].toString()
-          : 'No se pudo enviar el QR.';
-      throw Exception(message);
-    }
-    final resultado = ResultadoEnvioQr.fromJson(_mapaRespuesta(response.data));
-    final pideEmail = canales.contains(CanalesEnvioQr.email);
-    final pideSms = canales.contains(CanalesEnvioQr.sms);
-    final cambios = <String, dynamic>{};
-    if (pideEmail && resultado.email.enviado) {
-      cambios['email_confirmacion_enviado'] = true;
-    }
-    if (pideSms && resultado.sms.enviado) {
-      cambios['sms_confirmacion_enviado'] = true;
-    }
-    if (cambios.isNotEmpty) {
-      await actualizar(registrado.id, cambios);
-    }
-    return resultado;
-  }
-
   Map<String, dynamic> _mapaRespuesta(dynamic data) {
     if (data is Map<String, dynamic>) return data;
     if (data is Map) return Map<String, dynamic>.from(data);
@@ -262,21 +178,64 @@ class RegistradosRepository implements SyncExecutor {
     return {};
   }
 
+  ResultadoRegistro _resultadoRegistro(dynamic raw) {
+    if (raw is! Map) throw const RpeException(RpeErrorCode.desconocido);
+    final json = Map<String, dynamic>.from(raw);
+    if (json['ok'] == true) {
+      return RegistroOk(
+        registradoId: json['registrado_id'] as String,
+        codigoQr: json['codigo_qr'] as String? ?? '',
+        sobrecupo: json['sobrecupo'] == true,
+        envio: json['envio'] as String? ?? 'no_solicitado',
+      );
+    }
+    final rechazados = json['rechazados'];
+    return RegistroRechazado(
+      motivo: json['motivo'] as String? ?? 'desconocido',
+      registradoIdExistente: json['registrado_id_existente'] as String?,
+      puedeForzar: json['puede_forzar'] == true,
+      rechazados: rechazados is List
+          ? [
+              for (final item in rechazados)
+                if (item is Map)
+                  RechazoSubevento(
+                    subeventoId: item['subevento_id']?.toString() ?? '',
+                    motivo: item['motivo']?.toString() ?? '',
+                  ),
+            ]
+          : const [],
+    );
+  }
+
   // ---- SyncExecutor: puente entre la cola offline y esta tabla ----
 
   @override
   Future<void> onInsert(Map<String, dynamic> payload) async {
-    final data = Map<String, dynamic>.from(payload)
-      ..remove('id')
-      ..remove('acreditado_en');
-    try {
-      await _client.from(SupabaseTables.registrados).insert(data);
-    } on PostgrestException catch (e) {
-      // Si mientras estuvo offline alguien más registró el mismo correo,
-      // el UNIQUE(evento_id, email) rechaza el insert. Se descarta el
-      // duplicado en vez de reintentarlo por siempre.
-      if (e.code == _uniqueViolation) return;
-      rethrow;
+    final eventoId = payload['evento_id'] as String?;
+    if (eventoId == null || eventoId.isEmpty) {
+      throw TerminalSyncConflictException(
+        const SyncConflict(
+          code: 'sin_evento',
+          message: 'El registro no tiene evento.',
+        ),
+      );
+    }
+    final resultado = await registrar(
+      eventoId: eventoId,
+      datos: payload,
+      acreditar: payload['acreditado'] == true,
+      enviarQr: false,
+    );
+    if (resultado is RegistroRechazado) {
+      if (resultado.motivo == 'email_duplicado') {
+        throw SyncDiscardedException(kMensajeEmailDuplicado);
+      }
+      throw TerminalSyncConflictException(
+        SyncConflict(
+          code: resultado.motivo,
+          message: 'No se pudo sincronizar el registro.',
+        ),
+      );
     }
   }
 
@@ -344,10 +303,4 @@ class RegistradosRepository implements SyncExecutor {
 
 final registradosRepositoryProvider = Provider<RegistradosRepository>((ref) {
   return RegistradosRepository(ref.watch(supabaseClientProvider));
-});
-
-final registradosRepositoryPublicoProvider = Provider<RegistradosRepository>((
-  ref,
-) {
-  return RegistradosRepository(ref.watch(supabasePublicClientProvider));
 });

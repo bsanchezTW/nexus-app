@@ -110,9 +110,49 @@ class _ExportarScreenState extends ConsumerState<ExportarScreen> {
         eventoId: widget.eventoId,
       );
 
-      final resultado = await ref
+      final filas = [
+        for (final r in registros)
+          {
+            'nombre_completo': r.nombreCompleto,
+            'email': r.email,
+            'empresa': r.empresa,
+            'cargo': r.cargo,
+            'telefono': r.telefono,
+            'rut': r.rut,
+            'patente': r.patente,
+          },
+      ];
+      var resultado = await ref
           .read(registradosRepositoryProvider)
-          .importarLote(widget.eventoId, registros);
+          .importar(eventoId: widget.eventoId, filas: filas);
+      if (resultado.excedeCupo > 0 && resultado.puedeForzar && mounted) {
+        final forzar = await confirmDialog(
+          context,
+          title: 'Cupo insuficiente',
+          message:
+              'Faltan ${resultado.excedeCupo} cupos. ¿Importar el resto en sobrecupo?',
+          confirmLabel: 'Importar',
+        );
+        if (forzar) {
+          resultado = await ref
+              .read(registradosRepositoryProvider)
+              .importar(
+                eventoId: widget.eventoId,
+                filas: filas,
+                forzarSobrecupo: true,
+              );
+        }
+      }
+      if (resultado.excedeCupo > 0) {
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            'No se importó nadie: el cupo no alcanza.',
+            isError: true,
+          );
+        }
+        return;
+      }
 
       ref.invalidate(registradosPorEventoProvider(widget.eventoId));
 
@@ -120,7 +160,7 @@ class _ExportarScreenState extends ConsumerState<ExportarScreen> {
         showAppSnackBar(
           context,
           'Se registraron ${resultado.insertados} personas'
-          '${resultado.omitidos > 0 ? ' (${resultado.omitidos} omitidas por duplicado)' : ''}.',
+          '${resultado.omitidosDuplicado > 0 ? ' (${resultado.omitidosDuplicado} omitidas por duplicado)' : ''}.',
         );
       }
     } catch (e) {

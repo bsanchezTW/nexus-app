@@ -21,6 +21,7 @@ import '../../capturador/providers/capturador_providers.dart';
 import '../../capturador/services/evento_lead_interno_service.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
+import '../qr_codigo_parser.dart';
 import '../scanner/qr_scanner_service.dart';
 import '../scanner/scanner_controller.dart';
 import '../scanner/widgets/scanner_view.dart';
@@ -95,19 +96,16 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     return async.valueOrNull ?? [];
   }
 
-  Future<Registrado?> _resolverRegistrado(String registradoId) async {
-    final id = registradoId.toLowerCase();
+  Future<Registrado?> _resolverPorCodigo(String codigo) async {
     final registrados = await _listaAsistentes();
-    final enCache = registrados
-        .where((r) => r.id.toLowerCase() == id)
-        .firstOrNull;
+    final enCache = registrados.where((r) => r.codigoQr == codigo).firstOrNull;
 
     return resolverRegistradoParaAcreditacion(
       hayRed: ref.read(isOnlineProvider),
       enCache: enCache,
       obtenerDelServidor: () => ref
           .read(registradosRepositoryProvider)
-          .obtenerPorIdEnEvento(registradoId, widget.eventoId),
+          .obtenerPorCodigoQrEnEvento(codigo, widget.eventoId),
       escribirCache: (fresco) async {
         await ref
             .read(offlineReadCacheProvider)
@@ -283,20 +281,19 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     }
 
     try {
-      if (!decode.isValid) {
-        final preview = decode.rawText == null
-            ? '(vacío)'
-            : (decode.rawText!.length > 40
-                  ? '${decode.rawText!.substring(0, 40)}…'
-                  : decode.rawText!);
+      if (decode.lectura.tipo == QrLecturaTipo.formatoAntiguo) {
         _scanner.showFeedback(
-          'No se pudo leer el QR. Datos detectados: $preview',
+          'Este QR usa un formato antiguo y ya no sirve.',
           isError: true,
         );
         return;
       }
+      if (!decode.isValid || decode.lectura.codigo == null) {
+        _scanner.showFeedback('El código no es válido.', isError: true);
+        return;
+      }
 
-      final registrado = await _resolverRegistrado(decode.registradoId!);
+      final registrado = await _resolverPorCodigo(decode.lectura.codigo!);
 
       if (registrado == null) {
         _scanner.showFeedback(

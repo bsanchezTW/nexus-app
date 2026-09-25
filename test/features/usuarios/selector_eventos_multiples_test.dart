@@ -4,7 +4,7 @@ import 'package:transworld_nexus/data/models/evento.dart';
 import 'package:transworld_nexus/features/usuarios/widgets/selector_eventos_multiples.dart';
 
 Evento _evento(String id, String nombre) {
-  return Evento(id: id, nombre: nombre, fecha: DateTime(2026, 9, 1));
+  return Evento(id: id, nombre: nombre, fecha: DateTime(2026, 12, 1));
 }
 
 void main() {

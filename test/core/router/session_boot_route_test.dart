@@ -45,6 +45,6 @@ void main() {
       hold(location: RoutePaths.recuperarPassword, esPublica: true),
       isNull,
     );
-    expect(hold(location: RoutePaths.registroForms, esPublica: true), isNull);
+    expect(hold(location: RoutePaths.eventoFinalizado, esPublica: true), isNull);
   });
 }

@@ -23,7 +23,6 @@ class ExcelExportService {
     'Teléfono',
     'RUT / RUC',
     'Patente',
-    'Bloque',
     'Acreditado',
     'Fecha de registro',
   ];
@@ -49,8 +48,6 @@ class ExcelExportService {
         xls.TextCellValue(r.telefono ?? ''),
         xls.TextCellValue(r.rut ?? ''),
         xls.TextCellValue(r.patente ?? ''),
-        // Nombre del bloque (`evento_bloques.etiqueta`), no el UUID.
-        xls.TextCellValue(r.bloqueEtiqueta ?? ''),
         xls.TextCellValue(r.acreditado ? 'Sí' : 'No'),
         xls.TextCellValue(
           r.createdAt != null ? formatoFecha.format(r.createdAt!) : '',

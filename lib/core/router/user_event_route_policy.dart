@@ -6,15 +6,8 @@
 bool isUserEventRouteAllowed({
   required String location,
   required Set<String>? authorizedEventIds,
-  String? publicRegistrationEventId,
 }) {
   if (location == '/eventos') return true;
-  if (location == '/registro-forms') {
-    return authorizedEventIds != null &&
-        publicRegistrationEventId != null &&
-        publicRegistrationEventId.isNotEmpty &&
-        authorizedEventIds.contains(publicRegistrationEventId);
-  }
   if (!location.startsWith('/eventos/')) return true;
 
   final segments = Uri(path: location).pathSegments;

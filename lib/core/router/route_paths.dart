@@ -1,3 +1,5 @@
+import '../config/env.dart';
+
 /// Rutas centralizadas de la app (usadas por `go_router`).
 ///
 /// Mantener esto en un solo archivo evita el problema de rutas "sueltas"
@@ -24,6 +26,11 @@ class RoutePaths {
   static String editarEvento(String id) => '/eventos/$id/editar';
   static String accesoEvento(String id) => '/eventos/$id/acceso';
   static String usarEvento(String id) => '/eventos/$id/usar';
+  static String subeventos(String eventoId) => '/eventos/$eventoId/subeventos';
+  static String crearSubevento(String eventoId) =>
+      '/eventos/$eventoId/subeventos/crear';
+  static String editarSubevento(String eventoId, String subeventoId) =>
+      '/eventos/$eventoId/subeventos/$subeventoId/editar';
   static String registrar(String id) => '/eventos/$id/registrar';
   static String registroPorCliente(String id) =>
       '/eventos/$id/registro-cliente';
@@ -83,11 +90,8 @@ class RoutePaths {
     return '$base?desdeEvento=${Uri.encodeQueryComponent(desdeEvento)}';
   }
 
-  /// Formulario público de autoregistro (sin sesión). Reemplaza al
-  /// formulario externo "Transworld", fuera del alcance de los ZIP
-  /// originales (ver Sección 17.5 de la auditoría): ahora vive dentro de
-  /// la misma app, accesible también desde Flutter Web sin loguearse.
-  static const registroForms = '/registro-forms';
-  static String registroPublico(String eventoId) =>
-      '$registroForms?id=$eventoId';
+  static String urlPublicaEvento(String slug) {
+    final base = Env.publicWebBaseUrl.replaceAll(RegExp(r'/$'), '');
+    return '$base/eventos/$slug';
+  }
 }

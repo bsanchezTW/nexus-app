@@ -17,10 +17,10 @@ import '../../../core/widgets/app_modals.dart';
 import '../../../core/widgets/collapsing_nav.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
-import '../../../data/models/evento.dart';
 import '../../../data/models/registrado.dart';
 import '../../../data/models/resultado_envio_qr.dart';
 import '../../../data/offline/sync_queue_service.dart';
+import '../../../data/repositories/envios_qr_repository.dart';
 import '../../../data/repositories/registrados_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../eventos/providers/eventos_providers.dart';
@@ -591,6 +591,32 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
     return puedeVerContacto ? telefono : enmascararTelefono(telefono);
   }
 
+  Future<void> _regenerar() async {
+    if (!requireOnline(context, ref)) return;
+    final ok = await confirmDialog(
+      context,
+      title: 'Regenerar QR',
+      message: 'El código anterior dejará de servir. ¿Continuar?',
+      confirmLabel: 'Regenerar',
+    );
+    if (!ok || !mounted) return;
+    try {
+      await ref
+          .read(registradosRepositoryProvider)
+          .regenerarCodigoQr(widget.registrado.id);
+      ref.invalidate(registradosPorEventoProvider(widget.eventoId));
+      if (mounted) showAppSnackBar(context, 'Nuevo QR en camino');
+    } catch (e) {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          e.toString().replaceFirst('Exception: ', ''),
+          isError: true,
+        );
+      }
+    }
+  }
+
   Future<void> _enviar({required String canal}) async {
     if (!requireOnline(context, ref)) return;
     final puedeVerContacto = ref.read(canViewContactDataProvider);
@@ -602,14 +628,9 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
       }
     });
     try {
-      final evento = await ref.read(eventoByIdProvider(widget.eventoId).future);
       final resultado = await ref
           .read(registradosRepositoryProvider)
-          .enviarQr(
-            widget.registrado,
-            nombreEvento: evento.nombre,
-            canales: [canal],
-          );
+          .enviarQr(widget.registrado.id, canales: [canal]);
       ref.invalidate(registradosPorEventoProvider(widget.eventoId));
       if (!mounted) return;
       final canalResultado = canal == CanalesEnvioQr.email
@@ -665,7 +686,7 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
       final motivo = switch (resultado.reason) {
         'sin_telefono' => 'Este asistente no tiene teléfono.',
         'sin_email' => 'Este asistente no tiene email.',
-        'evento_comercial' => 'Este evento no envía QR por SMS.',
+        'sin_acceso_qr' => 'Este evento no envía QR por SMS.',
         _ => 'No se envió el QR.',
       };
       showAppSnackBar(context, motivo);
@@ -689,7 +710,7 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
     final isOnline = ref.watch(isOnlineProvider);
     final puedeVerContacto = ref.watch(canViewContactDataProvider);
     final evento = ref.watch(eventoByIdProvider(widget.eventoId)).valueOrNull;
-    final mostrarSms = evento?.tipoRegistro == TipoRegistroEvento.cliente;
+    final mostrarSms = evento?.accesoQr == true;
     final r = widget.registrado;
     // Un registro que solo existe en la cola local todavía no tiene id real
     // en el servidor: su QR no serviría para acreditar ni para el email. Se
@@ -759,11 +780,40 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
                     border: Border.all(color: AppColors.border),
                   ),
                   child: QrImageView(
-                    data: r.id,
+                    data: r.codigoQr,
                     size: qrSize,
                     backgroundColor: Colors.white,
                   ),
                 ),
+              if (ref.watch(canCreateContentProvider) && !soloEnLaCola) ...[
+                const SizedBox(height: 10),
+                TextButton(
+                  onPressed: puedeEnviar ? _regenerar : null,
+                  child: const Text('Regenerar QR'),
+                ),
+              ],
+              const SizedBox(height: 8),
+              const Text('Envíos'),
+              FutureBuilder(
+                future: ref
+                    .read(enviosQrRepositoryProvider)
+                    .listarPorRegistrado(r.id),
+                builder: (context, snapshot) {
+                  final envios = snapshot.data ?? const [];
+                  if (envios.isEmpty) {
+                    return const Text('Sin envíos todavía.');
+                  }
+                  return Column(
+                    children: [
+                      for (final envio in envios)
+                        Text(
+                          '${envio.createdAt ?? ''} · ${envio.canales.join(', ')} · ${envio.estado}',
+                          style: const TextStyle(color: AppColors.textSecondary),
+                        ),
+                    ],
+                  );
+                },
+              ),
               const SizedBox(height: 20),
               PrimaryGradientButton(
                 label: r.emailConfirmacionEnviado

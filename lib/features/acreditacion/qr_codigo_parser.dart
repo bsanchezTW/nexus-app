@@ -1,9 +1,8 @@
-import 'dart:convert';
-
 import 'package:mobile_scanner/mobile_scanner.dart';
 
-final _uuidPattern = RegExp(
-  r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
+final _codigoQr = RegExp(r'^TW1-[0-9A-F]{32}$');
+final _uuid = RegExp(
+  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
 );
 
 String _limpiar(String raw) {
@@ -13,86 +12,33 @@ String _limpiar(String raw) {
       .replaceAll(RegExp(r'''^["']|["']$'''), '');
 }
 
-/// Normaliza un candidato a UUID de `registrados.id`.
-String? normalizarUuid(String? candidato) {
-  if (candidato == null) return null;
-  final limpio = _limpiar(candidato);
-  if (limpio.isEmpty) return null;
-  final match = _uuidPattern.firstMatch(limpio);
-  return match?.group(0)?.toLowerCase();
+enum QrLecturaTipo { valido, formatoAntiguo, invalido }
+
+class QrLectura {
+  const QrLectura._(this.tipo, [this.codigo]);
+
+  const QrLectura.valido(String codigo) : this._(QrLecturaTipo.valido, codigo);
+  const QrLectura.formatoAntiguo() : this._(QrLecturaTipo.formatoAntiguo);
+  const QrLectura.invalido() : this._(QrLecturaTipo.invalido);
+
+  final QrLecturaTipo tipo;
+  final String? codigo;
 }
 
-/// Interpreta el texto crudo de un QR (UUID plano, JSON, URL, etc.).
-String? extraerRegistradoIdDeTexto(String raw) {
-  final texto = _limpiar(raw);
-  if (texto.isEmpty) return null;
-
-  final directo = normalizarUuid(texto);
-  if (directo != null) return directo;
-
-  if (texto.startsWith('{')) {
-    try {
-      final json = jsonDecode(texto);
-      if (json is Map) {
-        for (final key in ['registrado_id', 'id', 'registradoId']) {
-          final id = normalizarUuid(json[key]?.toString());
-          if (id != null) return id;
-        }
-      }
-    } catch (_) {}
-  }
-
-  final uri = Uri.tryParse(texto);
-  if (uri != null) {
-    for (final key in ['registrado_id', 'id', 'registradoId']) {
-      final id = normalizarUuid(uri.queryParameters[key]);
-      if (id != null) return id;
-    }
-    for (final segment in uri.pathSegments) {
-      final id = normalizarUuid(segment);
-      if (id != null) return id;
-    }
-  }
-
-  return normalizarUuid(texto);
+QrLectura interpretarQr(String raw) {
+  final texto = _limpiar(raw).toUpperCase();
+  if (texto.isEmpty) return const QrLectura.invalido();
+  if (_codigoQr.hasMatch(texto)) return QrLectura.valido(texto);
+  if (_uuid.hasMatch(texto)) return const QrLectura.formatoAntiguo();
+  return const QrLectura.invalido();
 }
 
-/// Lee el id desde cualquier campo que exponga [mobile_scanner].
-String? extraerRegistradoIdDeBarcode(Barcode barcode) {
-  final candidatos = <String>{
-    if (barcode.rawValue != null && barcode.rawValue!.isNotEmpty)
-      barcode.rawValue!,
-    if (barcode.displayValue != null && barcode.displayValue!.isNotEmpty)
-      barcode.displayValue!,
-  };
-
-  final decoded = barcode.rawDecodedBytes;
-  if (decoded is DecodedBarcodeBytes) {
-    final texto = utf8.decode(decoded.bytes, allowMalformed: true);
-    if (texto.isNotEmpty) candidatos.add(texto);
-  } else if (decoded is DecodedVisionBarcodeBytes) {
-    final bytes = decoded.bytes ?? decoded.rawBytes;
-    final texto = utf8.decode(bytes, allowMalformed: true);
-    if (texto.isNotEmpty) candidatos.add(texto);
-  }
-
-  for (final candidato in candidatos) {
-    final id = extraerRegistradoIdDeTexto(candidato);
-    if (id != null) return id;
-  }
-  return null;
+QrLectura interpretarQrDeCaptura(BarcodeCapture capture) {
+  final texto = textoLeidoDeCaptura(capture);
+  if (texto == null) return const QrLectura.invalido();
+  return interpretarQr(texto);
 }
 
-/// Prueba todos los códigos detectados en un frame (no solo el primero).
-String? extraerRegistradoIdDeCaptura(BarcodeCapture capture) {
-  for (final barcode in capture.barcodes) {
-    final id = extraerRegistradoIdDeBarcode(barcode);
-    if (id != null) return id;
-  }
-  return null;
-}
-
-/// Texto crudo leído, útil para depurar cuando el parseo falla.
 String? textoLeidoDeCaptura(BarcodeCapture capture) {
   for (final barcode in capture.barcodes) {
     final raw = barcode.rawValue;

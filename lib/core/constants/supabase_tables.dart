@@ -9,10 +9,9 @@ class SupabaseTables {
   static const perfiles = 'perfiles';
   static const eventos = 'eventos';
   static const registrados = 'registrados';
-
-  /// Bloques horarios / cupos de un evento (formulario público de registro).
-  /// `registrados.bloque_id` apunta acá; el nombre visible es `etiqueta`.
-  static const eventoBloques = 'evento_bloques';
+  static const subeventos = 'subeventos';
+  static const inscripcionesSubevento = 'inscripciones_subevento';
+  static const enviosQr = 'envios_qr';
 
   static const usuariosEventos = 'usuarios_eventos';
 
@@ -54,6 +53,10 @@ class SupabaseRpc {
   static const guardarLead = 'cl_guardar_lead';
   static const buscarLeadPorEmail = 'cl_buscar_lead_por_email';
   static const existeEmailRegistrado = 'rpe_existe_email_registrado';
+  static const registrarAsistente = 'rpe_registrar_asistente';
+  static const importarRegistrados = 'rpe_importar_registrados';
+  static const regenerarCodigoQr = 'rpe_regenerar_codigo_qr';
+  static const ocupacionEvento = 'rpe_ocupacion_evento';
   static const misAcreditados = 'rpe_mis_acreditados';
 }
 
@@ -62,6 +65,7 @@ class SupabaseFunctions {
 
   static const resetPassword = 'reset-password';
   static const enviarQr = 'enviar-qr';
+  static const qrImagen = 'qr-imagen';
   static const crearUsuario = 'crear-usuario';
   static const regenerarPasswordUsuario = 'regenerar-password-usuario';
   static const enviarPush = 'enviar-push';

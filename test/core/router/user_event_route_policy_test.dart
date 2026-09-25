@@ -70,33 +70,6 @@ void main() {
       );
     });
 
-    test('el formulario público respeta la asignación de la sesión user', () {
-      expect(
-        isUserEventRouteAllowed(
-          location: RoutePaths.registroForms,
-          authorizedEventIds: authorized,
-          publicRegistrationEventId: eventId,
-        ),
-        isTrue,
-      );
-      expect(
-        isUserEventRouteAllowed(
-          location: RoutePaths.registroForms,
-          authorizedEventIds: authorized,
-          publicRegistrationEventId: otherId,
-        ),
-        isFalse,
-      );
-      expect(
-        isUserEventRouteAllowed(
-          location: RoutePaths.registroForms,
-          authorizedEventIds: null,
-          publicRegistrationEventId: eventId,
-        ),
-        isFalse,
-      );
-    });
-
     test(
       'deniega creación, edición, exportación y rutas futuras desconocidas',
       () {
