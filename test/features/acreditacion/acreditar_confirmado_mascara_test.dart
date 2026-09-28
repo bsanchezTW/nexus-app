@@ -11,6 +11,8 @@ import 'package:transworld_nexus/data/offline/sync_queue_service.dart';
 import 'package:transworld_nexus/features/acreditacion/screens/acreditar_confirmado_screen.dart';
 import 'package:transworld_nexus/features/auth/providers/auth_providers.dart';
 import 'package:transworld_nexus/features/registrados/providers/registrados_providers.dart';
+import 'package:transworld_nexus/features/subeventos/providers/inscripciones_providers.dart';
+import 'package:transworld_nexus/features/subeventos/providers/subeventos_providers.dart';
 
 void main() {
   const eventoId = 'evento-1';
@@ -59,6 +61,8 @@ void main() {
           registradosPorEventoProvider.overrideWith(
             (ref, id) async => registrados,
           ),
+          subeventosPorEventoProvider.overrideWith((ref, id) async => const []),
+          inscripcionesPorEventoProvider.overrideWith((ref, id) async => const []),
         ],
         child: const MaterialApp(
           home: AcreditarConfirmadoScreen(eventoId: eventoId),

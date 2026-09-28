@@ -14,6 +14,8 @@ import 'package:transworld_nexus/data/repositories/registrados_repository.dart';
 import 'package:transworld_nexus/features/auth/providers/auth_providers.dart';
 import 'package:transworld_nexus/features/registrados/providers/registrados_providers.dart';
 import 'package:transworld_nexus/features/registrados/screens/ver_registrados_screen.dart';
+import 'package:transworld_nexus/features/subeventos/providers/inscripciones_providers.dart';
+import 'package:transworld_nexus/features/subeventos/providers/subeventos_providers.dart';
 
 class _FakeRegistradosRepository extends Fake implements RegistradosRepository {
   String? desacreditadoId;
@@ -76,6 +78,8 @@ void main() {
           registradosPorEventoProvider.overrideWith(
             (ref, id) async => [asistente],
           ),
+          subeventosPorEventoProvider.overrideWith((ref, id) async => const []),
+          inscripcionesPorEventoProvider.overrideWith((ref, id) async => const []),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),

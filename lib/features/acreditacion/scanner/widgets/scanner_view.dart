@@ -14,12 +14,16 @@ import 'scanner_overlay.dart';
 /// El [MobileScanner] no se reconstruye en cada cambio de estado del
 /// controlador; solo el overlay escucha [ScannerController].
 class ScannerView extends StatelessWidget {
-  const ScannerView({super.key, required this.controller, this.onClose});
+  const ScannerView({
+    super.key,
+    required this.controller,
+    this.onClose,
+    this.modoControl,
+  });
 
   final ScannerController controller;
-
-  /// Cierre del escáner (X). Si es null, hace [context.pop] cuando hay historial.
   final VoidCallback? onClose;
+  final Widget? modoControl;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +52,11 @@ class ScannerView extends StatelessWidget {
           );
         }
 
-        return _ScannerCameraLayer(controller: controller, onClose: onClose);
+        return _ScannerCameraLayer(
+          controller: controller,
+          onClose: onClose,
+          modoControl: modoControl,
+        );
       },
     );
   }
@@ -56,10 +64,15 @@ class ScannerView extends StatelessWidget {
 
 /// Capa de cámara estable: el preview no se recrea al togglear flash/modo.
 class _ScannerCameraLayer extends StatefulWidget {
-  const _ScannerCameraLayer({required this.controller, this.onClose});
+  const _ScannerCameraLayer({
+    required this.controller,
+    this.onClose,
+    this.modoControl,
+  });
 
   final ScannerController controller;
   final VoidCallback? onClose;
+  final Widget? modoControl;
 
   @override
   State<_ScannerCameraLayer> createState() => _ScannerCameraLayerState();
@@ -139,6 +152,7 @@ class _ScannerCameraLayerState extends State<_ScannerCameraLayer> {
                     onToggleTorch: widget.controller.toggleTorch,
                     onToggleCaptureLead:
                         widget.controller.toggleCaptureLeadMode,
+                    modoControl: widget.modoControl,
                   );
                 },
               ),

@@ -57,6 +57,9 @@ class SupabaseRpc {
   static const importarRegistrados = 'rpe_importar_registrados';
   static const regenerarCodigoQr = 'rpe_regenerar_codigo_qr';
   static const ocupacionEvento = 'rpe_ocupacion_evento';
+  static const inscribirSubevento = 'rpe_inscribir_subevento';
+  static const quitarInscripcionSubevento = 'rpe_quitar_inscripcion_subevento';
+  static const marcarAsistenciaSubevento = 'rpe_marcar_asistencia_subevento';
   static const misAcreditados = 'rpe_mis_acreditados';
 }
 

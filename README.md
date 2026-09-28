@@ -21,12 +21,12 @@ y 18) y corrige explícitamente los hallazgos críticos ahí identificados.
 | 4 | Sin constraint de duplicados en `registrados`: la deduplicación era solo a nivel de aplicación. | `UNIQUE (evento_id, email)` en la base de datos, reforzado (no reemplazado) por un chequeo previo en el cliente. |
 | 5 | Esquema inconsistente: código y `.env` apuntaban a `registro_eventos`, pero `schema.sql` creaba todo en `public`. | Todo vive explícitamente en `public`, sin variables de esquema configurables que puedan desalinearse. |
 | 6 | Base de datos compartida con la app hermana "capturador-leads" sin documentar el impacto. | Captura de leads vive en esta misma app (`features/capturador/`), mismo `auth.users` y esquema `public`; políticas/funciones con prefijo `rpe_` para evitar colisiones (`supabase/schema.sql`). |
-| 7 | Formulario público de autoregistro vivía **fuera** de ambos repositorios (`intranet-transworld-dc.onrender.com`), como dependencia oculta e indocumentada. | El autoregistro público vive dentro de esta misma app (`/r/:eventoId`, sin sesión, rol `anon`), con su propia política RLS acotada (`rpe_registrados_insert_publico`). |
+| 7 | Formulario público de autoregistro vivía **fuera** de ambos repositorios (`intranet-transworld-dc.onrender.com`), como dependencia oculta e indocumentada. | El formulario público de Flutter se eliminó. El registro público lo hace la web Node con las RPC `rpe_publico_*`. Contrato: [`docs/api-publica.md`](docs/api-publica.md). |
 | 8 | Integración con Electron oculta (`window.ipcRenderer`) sin las herramientas de build correspondientes en el ZIP. | Ya no aplica: el mismo Flutter Desktop nativo cubre exportación de archivos sin depender de un runtime externo. |
 | 9 | `.env` con credenciales reales incluido en el ZIP pese a `.gitignore`. | `.env` real nunca se versiona; `.env.example` documenta las variables sin valores reales. Ver `.gitignore`. |
 | 10 | Control de acceso por rol solo en la UI (`if (rol === 'admin')` repetido en decenas de archivos). | Sigue existiendo en la UI por UX (`RequireAdmin`, `isAdminProvider`), pero ya no es la única barrera: RLS + triggers son la fuente de verdad. |
 | 11 | El cambio obligatorio de contraseña (`perfiles.cambiar_pass`, regla 6.1 de la doc) existía como pantalla pero nada lo forzaba: un usuario marcado podía seguir usando la app. | El `redirect` del router fuerza `/recrear-pass` mientras `cambiar_pass = true`; al guardar la nueva contraseña se refresca el perfil y se vuelve al home. |
-| 12 | La Edge Function `enviar-qr` estaba declarada pero **nunca se invocaba**, `email_confirmacion_enviado` nunca se marcaba, y ningún flujo mostraba/entregaba el QR del asistente (la pantalla de escaneo leía un QR que nadie tenía). | Desde "Ver registrados" se puede abrir el QR de cada asistente (codifica `registrados.id`, lo mismo que lee el escáner) y enviarlo por email y SMS vía `enviar-qr`, marcando `email_confirmacion_enviado` y `sms_confirmacion_enviado`. |
+| 12 | La Edge Function `enviar-qr` estaba declarada pero **nunca se invocaba**, `email_confirmacion_enviado` nunca se marcaba, y ningún flujo mostraba/entregaba el QR del asistente (la pantalla de escaneo leía un QR que nadie tenía). | El QR es `codigo_qr` (`TW1-` + 32 hex). Se muestra en "Ver registrados", se envía por email y SMS, y el escáner lo lee para la entrada y para la asistencia a talleres. Ver [`docs/ENVIO_QR.md`](docs/ENVIO_QR.md). |
 
 ## Arquitectura
 
@@ -47,9 +47,9 @@ lib/
     externo/          # Operación acotada a eventos asignados
     capturador/       # Campañas y captura de leads
     registro/
-    registro_publico/
-    acreditacion/
     registrados/
+    subeventos/       # Talleres del evento
+    acreditacion/
     fijados/          # Eventos/campañas fijados por usuario
     notificaciones/   # Inbox in-app + bootstrap FCM
     kpi/
@@ -58,6 +58,9 @@ lib/
     updates/          # OTA vía GitHub Releases (Android / Windows)
 docs/
   NOTIFICACIONES_PUSH.md   # Setup Firebase + webhook Supabase
+  ENVIO_QR.md              # Webhook y envío del QR
+  api-publica.md           # Contrato de la web Node
+  arquitectura/subeventos/ # Fases y despliegue
 ```
 
 - **Sistema de diseño**: `core/theme/app_theme.dart` define los tokens
@@ -179,6 +182,10 @@ QR. Hace falta crédito SMS en la cuenta Brevo.
 
 Detalle del webhook y Firebase:
 [`docs/NOTIFICACIONES_PUSH.md`](docs/NOTIFICACIONES_PUSH.md).
+El contrato de la web pública está en
+[`docs/api-publica.md`](docs/api-publica.md).
+El orden para sacar esta versión está en
+[`docs/arquitectura/subeventos/despliegue.md`](docs/arquitectura/subeventos/despliegue.md).
 
 ## Pendiente / próximos pasos
 

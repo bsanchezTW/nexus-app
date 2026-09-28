@@ -21,7 +21,11 @@ import '../../capturador/providers/capturador_providers.dart';
 import '../../capturador/services/evento_lead_interno_service.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
+import '../../../core/widgets/app_widgets.dart';
 import '../qr_codigo_parser.dart';
+import '../decidir_accion_escaneo.dart';
+import '../../subeventos/providers/inscripciones_providers.dart';
+import '../../subeventos/providers/subeventos_providers.dart';
 import '../scanner/qr_scanner_service.dart';
 import '../scanner/scanner_controller.dart';
 import '../scanner/widgets/scanner_view.dart';
@@ -33,9 +37,10 @@ import '../scanner/widgets/scanner_view.dart';
 /// Cada detección consulta al servidor (acreditación y lead), aunque el
 /// mismo QR se lea varias veces con el escáner todavía abierto.
 class AcreditarQrScreen extends ConsumerStatefulWidget {
-  const AcreditarQrScreen({super.key, required this.eventoId});
+  const AcreditarQrScreen({super.key, required this.eventoId, this.subeventoId});
 
   final String eventoId;
+  final String? subeventoId;
 
   @override
   ConsumerState<AcreditarQrScreen> createState() => _AcreditarQrScreenState();
@@ -44,10 +49,12 @@ class AcreditarQrScreen extends ConsumerStatefulWidget {
 class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     with WidgetsBindingObserver {
   late final ScannerController _scanner;
+  late String? _subeventoId;
 
   @override
   void initState() {
     super.initState();
+    _subeventoId = widget.subeventoId;
     WidgetsBinding.instance.addObserver(this);
     _scanner = ScannerController(onCodeDetected: _onCodeDetected);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -305,8 +312,10 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
 
       if (_scanner.captureLeadMode) {
         await _procesarCapturarLead(registrado);
-      } else {
+      } else if (_subeventoId == null) {
         await _procesarAcreditar(registrado);
+      } else {
+        await _procesarAsistencia(registrado, _subeventoId!);
       }
     } catch (e) {
       _scanner.showFeedback(
@@ -315,6 +324,171 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
             : 'No se pudo acreditar. Intenta de nuevo.',
         isError: true,
       );
+    }
+  }
+
+  Widget _selectorModo() {
+    final talleres =
+        ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const [];
+    return Material(
+      color: Colors.black54,
+      borderRadius: BorderRadius.circular(12),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          isExpanded: true,
+          value: _subeventoId,
+          dropdownColor: Colors.black87,
+          style: const TextStyle(color: Colors.white),
+          items: [
+            const DropdownMenuItem(value: null, child: Text('Entrada')),
+            for (final taller in talleres)
+              DropdownMenuItem(value: taller.id, child: Text(taller.nombre)),
+          ],
+          onChanged: (valor) => setState(() => _subeventoId = valor),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _procesarAsistencia(Registrado registrado, String subeventoId) async {
+    final perfil = ref.read(currentPerfilProvider).valueOrNull;
+    final inscripciones =
+        ref.read(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const [];
+    final inscripcion = inscripciones
+        .where(
+          (fila) =>
+              fila.registradoId == registrado.id &&
+              fila.subeventoId == subeventoId,
+        )
+        .firstOrNull;
+    final accion = decidirAccionEscaneo(
+      formatoAntiguo: false,
+      invalido: false,
+      registrado: registrado,
+      inscripcion: inscripcion,
+      modoEntrada: false,
+      esExterno: perfil?.isExterno ?? false,
+      puedeCrear: perfil?.canCreateContent ?? false,
+      hayRed: ref.read(isOnlineProvider),
+    );
+    switch (accion.tipo) {
+      case AccionEscaneoTipo.marcarAsistencia:
+        await persistirAsistenciaSubevento(
+          ref,
+          eventoId: widget.eventoId,
+          registradoId: registrado.id,
+          subeventoId: subeventoId,
+          accion: 'marcar_asistencia',
+        );
+        _scanner.showFeedback('Asistencia marcada.', isError: false);
+      case AccionEscaneoTipo.yaMarcado:
+        _scanner.showFeedback('Ya tenía asistencia en este taller.', isError: false);
+      case AccionEscaneoTipo.soloAviso:
+        _scanner.showFeedback(
+          'No está inscrito en este taller.',
+          isError: true,
+        );
+      case AccionEscaneoTipo.ofrecerInscribirYMarcar:
+        final ok = await confirmDialog(
+          context,
+          title: 'No está inscrito',
+          message: accion.puedeForzar
+              ? 'Puedes inscribir y marcar, incluso si el cupo está lleno.'
+              : 'Puedes inscribir y marcar la asistencia.',
+          confirmLabel: 'Inscribir y marcar',
+        );
+        if (!ok || !mounted) return;
+        try {
+          await persistirAsistenciaSubevento(
+            ref,
+            eventoId: widget.eventoId,
+            registradoId: registrado.id,
+            subeventoId: subeventoId,
+            accion: 'inscribir_y_marcar',
+            forzar: accion.puedeForzar,
+          );
+          _scanner.showFeedback('Inscrito y asistencia marcada.', isError: false);
+        } on AsistenciaRechazada catch (rechazo) {
+          await _resolverRechazoInscripcion(
+            rechazo,
+            registrado: registrado,
+            subeventoId: subeventoId,
+            puedeForzar: accion.puedeForzar,
+          );
+        }
+      default:
+        _scanner.showFeedback('No se pudo usar este QR.', isError: true);
+    }
+  }
+
+  Future<void> _resolverRechazoInscripcion(
+    AsistenciaRechazada rechazo, {
+    required Registrado registrado,
+    required String subeventoId,
+    required bool puedeForzar,
+  }) async {
+    if (rechazo.motivo == 'sin_cupo') {
+      _scanner.showFeedback('Sin cupo en este taller.', isError: true);
+      return;
+    }
+    if (rechazo.motivo != 'superpuesto') {
+      _scanner.showFeedback('No se pudo inscribir en el taller.', isError: true);
+      return;
+    }
+
+    final talleres =
+        ref.read(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const [];
+    final nombres = [
+      for (final id in rechazo.conflictos)
+        talleres
+                .where((taller) => taller.id == id)
+                .map((taller) => taller.nombre)
+                .firstOrNull ??
+            'otro taller',
+    ];
+    final etiqueta = nombres.isEmpty ? 'otro taller' : nombres.join(', ');
+    final inscripciones =
+        ref.read(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const [];
+    final yaAsistio = inscripciones.any(
+      (fila) =>
+          fila.registradoId == registrado.id &&
+          rechazo.conflictos.contains(fila.subeventoId) &&
+          fila.asistio,
+    );
+    if (yaAsistio) {
+      _scanner.showFeedback(
+        'Ya asistió a $etiqueta a la misma hora.',
+        isError: true,
+      );
+      return;
+    }
+
+    final mover = await confirmDialog(
+      context,
+      title: 'Taller solapado',
+      message: 'Ya está inscrito en $etiqueta a la misma hora.',
+      confirmLabel: nombres.length == 1
+          ? 'Mover desde ${nombres.first}'
+          : 'Mover desde el taller solapado',
+    );
+    if (!mover || !mounted) return;
+    try {
+      await persistirAsistenciaSubevento(
+        ref,
+        eventoId: widget.eventoId,
+        registradoId: registrado.id,
+        subeventoId: subeventoId,
+        accion: 'inscribir_y_marcar',
+        forzar: puedeForzar,
+        reemplazar: true,
+      );
+      _scanner.showFeedback('Movido y asistencia marcada.', isError: false);
+    } on AsistenciaRechazada {
+      _scanner.showFeedback('No se pudo mover desde $etiqueta.', isError: true);
     }
   }
 
@@ -333,7 +507,11 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: ScannerView(controller: _scanner, onClose: _cerrarEscaner),
+        body: ScannerView(
+          controller: _scanner,
+          onClose: _cerrarEscaner,
+          modoControl: _selectorModo(),
+        ),
       ),
     );
   }

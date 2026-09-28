@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/nexus_components.dart';
+import '../../../core/widgets/tw_components.dart';
+import '../../../data/models/evento.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../providers/kpi_providers.dart';
 
@@ -100,6 +103,15 @@ class KpiScreen extends ConsumerWidget {
                   color: AppColors.success,
                 ),
               ),
+              if (kpi.talleres.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sectionGap + 6),
+                const SectionLabel('Talleres'),
+                const SizedBox(height: 10),
+                for (final taller in kpi.talleres) ...[
+                  _TarjetaTaller(taller: taller),
+                  const SizedBox(height: 12),
+                ],
+              ],
               if (topEmpresas.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.sectionGap + 6),
                 const SectionLabel('Empresas'),
@@ -150,6 +162,76 @@ class KpiScreen extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+}
+
+class _TarjetaTaller extends StatelessWidget {
+  const _TarjetaTaller({required this.taller});
+
+  final KpiSubevento taller;
+
+  @override
+  Widget build(BuildContext context) {
+    final sub = taller.subevento;
+    final inicio = horaATexto(sub.horaInicio)?.substring(0, 5) ?? '';
+    final fin = horaATexto(sub.horaFin)?.substring(0, 5) ?? '';
+    final dia =
+        '${sub.dia.day.toString().padLeft(2, '0')}/'
+        '${sub.dia.month.toString().padLeft(2, '0')}/${sub.dia.year}';
+    final cupo = taller.cupo == null ? 'Sin límite' : 'Cupo ${taller.cupo}';
+    final sobrecupo = taller.sobrecupo > 0
+        ? ' · Sobrecupo ${taller.sobrecupo}'
+        : '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(sub.nombre, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 2),
+        Text(
+          '$dia · $inicio–$fin · $cupo$sobrecupo',
+          style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 10),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: TwKpiCard(
+                  value: '${taller.inscritos}',
+                  label: 'Inscritos',
+                  icon: Symbols.group_rounded,
+                  tint: TwColors.blueTint,
+                  iconColor: TwColors.blueInk,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TwKpiCard(
+                  value: '${taller.asistentes}',
+                  label: 'Asistentes',
+                  icon: Symbols.how_to_reg_rounded,
+                  tint: TwColors.greenTint,
+                  iconColor: TwColors.greenInk,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TwKpiCard(
+                  value:
+                      '${(taller.porcentajeAsistencia * 100).toStringAsFixed(0)}%',
+                  label: 'Asistencia',
+                  icon: Symbols.percent_rounded,
+                  tint: TwColors.amberTint,
+                  iconColor: TwColors.amberInk,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

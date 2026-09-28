@@ -9,9 +9,30 @@ import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/collapsing_nav.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
+import '../../../data/models/inscripcion_subevento.dart';
 import '../../../data/models/registrado.dart';
+import '../../../data/models/subevento.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
+import '../../subeventos/providers/inscripciones_providers.dart';
+import '../../subeventos/providers/subeventos_providers.dart';
+
+@visibleForTesting
+List<Registrado> filtrarRegistradosPorModo({
+  required List<Registrado> registrados,
+  required List<InscripcionSubevento> inscripciones,
+  String? subeventoId,
+}) {
+  if (subeventoId == null) return registrados;
+  final ids = inscripciones
+      .where((fila) => fila.subeventoId == subeventoId)
+      .map((fila) => fila.registradoId)
+      .toSet();
+  return [
+    for (final registrado in registrados)
+      if (ids.contains(registrado.id)) registrado,
+  ];
+}
 
 class AcreditarConfirmadoScreen extends ConsumerStatefulWidget {
   const AcreditarConfirmadoScreen({super.key, required this.eventoId});
@@ -27,11 +48,40 @@ class _AcreditarConfirmadoScreenState
     extends ConsumerState<AcreditarConfirmadoScreen> {
   final _busquedaController = TextEditingController();
   String _busqueda = '';
+  String? _subeventoId;
 
   @override
   void dispose() {
     _busquedaController.dispose();
     super.dispose();
+  }
+
+  Future<void> _marcar(Registrado registrado) async {
+    final subeventoId = _subeventoId;
+    if (subeventoId == null) return;
+    try {
+      await persistirAsistenciaSubevento(
+        ref,
+        eventoId: widget.eventoId,
+        registradoId: registrado.id,
+        subeventoId: subeventoId,
+        accion: 'marcar_asistencia',
+      );
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          'Asistencia de ${registrado.nombreCompleto} marcada.',
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          'No se pudo marcar la asistencia.',
+          isError: true,
+        );
+      }
+    }
   }
 
   Future<void> _acreditar(Registrado registrado) async {
@@ -120,6 +170,44 @@ class _AcreditarConfirmadoScreenState
 
   void _actualizarRegistrados() {
     ref.invalidate(registradosPorEventoProvider(widget.eventoId));
+    ref.invalidate(inscripcionesPorEventoProvider(widget.eventoId));
+  }
+
+  Widget _selectorModo({
+    required bool puedeVerContacto,
+    required List<Subevento> talleres,
+  }) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 48,
+          child: _buildSearchField(puedeVerContacto: puedeVerContacto),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              FilterChip(
+                label: const Text('Entrada'),
+                selected: _subeventoId == null,
+                onSelected: (_) => setState(() => _subeventoId = null),
+              ),
+              for (final taller in talleres)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: FilterChip(
+                    label: Text(taller.nombre),
+                    selected: _subeventoId == taller.id,
+                    onSelected: (_) => setState(() => _subeventoId = taller.id),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -128,10 +216,24 @@ class _AcreditarConfirmadoScreenState
       registradosPorEventoProvider(widget.eventoId),
     );
     final puedeVerContacto = ref.watch(canViewContactDataProvider);
-
+    final talleres =
+        ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const <Subevento>[];
+    final inscripciones =
+        ref.watch(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const <InscripcionSubevento>[];
     final filtrados = registradosAsync.maybeWhen(
-      data: (registrados) =>
-          _filtrarRegistrados(registrados, puedeVerContacto: puedeVerContacto),
+      data: (registrados) {
+        final delModo = filtrarRegistradosPorModo(
+          registrados: registrados,
+          inscripciones: inscripciones,
+          subeventoId: _subeventoId,
+        );
+        return _filtrarRegistrados(
+          delModo,
+          puedeVerContacto: puedeVerContacto,
+        );
+      },
       orElse: () => const <Registrado>[],
     );
     final listaVacia = registradosAsync.hasValue && filtrados.isEmpty;
@@ -144,9 +246,14 @@ class _AcreditarConfirmadoScreenState
         tooltip: 'Volver',
         onTap: () => volverAtras(context),
       ),
-      pinnedContent: _buildSearchField(puedeVerContacto: puedeVerContacto),
-      pinnedContentHeight: 60,
-      scrollResetToken: _busqueda,
+      pinnedContent: talleres.isEmpty
+          ? _buildSearchField(puedeVerContacto: puedeVerContacto)
+          : _selectorModo(
+              puedeVerContacto: puedeVerContacto,
+              talleres: talleres,
+            ),
+      pinnedContentHeight: talleres.isEmpty ? 60 : 108,
+      scrollResetToken: '$_busqueda|$_subeventoId',
       lockScroll: listaVacia,
       onRefresh: () async => _actualizarRegistrados(),
       slivers: [
@@ -156,10 +263,26 @@ class _AcreditarConfirmadoScreenState
             child: registradosAsync.when(
               loading: () => _buildHeader(),
               error: (_, _) => _buildHeader(),
-              data: (registrados) => _buildHeader(
-                total: registrados.length,
-                pendientes: registrados.where((r) => !r.acreditado).length,
-              ),
+              data: (registrados) {
+                final delModo = filtrarRegistradosPorModo(
+                  registrados: registrados,
+                  inscripciones: inscripciones,
+                  subeventoId: _subeventoId,
+                );
+                final pendientes = _subeventoId == null
+                    ? delModo.where((r) => !r.acreditado).length
+                    : inscripciones
+                          .where(
+                            (fila) =>
+                                fila.subeventoId == _subeventoId && !fila.asistio,
+                          )
+                          .length;
+                return _buildHeader(
+                  total: delModo.length,
+                  pendientes: pendientes,
+                  modoTaller: _subeventoId != null,
+                );
+              },
             ),
           ),
         ),
@@ -181,8 +304,13 @@ class _AcreditarConfirmadoScreenState
             ),
           ],
           data: (registrados) {
+            final delModo = filtrarRegistradosPorModo(
+              registrados: registrados,
+              inscripciones: inscripciones,
+              subeventoId: _subeventoId,
+            );
             final filtrados = _filtrarRegistrados(
-              registrados,
+              delModo,
               puedeVerContacto: puedeVerContacto,
             );
 
@@ -193,6 +321,18 @@ class _AcreditarConfirmadoScreenState
                   child: EmptyStateView(
                     icon: Symbols.group_off_rounded,
                     message: 'Aún no hay asistentes registrados.',
+                    onRefresh: _actualizarRegistrados,
+                  ),
+                ),
+              ];
+            }
+            if (delModo.isEmpty) {
+              return [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: EmptyStateView(
+                    icon: Symbols.group_off_rounded,
+                    message: 'Nadie inscrito en este taller.',
                     onRefresh: _actualizarRegistrados,
                   ),
                 ),
@@ -222,6 +362,7 @@ class _AcreditarConfirmadoScreenState
                     filtrados[index],
                     index,
                     puedeVerContacto: puedeVerContacto,
+                    inscripciones: inscripciones,
                   ),
                 ),
               ),
@@ -232,7 +373,12 @@ class _AcreditarConfirmadoScreenState
     );
   }
 
-  Widget _buildHeader({int? total, int? pendientes}) {
+  Widget _buildHeader({int? total, int? pendientes, bool modoTaller = false}) {
+    final detalle = total == null
+        ? 'Acreditación manual'
+        : modoTaller
+        ? '$pendientes pendientes · $total inscritos'
+        : '$pendientes pendientes · $total registrados';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -242,9 +388,7 @@ class _AcreditarConfirmadoScreenState
         ),
         const SizedBox(height: 2),
         Text(
-          total == null
-              ? 'Acreditación manual'
-              : '$pendientes pendientes · $total registrados',
+          detalle,
           style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
       ],
@@ -255,8 +399,16 @@ class _AcreditarConfirmadoScreenState
     Registrado r,
     int index, {
     required bool puedeVerContacto,
+    required List<InscripcionSubevento> inscripciones,
   }) {
     final correo = puedeVerContacto ? r.email : enmascararEmail(r.email);
+    final asistio = _subeventoId != null &&
+        inscripciones.any(
+          (fila) =>
+              fila.registradoId == r.id &&
+              fila.subeventoId == _subeventoId &&
+              fila.asistio,
+        );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
@@ -296,7 +448,36 @@ class _AcreditarConfirmadoScreenState
             ),
           ),
           const SizedBox(width: 8),
-          if (r.acreditado)
+          if (_subeventoId != null)
+            asistio
+                ? const StatusChip(
+                    label: 'Asistió',
+                    variant: StatusChipVariant.success,
+                  )
+                : Pressable(
+                    scale: 0.95,
+                    onTap: () => _marcar(r),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: AppColors.headerGradient,
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        boxShadow: AppColors.shadowRest,
+                      ),
+                      child: const Text(
+                        'Marcar',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  )
+          else if (r.acreditado)
             const StatusChip(
               label: 'Acreditado',
               variant: StatusChipVariant.success,

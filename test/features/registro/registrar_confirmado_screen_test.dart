@@ -4,11 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:transworld_nexus/core/constants/app_role.dart';
 import 'package:transworld_nexus/core/network/connectivity_service.dart';
 import 'package:transworld_nexus/core/theme/tw_tokens.dart';
+import 'package:transworld_nexus/data/models/ocupacion_evento.dart';
 import 'package:transworld_nexus/data/models/evento.dart';
 import 'package:transworld_nexus/data/models/perfil.dart';
 import 'package:transworld_nexus/features/auth/providers/auth_providers.dart';
 import 'package:transworld_nexus/features/eventos/providers/eventos_providers.dart';
 import 'package:transworld_nexus/features/registro/screens/registrar_confirmado_screen.dart';
+import 'package:transworld_nexus/features/subeventos/providers/subeventos_providers.dart';
 
 void main() {
   testWidgets('el formulario muestra una card de información sobre el QR', (
@@ -35,6 +37,13 @@ void main() {
               id: id,
               nombre: 'Evento de prueba',
               fecha: DateTime(2026, 8, 20),
+            ),
+          ),
+          subeventosPorEventoProvider.overrideWith((ref, id) async => const []),
+          ocupacionEventoProvider.overrideWith(
+            (ref, id) async => const OcupacionEvento(
+              evento: OcupacionItem(cupoMaximo: null, inscritos: 0, asistentes: 0),
+              subeventos: {},
             ),
           ),
         ],
@@ -94,6 +103,13 @@ void main() {
               nombre: 'Evento Lima',
               fecha: DateTime(2026, 8, 20),
               pais: 'Perú',
+            ),
+          ),
+          subeventosPorEventoProvider.overrideWith((ref, id) async => const []),
+          ocupacionEventoProvider.overrideWith(
+            (ref, id) async => const OcupacionEvento(
+              evento: OcupacionItem(cupoMaximo: null, inscritos: 0, asistentes: 0),
+              subeventos: {},
             ),
           ),
         ],

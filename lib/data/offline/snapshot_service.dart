@@ -12,6 +12,7 @@ import '../../features/fijados/providers/fijados_providers.dart';
 import '../../features/home/providers/home_dashboard_providers.dart';
 import '../../features/home/providers/home_featured_providers.dart';
 import '../../features/registrados/providers/registrados_providers.dart';
+import '../../features/subeventos/providers/inscripciones_providers.dart';
 import '../../features/subeventos/providers/subeventos_providers.dart';
 import '../../features/usuarios/providers/usuarios_providers.dart';
 import '../images/offline_image_store.dart';
@@ -294,6 +295,8 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
             await _ref.read(registradosPorEventoProvider(evento.id).future);
             _ref.invalidate(subeventosPorEventoProvider(evento.id));
             await _ref.read(subeventosPorEventoProvider(evento.id).future);
+            _ref.invalidate(inscripcionesPorEventoProvider(evento.id));
+            await _ref.read(inscripcionesPorEventoProvider(evento.id).future);
           },
           completados: hechos,
           total: total,
@@ -412,6 +415,10 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
         await cache.retenerEventos(OfflineCacheTables.eventoDetalle, eventos);
         await cache.retenerEventos(SupabaseTables.registrados, eventos);
         await cache.retenerEventos(SupabaseTables.subeventos, eventos);
+        await cache.retenerEventos(
+          SupabaseTables.inscripcionesSubevento,
+          eventos,
+        );
       }
 
       if (actividades != null) {

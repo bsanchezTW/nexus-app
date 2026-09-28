@@ -24,7 +24,9 @@ import '../../../data/repositories/envios_qr_repository.dart';
 import '../../../data/repositories/registrados_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../eventos/providers/eventos_providers.dart';
-import '../providers/registrados_providers.dart';
+import '../../registrados/providers/registrados_providers.dart';
+import '../../subeventos/providers/inscripciones_providers.dart';
+import '../../subeventos/providers/subeventos_providers.dart';
 
 enum _Filtro { todos, acreditados, pendientes }
 
@@ -49,6 +51,7 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
   }
 
   _Filtro _filtro = _Filtro.todos;
+  String? _tallerFiltro;
   final _busquedaController = TextEditingController();
   String _busqueda = '';
   Timer? _debounce;
@@ -131,6 +134,16 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
         return false;
       }
       if (_filtro == _Filtro.pendientes && r.acreditado) return false;
+      if (_tallerFiltro != null) {
+        final inscripciones =
+            ref.read(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
+            const [];
+        final esta = inscripciones.any(
+          (fila) =>
+              fila.registradoId == r.id && fila.subeventoId == _tallerFiltro,
+        );
+        if (!esta) return false;
+      }
       if (_busqueda.isEmpty) return true;
       // Sin permiso para ver el contacto tampoco se busca por email: si no, el
       // correo oculto se podría reconstruir por tanteo.
@@ -166,6 +179,36 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
             ),
           ),
         ),
+        SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              ActionChip(
+                label: const Text('Todos los talleres'),
+                avatar: _tallerFiltro == null
+                    ? const Icon(Symbols.check_rounded, size: 16)
+                    : null,
+                onPressed: () => setState(() => _tallerFiltro = null),
+              ),
+              for (final taller
+                  in ref
+                          .watch(subeventosPorEventoProvider(widget.eventoId))
+                          .valueOrNull ??
+                      const [])
+                Padding(
+                  padding: const EdgeInsets.only(left: AppSpacing.sm),
+                  child: ActionChip(
+                    label: Text(taller.nombre),
+                    avatar: _tallerFiltro == taller.id
+                        ? const Icon(Symbols.check_rounded, size: 16)
+                        : null,
+                    onPressed: () => setState(() => _tallerFiltro = taller.id),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -193,7 +236,7 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
         onTap: () => volverAtras(context),
       ),
       pinnedContent: _buildPinnedControls(),
-      pinnedContentHeight: 112,
+      pinnedContentHeight: 156,
       scrollResetToken: '$_busqueda|$_filtro',
       lockScroll: listaVacia,
       onRefresh: () async => _actualizarRegistrados(),
@@ -591,6 +634,65 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
     return puedeVerContacto ? telefono : enmascararTelefono(telefono);
   }
 
+  Widget _talleresDe(Registrado registrado) {
+    final talleres =
+        ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const [];
+    final inscripciones =
+        ref.watch(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const [];
+    final propios = inscripciones
+        .where((fila) => fila.registradoId == registrado.id)
+        .map((fila) => fila.subeventoId)
+        .toSet();
+    final nombres = [
+      for (final taller in talleres)
+        if (propios.contains(taller.id)) taller.nombre,
+    ];
+    final online = ref.watch(isOnlineProvider);
+    final puedeEditar = online && !esIdSoloLocal(registrado.id);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        children: [
+          if (nombres.isEmpty)
+            const Text(
+              'Sin talleres',
+              style: TextStyle(color: AppColors.textSecondary),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                for (final nombre in nombres)
+                  Chip(
+                    label: Text(nombre),
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
+          TextButton(
+            onPressed: puedeEditar
+                ? () {
+                    final destino = RoutePaths.editarRegistrado(
+                      widget.eventoId,
+                      registrado.id,
+                    );
+                    final router = GoRouter.of(context);
+                    Navigator.of(context).pop();
+                    router.push(destino);
+                  }
+                : null,
+            child: const Text('Editar talleres'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _regenerar() async {
     if (!requireOnline(context, ref)) return;
     final ok = await confirmDialog(
@@ -751,6 +853,7 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
                   telefonoVisible,
                   style: const TextStyle(color: AppColors.textSecondary),
                 ),
+              _talleresDe(r),
               const SizedBox(height: 16),
               if (soloEnLaCola)
                 Container(

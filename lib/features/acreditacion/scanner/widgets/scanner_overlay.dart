@@ -23,6 +23,7 @@ class ScannerOverlay extends StatefulWidget {
     this.feedbackIsError = false,
     this.showTorch = true,
     this.scanWindowFraction = kScannerScanWindowFraction,
+    this.modoControl,
   });
 
   final bool animateCorners;
@@ -35,6 +36,7 @@ class ScannerOverlay extends StatefulWidget {
   final bool feedbackIsError;
   final bool showTorch;
   final double scanWindowFraction;
+  final Widget? modoControl;
 
   @override
   State<ScannerOverlay> createState() => _ScannerOverlayState();
@@ -127,6 +129,13 @@ class _ScannerOverlayState extends State<ScannerOverlay>
                 onPressed: widget.onClose,
               ),
             ),
+            if (widget.modoControl != null)
+              Positioned(
+                top: topInset + 72,
+                left: 72,
+                right: 72,
+                child: widget.modoControl!,
+              ),
             if (widget.showTorch)
               Positioned(
                 top: topInset + _cornerMargin,

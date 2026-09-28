@@ -13,6 +13,8 @@ import '../../../data/repositories/registrados_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
+import '../../subeventos/providers/inscripciones_providers.dart';
+import '../../subeventos/providers/subeventos_providers.dart';
 import '../services/excel_export_service.dart';
 import '../services/excel_import_registrados.dart';
 import '../services/export_file_delivery.dart';
@@ -66,9 +68,17 @@ class _ExportarScreenState extends ConsumerState<ExportarScreen> {
         return;
       }
 
+      final subeventos = await ref.read(
+        subeventosPorEventoProvider(widget.eventoId).future,
+      );
+      final inscripciones = await ref.read(
+        inscripcionesPorEventoProvider(widget.eventoId).future,
+      );
       final bytes = _exportService.generar(
         filtrados,
         tituloHoja: soloAcreditados ? 'Acreditados' : 'Registrados',
+        subeventos: subeventos,
+        inscripciones: inscripciones,
       );
       final nombreArchivo =
           '${evento.nombre.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}_${soloAcreditados ? 'acreditados' : 'registrados'}.xlsx';

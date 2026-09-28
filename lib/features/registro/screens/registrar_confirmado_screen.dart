@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/network/offline_guard.dart';
@@ -11,9 +12,13 @@ import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/tw_toast.dart';
+import '../../../core/router/route_paths.dart';
 import '../../../data/models/resultado_registro.dart';
 import '../../../data/repositories/registrados_repository.dart';
+import '../../auth/providers/auth_providers.dart';
 import '../../eventos/providers/eventos_providers.dart';
+import '../../subeventos/providers/subeventos_providers.dart';
+import '../../subeventos/widgets/selector_subeventos.dart';
 import '../../registrados/providers/registrados_providers.dart';
 
 /// Registro manual de un asistente. **Requiere conexión**, a diferencia de
@@ -49,6 +54,7 @@ class _RegistrarConfirmadoScreenState
   bool _acreditarAhora = false;
   bool _guardando = false;
   bool _autovalidar = false;
+  final Set<String> _talleres = {};
 
   @override
   void dispose() {
@@ -60,6 +66,18 @@ class _RegistrarConfirmadoScreenState
     _rutController.dispose();
     _patenteController.dispose();
     super.dispose();
+  }
+
+  Map<String, dynamic> _datosRegistro(bool requiereCertificacion, String email) {
+    return {
+      'nombre_completo': formatearNombreCompleto(_nombreController.text),
+      'email': email,
+      'empresa': formatearEmpresa(_empresaController.text),
+      'cargo': formatearCargo(_cargoController.text),
+      'telefono': telefonoInternacional(_telefonoController.text, _pais),
+      if (requiereCertificacion) 'rut': formatearRut(_rutController.text),
+      if (requiereCertificacion) 'patente': formatearPatente(_patenteController.text),
+    };
   }
 
   void _inicializarPais(String? paisEvento) {
@@ -115,19 +133,54 @@ class _RegistrarConfirmadoScreenState
       final resultado = await repo.registrar(
         eventoId: widget.eventoId,
         acreditar: _acreditarAhora,
-        datos: {
-          'nombre_completo': formatearNombreCompleto(_nombreController.text),
-          'email': email,
-          'empresa': formatearEmpresa(_empresaController.text),
-          'cargo': formatearCargo(_cargoController.text),
-          'telefono': telefonoInternacional(_telefonoController.text, _pais),
-          if (requiereCertificacion) 'rut': formatearRut(_rutController.text),
-          if (requiereCertificacion)
-            'patente': formatearPatente(_patenteController.text),
-        },
+        subeventoIds: _talleres.toList(),
+        datos: _datosRegistro(requiereCertificacion, email),
       );
 
       if (resultado is RegistroRechazado) {
+        if (resultado.motivo == 'email_duplicado' &&
+            resultado.registradoIdExistente != null &&
+            mounted) {
+          final abrir = await confirmDialog(
+            context,
+            title: 'Correo ya registrado',
+            message: 'Esa persona ya está en el evento.',
+            confirmLabel: 'Abrir registro existente',
+          );
+          if (abrir && mounted) {
+            context.push(
+              RoutePaths.editarRegistrado(
+                widget.eventoId,
+                resultado.registradoIdExistente!,
+              ),
+            );
+          }
+          return;
+        }
+        if (resultado.motivo == 'subeventos_rechazados' && mounted) {
+          if (!resultado.puedeForzar) {
+            throw Exception('Hay talleres que no se pudieron inscribir.');
+          }
+          final forzar = await confirmDialog(
+            context,
+            title: 'Talleres sin cupo',
+            message: 'Algunos talleres están llenos. ¿Registrar en sobrecupo?',
+            confirmLabel: 'Registrar',
+          );
+          if (!forzar || !mounted) return;
+          final forzado = await repo.registrar(
+            eventoId: widget.eventoId,
+            acreditar: _acreditarAhora,
+            forzarSobrecupo: true,
+            subeventoIds: _talleres.toList(),
+            datos: _datosRegistro(requiereCertificacion, email),
+          );
+          if (forzado is RegistroOk) {
+            _avisarRegistro();
+            return;
+          }
+          throw Exception('Hay talleres que no se pudieron inscribir.');
+        }
         if (resultado.motivo == 'sin_cupo_evento' &&
             resultado.puedeForzar &&
             mounted) {
@@ -137,26 +190,17 @@ class _RegistrarConfirmadoScreenState
             message: 'El evento no tiene cupo. ¿Registrar igual en sobrecupo?',
             confirmLabel: 'Registrar',
           );
-          if (forzar && mounted) {
-            final forzado = await repo.registrar(
-              eventoId: widget.eventoId,
-              acreditar: _acreditarAhora,
-              forzarSobrecupo: true,
-              datos: {
-                'nombre_completo': formatearNombreCompleto(_nombreController.text),
-                'email': email,
-                'empresa': formatearEmpresa(_empresaController.text),
-                'cargo': formatearCargo(_cargoController.text),
-                'telefono': telefonoInternacional(_telefonoController.text, _pais),
-                if (requiereCertificacion) 'rut': formatearRut(_rutController.text),
-                if (requiereCertificacion)
-                  'patente': formatearPatente(_patenteController.text),
-              },
-            );
-            if (forzado is RegistroOk) {
-              _avisarRegistro();
-              return;
-            }
+          if (!forzar || !mounted) return;
+          final forzado = await repo.registrar(
+            eventoId: widget.eventoId,
+            acreditar: _acreditarAhora,
+            forzarSobrecupo: true,
+            subeventoIds: _talleres.toList(),
+            datos: _datosRegistro(requiereCertificacion, email),
+          );
+          if (forzado is RegistroOk) {
+            _avisarRegistro();
+            return;
           }
         }
         throw Exception(
@@ -196,6 +240,7 @@ class _RegistrarConfirmadoScreenState
     _patenteController.clear();
     setState(() {
       _acreditarAhora = false;
+      _talleres.clear();
       _pais = _paisEvento;
       _autovalidar = false;
     });
@@ -238,6 +283,20 @@ class _RegistrarConfirmadoScreenState
                     mostrarCertificacion: requiereCertificacion,
                     rutController: _rutController,
                     patenteController: _patenteController,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text('Talleres', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: AppSpacing.sm),
+                  SelectorSubeventos(
+                    subeventos: ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ?? const [],
+                    ocupacion: ref.watch(ocupacionEventoProvider(widget.eventoId)).valueOrNull,
+                    seleccionados: _talleres,
+                    permitirSobrecupo: ref.watch(canCreateContentProvider),
+                    onChanged: (ids) => setState(() {
+                      _talleres
+                        ..clear()
+                        ..addAll(ids);
+                    }),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   _ToggleRow(

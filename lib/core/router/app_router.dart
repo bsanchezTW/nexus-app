@@ -506,7 +506,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/eventos/:id/acreditar-qr',
         pageBuilder: (context, state) => sharedAxisPage(
           key: state.pageKey,
-          child: AcreditarQrScreen(eventoId: state.pathParameters['id']!),
+          child: AcreditarQrScreen(
+            eventoId: state.pathParameters['id']!,
+            subeventoId: state.uri.queryParameters['subevento'],
+          ),
         ),
       ),
       GoRoute(

@@ -18,9 +18,13 @@ import '../../../core/widgets/nexus_components.dart';
 import '../../../data/models/registrado.dart';
 import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/offline/sync_queue_service.dart';
+import '../../../data/repositories/inscripciones_subevento_repository.dart';
 import '../../../data/repositories/registrados_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../eventos/providers/eventos_providers.dart';
+import '../../subeventos/providers/inscripciones_providers.dart';
+import '../../subeventos/providers/subeventos_providers.dart';
+import '../../subeventos/widgets/selector_subeventos.dart';
 import '../providers/registrados_providers.dart';
 
 class EditarRegistradoScreen extends ConsumerStatefulWidget {
@@ -54,6 +58,9 @@ class _EditarRegistradoScreenState
   bool _acreditado = false;
   bool _cargado = false;
   bool _guardando = false;
+  final Set<String> _talleresIniciales = {};
+  final Set<String> _talleresSeleccionados = {};
+  bool _talleresCargados = false;
 
   String _nombre0 = '';
   String _empresa0 = '';
@@ -99,6 +106,17 @@ class _EditarRegistradoScreenState
     _rutController.text = r.rut ?? '';
     _patenteController.text = r.patente ?? '';
     _acreditado = r.acreditado;
+    if (!_talleresCargados) {
+      _talleresCargados = true;
+      final inscripciones =
+          ref.read(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
+          const [];
+      for (final fila in inscripciones) {
+        if (fila.registradoId != widget.registradoId) continue;
+        _talleresIniciales.add(fila.subeventoId);
+        _talleresSeleccionados.add(fila.subeventoId);
+      }
+    }
     _nombre0 = _nombreController.text;
     _empresa0 = _empresaController.text;
     _cargo0 = _cargoController.text;
@@ -197,6 +215,47 @@ class _EditarRegistradoScreenState
               changes: cambios,
             );
       }
+      final fallos = <String>[];
+      if (ref.read(isOnlineProvider) && !esIdSoloLocal(widget.registradoId)) {
+        final agregar = _talleresSeleccionados.difference(_talleresIniciales);
+        final quitar = _talleresIniciales.difference(_talleresSeleccionados);
+        if (agregar.isNotEmpty || quitar.isNotEmpty) {
+          final repo = ref.read(inscripcionesSubeventoRepositoryProvider);
+          final talleres =
+              ref.read(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
+              const [];
+          String nombreDe(String id) {
+            return talleres
+                    .where((taller) => taller.id == id)
+                    .map((taller) => taller.nombre)
+                    .firstOrNull ??
+                'un taller';
+          }
+
+          for (final id in agregar) {
+            try {
+              final resultado = await repo.inscribir(
+                registradoId: widget.registradoId,
+                subeventoId: id,
+              );
+              if (resultado['ok'] == false) fallos.add(nombreDe(id));
+            } catch (_) {
+              fallos.add(nombreDe(id));
+            }
+          }
+          for (final id in quitar) {
+            try {
+              await repo.quitar(
+                registradoId: widget.registradoId,
+                subeventoId: id,
+              );
+            } catch (_) {
+              fallos.add(nombreDe(id));
+            }
+          }
+          ref.invalidate(inscripcionesPorEventoProvider(widget.eventoId));
+        }
+      }
       await publicarCambioEnLecturaCacheada(
         ref,
         tabla: SupabaseTables.registrados,
@@ -207,7 +266,13 @@ class _EditarRegistradoScreenState
             ref.invalidate(registradosPorEventoProvider(widget.eventoId)),
       );
       if (mounted) {
-        showAppSnackBar(context, 'Cambios guardados.');
+        showAppSnackBar(
+          context,
+          fallos.isEmpty
+              ? 'Cambios guardados.'
+              : 'Cambios guardados. No se actualizaron: ${fallos.join(', ')}.',
+          isError: fallos.isNotEmpty,
+        );
         volverALista(context, RoutePaths.verRegistrados(widget.eventoId));
       }
     } catch (e) {
@@ -406,6 +471,22 @@ class _EditarRegistradoScreenState
                       value: _acreditado,
                       onChanged: hayRed
                           ? (v) => setState(() => _acreditado = v)
+                          : (_) {},
+                    ),
+                    const SizedBox(height: 14),
+                    Text('Talleres', style: Theme.of(context).textTheme.titleMedium),
+                    SelectorSubeventos(
+                      subeventos: ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ?? const [],
+                      ocupacion: ref.watch(ocupacionEventoProvider(widget.eventoId)).valueOrNull,
+                      seleccionados: _talleresSeleccionados,
+                      yaInscritos: _talleresIniciales,
+                      permitirSobrecupo: ref.watch(canCreateContentProvider),
+                      onChanged: hayRed && !esIdSoloLocal(widget.registradoId)
+                          ? (ids) => setState(() {
+                              _talleresSeleccionados
+                                ..clear()
+                                ..addAll(ids);
+                            })
                           : (_) {},
                     ),
                     const SizedBox(height: 24),

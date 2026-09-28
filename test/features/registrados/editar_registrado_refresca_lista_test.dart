@@ -8,6 +8,7 @@ import 'package:transworld_nexus/core/network/connectivity_service.dart';
 import 'package:transworld_nexus/core/router/refresh_on_visible.dart';
 import 'package:transworld_nexus/core/router/route_paths.dart';
 import 'package:transworld_nexus/core/widgets/nexus_components.dart';
+import 'package:transworld_nexus/data/models/ocupacion_evento.dart';
 import 'package:transworld_nexus/data/models/evento.dart';
 import 'package:transworld_nexus/data/models/perfil.dart';
 import 'package:transworld_nexus/data/models/registrado.dart';
@@ -16,6 +17,8 @@ import 'package:transworld_nexus/data/offline/sync_queue_service.dart';
 import 'package:transworld_nexus/data/repositories/registrados_repository.dart';
 import 'package:transworld_nexus/features/auth/providers/auth_providers.dart';
 import 'package:transworld_nexus/features/eventos/providers/eventos_providers.dart';
+import 'package:transworld_nexus/features/subeventos/providers/inscripciones_providers.dart';
+import 'package:transworld_nexus/features/subeventos/providers/subeventos_providers.dart';
 import 'package:transworld_nexus/features/registrados/screens/editar_registrado_screen.dart';
 import 'package:transworld_nexus/features/registrados/screens/ver_registrados_screen.dart';
 
@@ -101,6 +104,14 @@ void main() {
             ),
           ),
           registradosRepositoryProvider.overrideWithValue(repo),
+          subeventosPorEventoProvider.overrideWith((ref, id) async => const []),
+          ocupacionEventoProvider.overrideWith(
+            (ref, id) async => const OcupacionEvento(
+              evento: OcupacionItem(cupoMaximo: null, inscritos: 0, asistentes: 0),
+              subeventos: {},
+            ),
+          ),
+          inscripcionesPorEventoProvider.overrideWith((ref, id) async => const []),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),

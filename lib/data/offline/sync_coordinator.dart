@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/supabase_tables.dart';
 import '../../core/network/connectivity_service.dart';
+import '../repositories/inscripciones_subevento_repository.dart';
 import '../repositories/leads_repository.dart';
 import '../repositories/registrados_repository.dart';
 import '../repositories/storage_cleanup_service.dart';
@@ -61,6 +62,9 @@ class SyncCoordinator {
 
   Map<String, SyncExecutor> get _executors => {
     SupabaseTables.registrados: _ref.read(registradosRepositoryProvider),
+    SupabaseTables.inscripcionesSubevento: _ref.read(
+      inscripcionesSubeventoRepositoryProvider,
+    ),
     SupabaseTables.leads: _ref.read(leadsRepositoryProvider),
   };
 
