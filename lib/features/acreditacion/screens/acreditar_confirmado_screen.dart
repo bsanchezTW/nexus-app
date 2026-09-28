@@ -72,7 +72,18 @@ class _AcreditarConfirmadoScreenState
           'Asistencia de ${registrado.nombreCompleto} marcada.',
         );
       }
-    } catch (_) {
+    } catch (rechazo) {
+      if (rechazo is AsistenciaRechazada && rechazo.motivo == 'no_inscrito') {
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            'Esa persona ya no está inscrita en el taller.',
+            isError: true,
+          );
+        }
+        _actualizarRegistrados();
+        return;
+      }
       if (mounted) {
         showAppSnackBar(
           context,

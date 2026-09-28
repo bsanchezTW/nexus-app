@@ -410,14 +410,30 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     );
     switch (accion.tipo) {
       case AccionEscaneoTipo.marcarAsistencia:
-        await persistirAsistenciaSubevento(
-          ref,
-          eventoId: widget.eventoId,
-          registradoId: registrado.id,
-          subeventoId: subeventoId,
-          accion: 'marcar_asistencia',
-        );
-        _scanner.showFeedback('Asistencia marcada.', isError: false);
+        try {
+          await persistirAsistenciaSubevento(
+            ref,
+            eventoId: widget.eventoId,
+            registradoId: registrado.id,
+            subeventoId: subeventoId,
+            accion: 'marcar_asistencia',
+          );
+          _scanner.showFeedback('Asistencia marcada.', isError: false);
+        } on AsistenciaRechazada catch (rechazo) {
+          if (rechazo.motivo == 'no_inscrito') {
+            ref.invalidate(inscripcionesPorEventoProvider(widget.eventoId));
+            await _ofrecerInscribirYMarcar(
+              registrado: registrado,
+              subeventoId: subeventoId,
+              puedeForzar: accion.puedeForzar,
+            );
+          } else {
+            _scanner.showFeedback(
+              'No se pudo marcar la asistencia.',
+              isError: true,
+            );
+          }
+        }
       case AccionEscaneoTipo.yaMarcado:
         _scanner.showFeedback('Ya tenía asistencia en este taller.', isError: false);
       case AccionEscaneoTipo.soloAviso:
@@ -448,36 +464,48 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
             return;
           }
         }
-        if (!mounted) return;
-        final ok = await confirmDialog(
-          context,
-          title: 'No está inscrito',
-          message: accion.puedeForzar
-              ? 'Puedes inscribir y marcar, incluso si el cupo está lleno.'
-              : 'Puedes inscribir y marcar la asistencia.',
-          confirmLabel: 'Inscribir y marcar',
+        await _ofrecerInscribirYMarcar(
+          registrado: registrado,
+          subeventoId: subeventoId,
+          puedeForzar: accion.puedeForzar,
         );
-        if (!ok || !mounted) return;
-        try {
-          await persistirAsistenciaSubevento(
-            ref,
-            eventoId: widget.eventoId,
-            registradoId: registrado.id,
-            subeventoId: subeventoId,
-            accion: 'inscribir_y_marcar',
-            forzar: accion.puedeForzar,
-          );
-          _scanner.showFeedback('Inscrito y asistencia marcada.', isError: false);
-        } on AsistenciaRechazada catch (rechazo) {
-          await _resolverRechazoInscripcion(
-            rechazo,
-            registrado: registrado,
-            subeventoId: subeventoId,
-            puedeForzar: accion.puedeForzar,
-          );
-        }
       default:
         _scanner.showFeedback('No se pudo usar este QR.', isError: true);
+    }
+  }
+
+  Future<void> _ofrecerInscribirYMarcar({
+    required Registrado registrado,
+    required String subeventoId,
+    required bool puedeForzar,
+  }) async {
+    if (!mounted) return;
+    final ok = await confirmDialog(
+      context,
+      title: 'No está inscrito',
+      message: puedeForzar
+          ? 'Puedes inscribir y marcar, incluso si el cupo está lleno.'
+          : 'Puedes inscribir y marcar la asistencia.',
+      confirmLabel: 'Inscribir y marcar',
+    );
+    if (!ok || !mounted) return;
+    try {
+      await persistirAsistenciaSubevento(
+        ref,
+        eventoId: widget.eventoId,
+        registradoId: registrado.id,
+        subeventoId: subeventoId,
+        accion: 'inscribir_y_marcar',
+        forzar: puedeForzar,
+      );
+      _scanner.showFeedback('Inscrito y asistencia marcada.', isError: false);
+    } on AsistenciaRechazada catch (rechazo) {
+      await _resolverRechazoInscripcion(
+        rechazo,
+        registrado: registrado,
+        subeventoId: subeventoId,
+        puedeForzar: puedeForzar,
+      );
     }
   }
 

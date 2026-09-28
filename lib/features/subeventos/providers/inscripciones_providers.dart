@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/supabase_tables.dart';
@@ -20,16 +21,30 @@ List<InscripcionSubevento> fusionarInscripcionesConCola({
         item.operation == SyncOperation.insert &&
         item.payload['evento_id'] == eventoId,
   );
+  final reemplazos = <String, InscripcionSubevento>{};
   final extras = <InscripcionSubevento>[];
   for (final item in pendientes) {
     final registradoId = item.payload['registrado_id'] as String?;
     final subeventoId = item.payload['subevento_id'] as String?;
     if (registradoId == null || subeventoId == null) continue;
-    final yaEsta = servidor.any(
-      (fila) =>
-          fila.registradoId == registradoId && fila.subeventoId == subeventoId,
-    );
-    if (yaEsta) continue;
+    final clave = '$registradoId|$subeventoId';
+    final existente = reemplazos[clave] ??
+        servidor
+            .where(
+              (fila) =>
+                  fila.registradoId == registradoId &&
+                  fila.subeventoId == subeventoId,
+            )
+            .firstOrNull;
+    if (existente != null) {
+      reemplazos[clave] = existente.copyWith(
+        asistio: true,
+        pendienteDeSincronizar: true,
+      );
+      continue;
+    }
+    // inscribir_y_marcar con reemplazar: true no simula en caché los talleres
+    // que se quitan; el servidor lo resuelve al sincronizar.
     extras.add(
       InscripcionSubevento(
         id: item.id,
@@ -42,7 +57,11 @@ List<InscripcionSubevento> fusionarInscripcionesConCola({
       ),
     );
   }
-  return [...servidor, ...extras];
+  return [
+    for (final fila in servidor)
+      reemplazos['${fila.registradoId}|${fila.subeventoId}'] ?? fila,
+    ...extras,
+  ];
 }
 
 class AsistenciaRechazada implements Exception {
@@ -119,10 +138,15 @@ Future<void> persistirAsistenciaSubevento(
         );
       }
     } else {
-      await repo.marcarAsistencia(
+      final resultado = await repo.marcarAsistencia(
         registradoId: registradoId,
         subeventoId: subeventoId,
       );
+      if (resultado['ok'] == false) {
+        throw AsistenciaRechazada(
+          resultado['motivo']?.toString() ?? 'rechazo',
+        );
+      }
     }
   } else {
     await ref.read(syncQueueServiceProvider.notifier).enqueueInsert(

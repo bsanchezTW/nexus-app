@@ -38,4 +38,26 @@ class InscripcionSubevento {
       asistioPor: map['asistio_por'] as String?,
     );
   }
+
+  InscripcionSubevento copyWith({
+    bool? sobrecupo,
+    bool? asistio,
+    DateTime? asistioEn,
+    String? asistioPor,
+    bool? pendienteDeSincronizar,
+  }) {
+    return InscripcionSubevento(
+      id: id,
+      eventoId: eventoId,
+      registradoId: registradoId,
+      subeventoId: subeventoId,
+      origen: origen,
+      sobrecupo: sobrecupo ?? this.sobrecupo,
+      asistio: asistio ?? this.asistio,
+      asistioEn: asistioEn ?? this.asistioEn,
+      asistioPor: asistioPor ?? this.asistioPor,
+      pendienteDeSincronizar:
+          pendienteDeSincronizar ?? this.pendienteDeSincronizar,
+    );
+  }
 }
