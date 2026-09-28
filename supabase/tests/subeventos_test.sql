@@ -25,6 +25,7 @@ INSERT INTO auth.users (
 ON CONFLICT (id) DO NOTHING;
 
 ALTER TABLE public.perfiles DISABLE TRIGGER trg_perfiles_prevent_role_escalation;
+ALTER TABLE public.perfiles DISABLE TRIGGER trg_perfiles_validate_externo;
 INSERT INTO public.perfiles (id, nombre_completo, rol, activo)
 VALUES
   ('11111111-1111-1111-1111-111111111111', 'Admin Fase1', 'admin', true),
@@ -32,6 +33,7 @@ VALUES
   ('33333333-3333-3333-3333-333333333333', 'User Fase1', 'user', true),
   ('44444444-4444-4444-4444-444444444444', 'Ext Fase1', 'externo', true)
 ON CONFLICT (id) DO UPDATE SET rol = EXCLUDED.rol, activo = true, nombre_completo = EXCLUDED.nombre_completo;
+ALTER TABLE public.perfiles ENABLE TRIGGER trg_perfiles_validate_externo;
 ALTER TABLE public.perfiles ENABLE TRIGGER trg_perfiles_prevent_role_escalation;
 
 INSERT INTO public.eventos (id, nombre, pais, fecha, lugar, direccion, cupo_maximo, hora_inicio, hora_fin, duracion_dias, creado_por)
@@ -45,10 +47,10 @@ WHERE id = '44444444-4444-4444-4444-444444444444';
 
 INSERT INTO public.subeventos (id, evento_id, codigo, nombre, dia, hora_inicio, hora_fin, cupo_maximo, orden)
 VALUES
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'taller1', 'Taller A', CURRENT_DATE + 30, '10:00', '11:00', 1, 1),
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'taller2', 'Taller B', CURRENT_DATE + 30, '11:00', '12:00', NULL, 2),
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb3', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'taller3', 'Taller C', CURRENT_DATE + 30, '10:30', '11:30', NULL, 3),
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb4', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'taller4', 'Taller D', CURRENT_DATE + 30, '14:00', '15:00', NULL, 4);
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'tlr001', 'Taller A', CURRENT_DATE + 30, '10:00', '11:00', 1, 1),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'tlr002', 'Taller B', CURRENT_DATE + 30, '11:00', '12:00', NULL, 2),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb3', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'tlr003', 'Taller C', CURRENT_DATE + 30, '10:30', '11:30', NULL, 3),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb4', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'tlr004', 'Taller D', CURRENT_DATE + 30, '14:00', '15:00', NULL, 4);
 
 CREATE OR REPLACE FUNCTION pg_temp.f1_como(p_uid uuid) RETURNS void
 LANGUAGE plpgsql AS $$
@@ -183,22 +185,26 @@ BEGIN
   RESET ROLE;
   r := public.rpe_publico_registrar(v_slug,
     '{"nombre_completo":"Paz León","email":"paz@x.cl","empresa":"Acme","cargo":"Jefa","telefono":"+56 9 5555 5555"}'::jsonb,
-    ARRAY['taller2']);
+    ARRAY['tlr002']);
   IF r->>'resultado' IS DISTINCT FROM 'inscrito' OR r->>'envio' IS DISTINCT FROM 'programado' THEN
     RAISE EXCEPTION 'caso 6 alta %', r;
   END IF;
+  UPDATE public.envios_qr e
+  SET created_at = now() - interval '1 hour'
+  FROM public.registrados rg
+  WHERE rg.id = e.registrado_id AND rg.email = 'paz@x.cl';
   r := public.rpe_publico_registrar(v_slug,
     '{"nombre_completo":"Otra Persona","email":"paz@x.cl","empresa":"Otra","cargo":"Otra","telefono":"+56 9 5555 5555"}'::jsonb,
-    ARRAY['taller4']);
+    ARRAY['tlr002', 'tlr004']);
   IF r->>'resultado' IS DISTINCT FROM 'actualizado' THEN RAISE EXCEPTION 'caso 6 update %', r; END IF;
-  IF NOT ((r->'ya_inscrito_en') ? 'taller2') THEN RAISE EXCEPTION 'caso 6 ya_inscrito %', r; END IF;
+  IF NOT ((r->'ya_inscrito_en') ? 'tlr002') THEN RAISE EXCEPTION 'caso 6 ya_inscrito %', r; END IF;
   SELECT nombre_completo INTO nombre FROM public.registrados WHERE email = 'paz@x.cl';
   IF nombre IS DISTINCT FROM 'Paz León' THEN RAISE EXCEPTION 'caso 6 pisó el nombre %', nombre; END IF;
   SELECT count(*) INTO n FROM public.registrados WHERE email = 'paz@x.cl';
   IF n <> 1 THEN RAISE EXCEPTION 'caso 6 cupo/filas %', n; END IF;
   r := public.rpe_publico_registrar(v_slug,
     '{"nombre_completo":"Paz León","email":"paz@x.cl","empresa":"Acme","cargo":"Jefa","telefono":"+56 9 5555 5555"}'::jsonb,
-    ARRAY['taller2', 'taller4']);
+    ARRAY['tlr002', 'tlr004']);
   IF r->>'envio' IS DISTINCT FROM 'limitado' THEN RAISE EXCEPTION 'caso 13 %', r; END IF;
   SELECT count(*) INTO n FROM public.envios_qr e
   JOIN public.registrados rg ON rg.id = e.registrado_id
@@ -263,7 +269,12 @@ END $$;
 
 -- 10. Horario y rango
 DO $$
+DECLARE v_ana uuid;
 BEGIN
+  SELECT id INTO v_ana FROM public.registrados WHERE email = 'ana-qr@x.cl';
+  PERFORM pg_temp.f1_como('11111111-1111-1111-1111-111111111111');
+  PERFORM public.rpe_inscribir_subevento(
+    v_ana, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2', false, false, false);
   BEGIN
     UPDATE public.subeventos SET hora_inicio = '10:00', hora_fin = '11:30'
     WHERE id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2';
@@ -286,13 +297,29 @@ DO $$
 DECLARE n int; cal jsonb; det jsonb; reg jsonb; v_slug text;
 BEGIN
   SET LOCAL ROLE anon;
-  SELECT count(*) INTO n FROM public.eventos;
+  BEGIN
+    SELECT count(*) INTO n FROM public.eventos;
+  EXCEPTION WHEN insufficient_privilege THEN
+    n := 0;
+  END;
   IF n <> 0 THEN RAISE EXCEPTION 'caso 11 anon leyó eventos %', n; END IF;
-  SELECT count(*) INTO n FROM public.subeventos;
+  BEGIN
+    SELECT count(*) INTO n FROM public.subeventos;
+  EXCEPTION WHEN insufficient_privilege THEN
+    n := 0;
+  END;
   IF n <> 0 THEN RAISE EXCEPTION 'caso 11 anon leyó subeventos %', n; END IF;
-  SELECT count(*) INTO n FROM public.registrados;
+  BEGIN
+    SELECT count(*) INTO n FROM public.registrados;
+  EXCEPTION WHEN insufficient_privilege THEN
+    n := 0;
+  END;
   IF n <> 0 THEN RAISE EXCEPTION 'caso 11 anon leyó registrados %', n; END IF;
-  SELECT count(*) INTO n FROM public.inscripciones_subevento;
+  BEGIN
+    SELECT count(*) INTO n FROM public.inscripciones_subevento;
+  EXCEPTION WHEN insufficient_privilege THEN
+    n := 0;
+  END;
   IF n <> 0 THEN RAISE EXCEPTION 'caso 11 anon leyó inscripciones %', n; END IF;
   RESET ROLE;
   SELECT slug INTO v_slug FROM public.eventos WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -344,6 +371,170 @@ END $$;
 DO $$
 BEGIN
   RAISE NOTICE 'PENDIENTE caso 15 concurrencia manual (dos sesiones)';
+END $$;
+
+-- 16. Dos altas públicas seguidas con el mismo email.
+DO $$
+DECLARE r jsonb; v_slug text;
+BEGIN
+  RESET ROLE;
+  INSERT INTO public.eventos (
+    id, nombre, pais, fecha, lugar, direccion, cupo_maximo,
+    hora_inicio, hora_fin, duracion_dias, creado_por
+  ) VALUES (
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa16', 'Evento Caso 16', 'Chile',
+    CURRENT_DATE + 40, 'Hotel', 'Calle 1', 5, '09:00', '18:00', 1,
+    '11111111-1111-1111-1111-111111111111'
+  );
+  SELECT slug INTO v_slug FROM public.eventos WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa16';
+  r := public.rpe_publico_registrar(v_slug,
+    '{"nombre_completo":"Nico Paz","email":"nico16@x.cl","empresa":"X","cargo":"Analista","telefono":"56911112222"}'::jsonb);
+  IF r->>'resultado' IS DISTINCT FROM 'inscrito' THEN RAISE EXCEPTION 'caso 16 alta %', r; END IF;
+  r := public.rpe_publico_registrar(v_slug,
+    '{"nombre_completo":"Nico Paz","email":"nico16@x.cl","empresa":"X","cargo":"Analista","telefono":"56911112222"}'::jsonb);
+  IF r->>'resultado' IS DISTINCT FROM 'sin_cambios' THEN RAISE EXCEPTION 'caso 16 re %', r; END IF;
+  RAISE NOTICE 'OK caso 16 email repetido';
+END $$;
+
+-- 17. Inscribir a quien ya está no consume cupo y marca asistencia.
+DO $$
+DECLARE r jsonb; v_id uuid; antes int; despues int; v_asistio boolean;
+BEGIN
+  PERFORM pg_temp.f1_como('11111111-1111-1111-1111-111111111111');
+  SELECT id INTO v_id FROM public.registrados WHERE email = 'paz@x.cl';
+  SELECT count(*) INTO antes FROM public.inscripciones_subevento
+  WHERE registrado_id = v_id AND subevento_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2';
+  r := public.rpe_inscribir_subevento(
+    v_id, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2', false, true, false);
+  IF (r->>'ok')::boolean IS NOT TRUE OR (r->>'ya_inscrito')::boolean IS NOT TRUE THEN
+    RAISE EXCEPTION 'caso 17 %', r;
+  END IF;
+  SELECT count(*) INTO despues FROM public.inscripciones_subevento
+  WHERE registrado_id = v_id AND subevento_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2';
+  SELECT asistio INTO v_asistio FROM public.inscripciones_subevento
+  WHERE registrado_id = v_id AND subevento_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2';
+  IF antes <> 1 OR despues <> antes OR v_asistio IS NOT TRUE THEN
+    RAISE EXCEPTION 'caso 17 conteo % -> % asistio %', antes, despues, v_asistio;
+  END IF;
+  RAISE NOTICE 'OK caso 17 ya inscrito';
+END $$;
+
+-- 18. Permiso antes de decir si está inscrito.
+DO $$
+DECLARE v_ana uuid; v_luis uuid;
+BEGIN
+  INSERT INTO auth.users (
+    id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+    created_at, updated_at, is_super_admin, is_sso_user, is_anonymous,
+    banned_until, confirmation_token, recovery_token,
+    email_change_token_new, email_change
+  ) VALUES (
+    '55555555-5555-5555-5555-555555555555', '00000000-0000-0000-0000-000000000000',
+    'authenticated', 'authenticated', 'f1-ajeno@test.local', crypt('x', gen_salt('bf')),
+    now(), '{}'::jsonb, '{}'::jsonb, now(), now(), false, false, false, NULL, '', '', '', ''
+  ) ON CONFLICT (id) DO NOTHING;
+  ALTER TABLE public.perfiles DISABLE TRIGGER trg_perfiles_prevent_role_escalation;
+  INSERT INTO public.perfiles (id, nombre_completo, rol, activo)
+  VALUES ('55555555-5555-5555-5555-555555555555', 'Ajeno Fase1', 'user', true)
+  ON CONFLICT (id) DO UPDATE SET rol = 'user', activo = true;
+  ALTER TABLE public.perfiles ENABLE TRIGGER trg_perfiles_prevent_role_escalation;
+
+  SELECT id INTO v_ana FROM public.registrados WHERE email = 'ana-qr@x.cl';
+  SELECT id INTO v_luis FROM public.registrados WHERE email = 'luis@x.cl';
+  PERFORM pg_temp.f1_como('55555555-5555-5555-5555-555555555555');
+  BEGIN
+    PERFORM public.rpe_marcar_asistencia_subevento(v_ana, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1', true);
+    RAISE EXCEPTION 'caso 18 dejó marcar a un inscrito';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE '%RPE_NO_AUTORIZADO%' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.rpe_marcar_asistencia_subevento(v_luis, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb4', true);
+    RAISE EXCEPTION 'caso 18 dejó marcar a quien no está en el taller';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE '%RPE_NO_AUTORIZADO%' THEN RAISE; END IF;
+  END;
+  RAISE NOTICE 'OK caso 18 permiso antes de existencia';
+END $$;
+
+-- 19. RUT con k minúscula.
+DO $$
+DECLARE v jsonb;
+BEGIN
+  PERFORM set_config('rpe.pais_evento', 'Chile', true);
+  v := public.rpe_validar_datos_asistente(
+    '{"nombre_completo":"Rita Sol","email":"rita19@x.cl","empresa":"X","cargo":"Analista","telefono":"56912345678","rut":"10.000.013-k","patente":"ABCD12"}'::jsonb,
+    true, false);
+  IF v->>'rut' IS DISTINCT FROM '10000013K' THEN RAISE EXCEPTION 'caso 19 k %', v->>'rut'; END IF;
+  v := public.rpe_validar_datos_asistente(
+    '{"nombre_completo":"Rita Sol","email":"rita19@x.cl","empresa":"X","cargo":"Analista","telefono":"56912345678","rut":"10.000.013-K","patente":"ABCD12"}'::jsonb,
+    true, false);
+  IF v->>'rut' IS DISTINCT FROM '10000013K' THEN RAISE EXCEPTION 'caso 19 K %', v->>'rut'; END IF;
+  RAISE NOTICE 'OK caso 19 rut k';
+END $$;
+
+-- 20. tiene_subeventos ignora talleres ocultos.
+DO $$
+DECLARE v_slug text; det jsonb;
+BEGIN
+  RESET ROLE;
+  INSERT INTO public.eventos (
+    id, nombre, pais, fecha, lugar, direccion, cupo_maximo,
+    hora_inicio, hora_fin, duracion_dias, creado_por
+  ) VALUES (
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa20', 'Evento Caso 20', 'Chile',
+    CURRENT_DATE + 40, 'Hotel', 'Calle 1', NULL, '09:00', '18:00', 1,
+    '11111111-1111-1111-1111-111111111111'
+  );
+  INSERT INTO public.subeventos (
+    id, evento_id, codigo, nombre, dia, hora_inicio, hora_fin, visible_publico
+  ) VALUES (
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb20', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa20',
+    'oculto', 'Oculto', CURRENT_DATE + 40, '10:00', '11:00', false
+  );
+  SELECT slug INTO v_slug FROM public.eventos WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa20';
+  det := public.rpe_publico_evento(v_slug);
+  IF (det->>'tiene_subeventos')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'caso 20 %', det->>'tiene_subeventos';
+  END IF;
+  RAISE NOTICE 'OK caso 20 talleres ocultos';
+END $$;
+
+-- 21. Excel con certificación: RUT y patente opcionales, formato si vienen.
+DO $$
+DECLARE r jsonb; n int;
+BEGIN
+  RESET ROLE;
+  INSERT INTO public.eventos (
+    id, nombre, pais, fecha, lugar, direccion, cupo_maximo,
+    hora_inicio, hora_fin, duracion_dias, creado_por, certificacion_capacitacion
+  ) VALUES (
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa21', 'Evento Caso 21', 'Chile',
+    CURRENT_DATE + 40, 'Hotel', 'Calle 1', 10, '09:00', '18:00', 1,
+    '11111111-1111-1111-1111-111111111111', true
+  );
+  PERFORM pg_temp.f1_como('11111111-1111-1111-1111-111111111111');
+  r := public.rpe_importar_registrados(
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa21',
+    jsonb_build_array(
+      jsonb_build_object(
+        'nombre_completo', 'Rita Sol', 'email', 'rita21@x.cl',
+        'empresa', 'X', 'cargo', 'Analista', 'telefono', '56988888888'
+      ),
+      jsonb_build_object(
+        'nombre_completo', 'Hugo Mal', 'email', 'hugo21@x.cl',
+        'empresa', 'X', 'cargo', 'Analista', 'telefono', '56988888889',
+        'rut', '1', 'patente', 'ABCD12'
+      )
+    ),
+    false);
+  SELECT count(*) INTO n FROM public.registrados WHERE email = 'rita21@x.cl';
+  IF (r->>'insertados')::int IS DISTINCT FROM 1 OR n <> 1
+     OR jsonb_array_length(r->'invalidos') IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'caso 21 %', r;
+  END IF;
+  RAISE NOTICE 'OK caso 21 importacion certificacion';
 END $$;
 
 ROLLBACK;

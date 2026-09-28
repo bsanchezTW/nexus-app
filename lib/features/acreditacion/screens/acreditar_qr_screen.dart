@@ -490,7 +490,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     );
     if (!ok || !mounted) return;
     try {
-      await persistirAsistenciaSubevento(
+      final resultado = await persistirAsistenciaSubevento(
         ref,
         eventoId: widget.eventoId,
         registradoId: registrado.id,
@@ -498,7 +498,12 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
         accion: 'inscribir_y_marcar',
         forzar: puedeForzar,
       );
-      _scanner.showFeedback('Inscrito y asistencia marcada.', isError: false);
+      _scanner.showFeedback(
+        resultado?['ya_inscrito'] == true
+            ? 'Ya estaba inscrito; asistencia marcada.'
+            : 'Inscrito y asistencia marcada.',
+        isError: false,
+      );
     } on AsistenciaRechazada catch (rechazo) {
       await _resolverRechazoInscripcion(
         rechazo,

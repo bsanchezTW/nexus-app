@@ -110,7 +110,7 @@ final inscripcionesPorEventoProvider = FutureProvider.autoDispose
       );
     });
 
-Future<void> persistirAsistenciaSubevento(
+Future<Map<String, dynamic>?> persistirAsistenciaSubevento(
   WidgetRef ref, {
   required String eventoId,
   required String registradoId,
@@ -121,10 +121,11 @@ Future<void> persistirAsistenciaSubevento(
 }) async {
   final online = ref.read(isOnlineProvider);
   final cache = ref.read(offlineReadCacheProvider);
+  Map<String, dynamic>? resultado;
   if (online && !esIdSoloLocal(registradoId)) {
     final repo = ref.read(inscripcionesSubeventoRepositoryProvider);
     if (accion == 'inscribir_y_marcar') {
-      final resultado = await repo.inscribir(
+      resultado = await repo.inscribir(
         registradoId: registradoId,
         subeventoId: subeventoId,
         forzarSobrecupo: forzar,
@@ -138,7 +139,7 @@ Future<void> persistirAsistenciaSubevento(
         );
       }
     } else {
-      final resultado = await repo.marcarAsistencia(
+      resultado = await repo.marcarAsistencia(
         registradoId: registradoId,
         subeventoId: subeventoId,
       );
@@ -172,4 +173,5 @@ Future<void> persistirAsistenciaSubevento(
   ref.read(cacheRevisionProvider(clave).notifier).state++;
   ref.invalidate(registradosPorEventoProvider(eventoId));
   ref.invalidate(inscripcionesPorEventoProvider(eventoId));
+  return resultado;
 }
