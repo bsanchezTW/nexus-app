@@ -25,6 +25,7 @@ import '../../capturador/providers/capturador_providers.dart';
 import '../../capturador/services/evento_lead_interno_service.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
+import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/tw_toast.dart';
 import '../qr_codigo_parser.dart';
@@ -375,14 +376,14 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
         ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
         const [];
     return Material(
-      color: Colors.black54,
+      color: TwColors.cameraScrim,
       borderRadius: BorderRadius.circular(12),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String?>(
           isExpanded: true,
           value: _subeventoId,
-          dropdownColor: Colors.black87,
-          style: const TextStyle(color: Colors.white),
+          dropdownColor: TwColors.cameraMenu,
+          style: const TextStyle(color: TwColors.onCamera),
           items: [
             const DropdownMenuItem(value: null, child: Text('Entrada')),
             for (final taller in talleres)

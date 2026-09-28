@@ -49,6 +49,11 @@ class TwColors {
   static const subtle = Color(0xFF7D8798); // subtítulo tarjeta soporte
   static const footerInk = Color(0xFFA2ABBB); // pie de versión
 
+  /// Selector sobre la cámara: velo y menú oscuros, texto claro.
+  static const cameraScrim = Color(0x8A000000);
+  static const cameraMenu = Color(0xDD000000);
+  static const onCamera = Color(0xFFFFFFFF);
+
   // ---------- Iconos ----------
   static const iconIdle = Color(0xFF7F8CA1); // icono dentro de input
   static const iconInk = Color(0xFF40506B); // icono neutro sobre tint
