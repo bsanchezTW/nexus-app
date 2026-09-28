@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +13,9 @@ import '../../../core/router/route_paths.dart';
 import '../../../data/models/capturar_lead_route_extra.dart';
 import '../../../data/models/lead_existente.dart';
 import '../../../data/models/lead_prefill.dart';
+import '../../../data/models/inscripcion_subevento.dart';
 import '../../../data/models/registrado.dart';
+import '../../../data/repositories/inscripciones_subevento_repository.dart';
 import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/leads_repository.dart';
 import '../../../data/repositories/registrados_repository.dart';
@@ -252,6 +256,42 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
   }
 
   bool _cerrando = false;
+  bool _inscripcionesNoCargadas = false;
+
+  Future<List<InscripcionSubevento>> _listaInscripciones() async {
+    // El build ya observa las inscripciones; aquí se espera si aún cargan.
+    final async = ref.read(inscripcionesPorEventoProvider(widget.eventoId));
+    if (async.hasValue) {
+      _inscripcionesNoCargadas = false;
+      return async.requireValue;
+    }
+    if (async.isLoading) {
+      try {
+        final lista = await ref.read(
+          inscripcionesPorEventoProvider(widget.eventoId).future,
+        );
+        _inscripcionesNoCargadas = false;
+        return lista;
+      } catch (error, stackTrace) {
+        _inscripcionesNoCargadas = true;
+        developer.log(
+          'No se pudieron cargar las inscripciones',
+          name: 'AsistenciaSubevento',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        return [];
+      }
+    }
+    _inscripcionesNoCargadas = true;
+    developer.log(
+      'No se pudieron cargar las inscripciones',
+      name: 'AsistenciaSubevento',
+      error: async.error,
+      stackTrace: async.stackTrace,
+    );
+    return async.valueOrNull ?? [];
+  }
 
   Future<void> _cerrarEscaner() async {
     if (_cerrando) return;
@@ -353,16 +393,11 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
 
   Future<void> _procesarAsistencia(Registrado registrado, String subeventoId) async {
     final perfil = ref.read(currentPerfilProvider).valueOrNull;
-    final inscripciones =
-        ref.read(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
-        const [];
-    final inscripcion = inscripciones
-        .where(
-          (fila) =>
-              fila.registradoId == registrado.id &&
-              fila.subeventoId == subeventoId,
-        )
-        .firstOrNull;
+    final inscripcion = await resolverInscripcionParaEscaneo(
+      cargar: _listaInscripciones,
+      registradoId: registrado.id,
+      subeventoId: subeventoId,
+    );
     final accion = decidirAccionEscaneo(
       formatoAntiguo: false,
       invalido: false,
@@ -391,6 +426,29 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
           isError: true,
         );
       case AccionEscaneoTipo.ofrecerInscribirYMarcar:
+        if (_inscripcionesNoCargadas && ref.read(isOnlineProvider)) {
+          final resultado = await ref
+              .read(inscripcionesSubeventoRepositoryProvider)
+              .marcarAsistencia(
+                registradoId: registrado.id,
+                subeventoId: subeventoId,
+              );
+          if (!mounted) return;
+          if (resultado['ok'] != false) {
+            ref.invalidate(inscripcionesPorEventoProvider(widget.eventoId));
+            ref.invalidate(registradosPorEventoProvider(widget.eventoId));
+            _scanner.showFeedback('Asistencia marcada.', isError: false);
+            return;
+          }
+          if (resultado['motivo']?.toString() != 'no_inscrito') {
+            _scanner.showFeedback(
+              'No se pudo marcar la asistencia.',
+              isError: true,
+            );
+            return;
+          }
+        }
+        if (!mounted) return;
         final ok = await confirmDialog(
           context,
           title: 'No está inscrito',
@@ -438,6 +496,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
       return;
     }
 
+    // El build ya observa los talleres.
     final talleres =
         ref.read(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
         const [];
@@ -450,9 +509,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
             'otro taller',
     ];
     final etiqueta = nombres.isEmpty ? 'otro taller' : nombres.join(', ');
-    final inscripciones =
-        ref.read(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
-        const [];
+    final inscripciones = await _listaInscripciones();
     final yaAsistio = inscripciones.any(
       (fila) =>
           fila.registradoId == registrado.id &&
@@ -467,6 +524,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
       return;
     }
 
+    if (!mounted) return;
     final mover = await confirmDialog(
       context,
       title: 'Taller solapado',
@@ -494,8 +552,10 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Precarga asistentes sin reconstruir el preview de cámara.
+    // Precarga asistentes, talleres e inscripciones sin reconstruir el preview.
     ref.watch(registradosPorEventoProvider(widget.eventoId));
+    ref.watch(subeventosPorEventoProvider(widget.eventoId));
+    ref.watch(inscripcionesPorEventoProvider(widget.eventoId));
 
     return PopScope(
       // El gesto iOS de deslizar atrás exige canPop: el cierre (botón o
@@ -515,6 +575,22 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
       ),
     );
   }
+}
+
+/// Espera la lista y devuelve la inscripción de esa persona en ese taller.
+@visibleForTesting
+Future<InscripcionSubevento?> resolverInscripcionParaEscaneo({
+  required Future<List<InscripcionSubevento>> Function() cargar,
+  required String registradoId,
+  required String subeventoId,
+}) async {
+  final lista = await cargar();
+  for (final fila in lista) {
+    if (fila.registradoId == registradoId && fila.subeventoId == subeventoId) {
+      return fila;
+    }
+  }
+  return null;
 }
 
 /// Con red pide esa fila al servidor; sin red (o si el GET falla) usa el padrón

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:transworld_nexus/data/models/inscripcion_subevento.dart';
 import 'package:transworld_nexus/data/models/registrado.dart';
 import 'package:transworld_nexus/features/acreditacion/decidir_accion_escaneo.dart';
+import 'package:transworld_nexus/features/acreditacion/screens/acreditar_qr_screen.dart';
 
 void main() {
   const persona = Registrado(
@@ -113,5 +114,24 @@ void main() {
       ).tipo,
       AccionEscaneoTipo.invalido,
     );
+  });
+
+  test('la resolución de inscripción espera la carga diferida', () async {
+    const inscripcion = InscripcionSubevento(
+      id: 'i1',
+      eventoId: 'e1',
+      registradoId: 'r1',
+      subeventoId: 's1',
+      origen: 'app',
+    );
+    final hallada = await resolverInscripcionParaEscaneo(
+      cargar: () async {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        return const [inscripcion];
+      },
+      registradoId: 'r1',
+      subeventoId: 's1',
+    );
+    expect(hallada?.id, 'i1');
   });
 }

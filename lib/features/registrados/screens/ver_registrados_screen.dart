@@ -17,11 +17,13 @@ import '../../../core/widgets/app_modals.dart';
 import '../../../core/widgets/collapsing_nav.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
+import '../../../data/models/inscripcion_subevento.dart';
 import '../../../data/models/registrado.dart';
 import '../../../data/models/resultado_envio_qr.dart';
 import '../../../data/offline/sync_queue_service.dart';
 import '../../../data/repositories/envios_qr_repository.dart';
 import '../../../data/repositories/registrados_repository.dart';
+import '../../acreditacion/screens/acreditar_confirmado_screen.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
@@ -128,22 +130,18 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
   List<Registrado> _filtrarRegistrados(
     List<Registrado> registrados, {
     required bool puedeVerContacto,
+    required List<InscripcionSubevento> inscripciones,
   }) {
-    return registrados.where((r) {
+    final delTaller = filtrarRegistradosPorModo(
+      registrados: registrados,
+      inscripciones: inscripciones,
+      subeventoId: _tallerFiltro,
+    );
+    return delTaller.where((r) {
       if (_filtro == _Filtro.acreditados && !r.acreditado) {
         return false;
       }
       if (_filtro == _Filtro.pendientes && r.acreditado) return false;
-      if (_tallerFiltro != null) {
-        final inscripciones =
-            ref.read(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
-            const [];
-        final esta = inscripciones.any(
-          (fila) =>
-              fila.registradoId == r.id && fila.subeventoId == _tallerFiltro,
-        );
-        if (!esta) return false;
-      }
       if (_busqueda.isEmpty) return true;
       // Sin permiso para ver el contacto tampoco se busca por email: si no, el
       // correo oculto se podría reconstruir por tanteo.
@@ -219,10 +217,16 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
       registradosPorEventoProvider(widget.eventoId),
     );
     final puedeVerContacto = ref.watch(canViewContactDataProvider);
+    final inscripciones =
+        ref.watch(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const <InscripcionSubevento>[];
 
     final filtrados = registradosAsync.maybeWhen(
-      data: (registrados) =>
-          _filtrarRegistrados(registrados, puedeVerContacto: puedeVerContacto),
+      data: (registrados) => _filtrarRegistrados(
+        registrados,
+        puedeVerContacto: puedeVerContacto,
+        inscripciones: inscripciones,
+      ),
       orElse: () => const <Registrado>[],
     );
     final listaVacia = registradosAsync.hasValue && filtrados.isEmpty;
@@ -277,6 +281,7 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
             final filtrados = _filtrarRegistrados(
               registrados,
               puedeVerContacto: puedeVerContacto,
+              inscripciones: inscripciones,
             );
 
             if (registrados.isEmpty) {

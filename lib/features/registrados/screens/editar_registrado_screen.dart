@@ -15,6 +15,7 @@ import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
 import '../../../core/widgets/nexus_components.dart';
+import '../../../data/models/inscripcion_subevento.dart';
 import '../../../data/models/registrado.dart';
 import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/offline/sync_queue_service.dart';
@@ -106,17 +107,6 @@ class _EditarRegistradoScreenState
     _rutController.text = r.rut ?? '';
     _patenteController.text = r.patente ?? '';
     _acreditado = r.acreditado;
-    if (!_talleresCargados) {
-      _talleresCargados = true;
-      final inscripciones =
-          ref.read(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
-          const [];
-      for (final fila in inscripciones) {
-        if (fila.registradoId != widget.registradoId) continue;
-        _talleresIniciales.add(fila.subeventoId);
-        _talleresSeleccionados.add(fila.subeventoId);
-      }
-    }
     _nombre0 = _nombreController.text;
     _empresa0 = _empresaController.text;
     _cargo0 = _cargoController.text;
@@ -216,11 +206,19 @@ class _EditarRegistradoScreenState
             );
       }
       final fallos = <String>[];
-      if (ref.read(isOnlineProvider) && !esIdSoloLocal(widget.registradoId)) {
+      final inscripcionesAsync = ref.read(
+        inscripcionesPorEventoProvider(widget.eventoId),
+      );
+      // El build ya observa las inscripciones: solo se tocan talleres con datos.
+      final tocarTalleres = _talleresCargados && !inscripcionesAsync.hasError;
+      if (tocarTalleres &&
+          ref.read(isOnlineProvider) &&
+          !esIdSoloLocal(widget.registradoId)) {
         final agregar = _talleresSeleccionados.difference(_talleresIniciales);
         final quitar = _talleresIniciales.difference(_talleresSeleccionados);
         if (agregar.isNotEmpty || quitar.isNotEmpty) {
           final repo = ref.read(inscripcionesSubeventoRepositoryProvider);
+          // El build ya observa los talleres.
           final talleres =
               ref.read(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
               const [];
@@ -309,11 +307,27 @@ class _EditarRegistradoScreenState
     }
   }
 
+  void _volcarTalleres(List<InscripcionSubevento> filas) {
+    _talleresCargados = true;
+    for (final fila in filas) {
+      if (fila.registradoId != widget.registradoId) continue;
+      _talleresIniciales.add(fila.subeventoId);
+      _talleresSeleccionados.add(fila.subeventoId);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final esAdmin = ref.watch(isAdminProvider);
     final hayRed = ref.watch(isOnlineProvider);
     final puedeVerContacto = ref.watch(canViewContactDataProvider);
+    final inscripcionesAsync = ref.watch(
+      inscripcionesPorEventoProvider(widget.eventoId),
+    );
+    ref.watch(subeventosPorEventoProvider(widget.eventoId));
+    if (inscripcionesAsync.hasValue && !_talleresCargados) {
+      _volcarTalleres(inscripcionesAsync.requireValue);
+    }
     final evento = ref.watch(eventoByIdProvider(widget.eventoId)).valueOrNull;
     if (evento != null) {
       _inicializarPaisTelefonoEvento(
@@ -475,7 +489,23 @@ class _EditarRegistradoScreenState
                     ),
                     const SizedBox(height: 14),
                     Text('Talleres', style: Theme.of(context).textTheme.titleMedium),
-                    SelectorSubeventos(
+                    if (inscripcionesAsync.hasError && !_talleresCargados)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('No se pudieron cargar los talleres'),
+                          TextButton(
+                            onPressed: () => ref.invalidate(
+                              inscripcionesPorEventoProvider(widget.eventoId),
+                            ),
+                            child: const Text('Reintentar'),
+                          ),
+                        ],
+                      )
+                    else if (inscripcionesAsync.isLoading && !_talleresCargados)
+                      const SizedBox(height: 88, child: LoadingView())
+                    else
+                      SelectorSubeventos(
                       subeventos: ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ?? const [],
                       ocupacion: ref.watch(ocupacionEventoProvider(widget.eventoId)).valueOrNull,
                       seleccionados: _talleresSeleccionados,

@@ -17,7 +17,6 @@ import '../../registrados/providers/registrados_providers.dart';
 import '../../subeventos/providers/inscripciones_providers.dart';
 import '../../subeventos/providers/subeventos_providers.dart';
 
-@visibleForTesting
 List<Registrado> filtrarRegistradosPorModo({
   required List<Registrado> registrados,
   required List<InscripcionSubevento> inscripciones,
