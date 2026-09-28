@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 enum RpeErrorCode {
@@ -39,18 +41,39 @@ const kMensajesRpe = <RpeErrorCode, String>{
   RpeErrorCode.desconocido: 'No se pudo completar la operación.',
 };
 
+const kEtiquetasCampoRpe = <String, String>{
+  'nombre_completo': 'nombre y apellido',
+  'email': 'correo',
+  'empresa': 'empresa',
+  'cargo': 'cargo',
+  'telefono': 'teléfono',
+  'rut': 'RUT/RUC',
+  'patente': 'patente',
+  'codigo': 'código',
+  'subeventos': 'talleres',
+  'rango': 'rango de fechas',
+};
+
 class RpeException implements Exception {
-  const RpeException(this.code, {this.campo, this.regla, this.detalle});
+  const RpeException(this.code, {this.campo, this.regla, this.detalle, this.pista});
 
   final RpeErrorCode code;
   final String? campo;
   final String? regla;
   final Object? detalle;
+  final String? pista;
 
   String get mensaje {
-    if (code == RpeErrorCode.datosInvalidos && campo != null) {
-      return 'El campo $campo no es válido.';
+    if (code == RpeErrorCode.datosInvalidos &&
+        campo != null &&
+        campo!.isNotEmpty) {
+      if (campo!.startsWith('utm_')) {
+        return 'Un parámetro de campaña no es válido.';
+      }
+      final etiqueta = kEtiquetasCampoRpe[campo!] ?? campo;
+      return 'El campo $etiqueta no es válido.';
     }
+    if (pista != null && pista!.trim().isNotEmpty) return pista!.trim();
     return kMensajesRpe[code] ?? kMensajesRpe[RpeErrorCode.desconocido]!;
   }
 
@@ -61,9 +84,11 @@ class RpeException implements Exception {
 RpeException? rpeExceptionDesde(Object error) {
   String? message;
   Object? details;
+  String? pista;
   if (error is PostgrestException) {
     message = error.message;
-    details = error.details;
+    details = _mapa(error.details);
+    pista = error.hint;
   } else if (error is FunctionException) {
     final data = error.details;
     if (data is Map && data['error'] is String) {
@@ -71,7 +96,7 @@ RpeException? rpeExceptionDesde(Object error) {
     } else {
       message = error.reasonPhrase;
     }
-    details = data;
+    details = _mapa(data);
   }
   if (message == null || !message.startsWith('RPE_')) return null;
   return RpeException(
@@ -79,6 +104,7 @@ RpeException? rpeExceptionDesde(Object error) {
     campo: _texto(details, 'campo'),
     regla: _texto(details, 'regla'),
     detalle: details,
+    pista: pista,
   );
 }
 
@@ -118,8 +144,15 @@ String? _texto(Object? details, String clave) {
   if (details is Map && details[clave] != null) {
     return details[clave].toString();
   }
-  if (details is String && details.startsWith('{')) {
-    return null;
-  }
   return null;
+}
+
+Object? _mapa(Object? details) {
+  if (details is String && details.startsWith('{')) {
+    try {
+      final decoded = jsonDecode(details);
+      if (decoded is Map) return decoded;
+    } catch (_) {}
+  }
+  return details;
 }
