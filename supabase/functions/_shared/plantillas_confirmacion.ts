@@ -101,6 +101,14 @@ function tablaTalleres(talleres: TallerCorreo[]): string {
   return `<h2>Tus talleres</h2><table><thead><tr><th>Día</th><th>Hora</th><th>Taller</th><th>Sala</th><th>Expositor</th></tr></thead><tbody>${filas}</tbody></table>`;
 }
 
+function botonesCalendario(google: string, outlook: string): string {
+  const boton = (href: string, fondo: string, etiqueta: string) =>
+    `<td align="center" style="padding: 0 10px 10px 10px;"><table border="0" cellspacing="0" cellpadding="0"><tr><td align="center" bgcolor="${fondo}" style="border-radius: 6px;"><a href="${href}" target="_blank" style="font-size: 15px; font-family: Arial, sans-serif; color: #ffffff; text-decoration: none; padding: 12px 24px; display: inline-block; font-weight: bold; border-radius: 6px; border: 1px solid ${fondo};">${etiqueta}</a></td></tr></table></td>`;
+  return `<div style="margin-top: 35px; margin-bottom: 45px; text-align: center;"><p style="font-size: 15px; margin-bottom: 20px; color: #555;">Agéndalo en tu calendario:</p><table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;"><tr>${
+    boton(outlook, "#0078D4", "Outlook")
+  }${boton(google, "#4285F4", "Google Calendar")}</tr></table></div>`;
+}
+
 export function htmlConfirmacion(datos: DatosConfirmacion): string {
   const links = linksCalendario({
     ...datos.evento,
@@ -114,23 +122,27 @@ export function htmlConfirmacion(datos: DatosConfirmacion): string {
   const qr = datos.evento.accesoQr && datos.qrUrl
     ? `<p>Presenta este código en la acreditación.</p><img src="${
       escaparHtml(datos.qrUrl)
-    }" width="250" alt="Código QR">`
+    }" alt="Código QR" width="250" height="250" style="display: block; margin: 0 auto; background-color: #fff;">`
     : "";
   const mapa = datos.evento.mapaUrl
     ? `<p><a href="${escaparHtml(datos.evento.mapaUrl)}">Cómo llegar</a></p>`
     : "";
-  return `<!DOCTYPE html><html><body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; color: #000;">
-    <div style="max-width: 600px; margin: 0 auto;">
+  return `<!DOCTYPE html><html><body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; color: #000; margin: 0;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f4f4;">
       ${intro(datos)}
       ${aviso}
       ${qr}
       ${tablaTalleres(datos.talleres)}
       ${mapa}
-      <p>Agéndalo en tu calendario: <a href="${links.google}">Google</a> · <a href="${links.outlook}">Outlook</a></p>
-      <p style="text-decoration: underline; font-weight: bold;">Saludos cordiales.</p>
+      <div style="text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 50px;">
+        <p style="margin: 0;">Consultas a</p>
+        <p style="margin: 0; color: #206591; text-decoration: underline;">contacto@transworld.cl</p>
+      </div>
+      ${botonesCalendario(links.google, links.outlook)}
+      <p style="margin: 0; text-decoration: underline; font-weight: bold;">Saludos cordiales.</p>
       <p>Marketing</p>
       <p style="font-weight: bold;">Transworld</p>
-      <img src="${escaparHtml(datos.pieUrl)}" alt="Transworld" width="560">
+      <img src="${escaparHtml(datos.pieUrl)}" alt="Transworld" width="560" style="width: 100%; max-width: 560px; height: auto; display: block; border: none;">
     </div>
   </body></html>`;
 }

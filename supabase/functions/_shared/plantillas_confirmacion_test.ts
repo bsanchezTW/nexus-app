@@ -54,6 +54,11 @@ Deno.test("el HTML escapa y muestra QR solo con acceso", () => {
   assertStringIncludes(html, "Ana &lt;Pérez&gt; &amp; Cía");
   assertStringIncludes(html, "Tus talleres");
   assertStringIncludes(html, "https://ejemplo/qr");
+  assertStringIncludes(html, "#0078D4");
+  assertStringIncludes(html, "#4285F4");
+  assertStringIncludes(html, "Consultas a");
+  assertStringIncludes(html, "contacto@transworld.cl");
+  assertStringIncludes(html, "margin-bottom: 50px");
   const sinQr = htmlConfirmacion({
     ...base,
     evento: { ...base.evento, accesoQr: false },
