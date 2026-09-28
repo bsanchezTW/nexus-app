@@ -27,6 +27,7 @@ export type RangoEvento = {
   lugar: string;
   direccion: string;
   descripcion: string;
+  zona: string;
 };
 
 function compactarFecha(iso: string): string {
@@ -77,7 +78,9 @@ export function linksCalendario(evento: RangoEvento): {
   const endDt = `${fin.slice(0, 10)}T${evento.horaFin!.slice(0, 5)}:00`;
   return {
     google:
-      `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${inicio}/${termino}&details=${details}&location=${location}`,
+      `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${inicio}/${termino}&details=${details}&location=${location}&ctz=${
+        encodeURIComponent(evento.zona)
+      }`,
     outlook:
       `https://outlook.live.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent&subject=${text}&startdt=${startDt}&enddt=${endDt}&body=${details}&location=${location}`,
   };

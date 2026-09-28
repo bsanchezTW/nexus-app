@@ -1,4 +1,4 @@
-import { assertStringIncludes } from "https://deno.land/std@0.168.0/testing/asserts.ts";
+import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.168.0/testing/asserts.ts";
 import { formatearDia, linksCalendario } from "./zona_horaria.ts";
 
 Deno.test("formatea el día local", () => {
@@ -15,8 +15,10 @@ Deno.test("links de un día con horas y de varios días sin horas", () => {
     lugar: "Hotel",
     direccion: "Av",
     descripcion: "ok",
+    zona: "America/Santiago",
   });
   assertStringIncludes(conHoras.google, "20261112T090000/20261112T180000");
+  assertStringIncludes(conHoras.google, "ctz=America%2FSantiago");
   const varios = linksCalendario({
     nombre: "E",
     fecha: "2026-11-12",
@@ -26,7 +28,9 @@ Deno.test("links de un día con horas y de varios días sin horas", () => {
     lugar: "Hotel",
     direccion: "Av",
     descripcion: "ok",
+    zona: "America/Santiago",
   });
   assertStringIncludes(varios.google, "20261112/20261114");
+  assertEquals(varios.google.includes("ctz="), false);
   assertStringIncludes(varios.outlook, "allday=true");
 });

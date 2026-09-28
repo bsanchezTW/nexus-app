@@ -1,5 +1,6 @@
 import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.168.0/testing/asserts.ts";
 import {
+  aGsm7,
   asuntoDe,
   htmlConfirmacion,
   textoSms,
@@ -18,6 +19,7 @@ const base = {
     lugar: "Hotel",
     direccion: "Av. 1",
     descripcion: "",
+    zona: "America/Santiago",
     accesoQr: true,
     mapaUrl: null,
   },
@@ -72,4 +74,21 @@ Deno.test("el SMS cabe en 160 y se omite sin acceso QR", () => {
     textoSms({ evento: "X", talleres: 0, urlQr: "", accesoQr: false }).status,
     "skipped",
   );
+});
+
+Deno.test("el SMS de un nombre con tildes queda en GSM-7 y conserva la URL", () => {
+  const url = "https://ejemplo.test/functions/v1/qr-imagen?c=TW1-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const sms = textoSms({
+    evento: "Conexión Anual Ñuñoa…",
+    talleres: 1,
+    urlQr: url,
+    accesoQr: true,
+  });
+  assertEquals(sms.status, "ready");
+  if (sms.status !== "ready") return;
+  assertEquals(sms.text.length <= 160, true);
+  assertStringIncludes(sms.text, url);
+  assertEquals(sms.text, aGsm7(sms.text));
+  assertEquals(sms.text.includes("á"), false);
+  assertEquals(sms.text.includes("…"), false);
 });

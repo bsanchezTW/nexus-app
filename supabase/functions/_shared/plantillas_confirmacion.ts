@@ -1,5 +1,19 @@
 import { formatearDia, formatearHora, linksCalendario, type RangoEvento } from "./zona_horaria.ts";
 
+const GSM7 = new Set(
+  "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà"
+    .split(""),
+);
+
+export function aGsm7(texto: string): string {
+  const plano = texto.normalize("NFD").replace(/\u0300-\u036F/g, "").replaceAll("…", "...");
+  let salida = "";
+  for (const caracter of plano) {
+    salida += GSM7.has(caracter) ? caracter : "?";
+  }
+  return salida;
+}
+
 export type Tono = "autoinscrito" | "registrado_por" | "neutral";
 export type MotivoEnvio =
   | "registro"
@@ -129,14 +143,14 @@ export function textoSms(args: {
 }): { status: "ready"; text: string } | { status: "skipped"; reason: string } {
   if (!args.accesoQr) return { status: "skipped", reason: "sin_acceso_qr" };
   const extra = args.talleres > 0 ? `, ${args.talleres} talleres` : "";
-  const sufijo = `${extra}. Tu QR: ${args.urlQr}`;
-  const prefijo = ": tu registro está confirmado";
-  let nombre = args.evento;
-  let texto = `${nombre}${prefijo}${sufijo}`;
+  const sufijo = `${extra}. QR: ${args.urlQr}`;
+  const medio = ": registro confirmado";
+  let nombre = aGsm7(args.evento);
+  let texto = `${nombre}${medio}${sufijo}`;
   if (texto.length > 160) {
-    const disponible = 160 - prefijo.length - sufijo.length;
-    nombre = disponible > 1 ? args.evento.slice(0, disponible - 1) + "…" : "Evento";
-    texto = `${nombre}${prefijo}${sufijo}`;
+    const disponible = 160 - medio.length - sufijo.length;
+    nombre = disponible > 3 ? `${nombre.slice(0, disponible - 3)}...` : "Evento";
+    texto = `${nombre}${medio}${sufijo}`;
   }
   return { status: "ready", text: texto.slice(0, 160) };
 }

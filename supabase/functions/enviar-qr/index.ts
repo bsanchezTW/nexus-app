@@ -15,6 +15,7 @@ import {
   type TallerCorreo,
 } from "../_shared/plantillas_confirmacion.ts";
 import { esCodigoQrValido, generarQrPng, urlImagenQr } from "../_shared/qr.ts";
+import { zonaDePais } from "../_shared/zona_horaria.ts";
 
 const PIE_DE_FIRMA_URL =
   "https://evjocwzmlsyjixzihxep.supabase.co/storage/v1/object/public/imagenes/PIE-DE-FIRMA.png";
@@ -287,6 +288,7 @@ async function enviarEmail(args: {
       lugar: args.evento.lugar ?? "",
       direccion: args.evento.direccion ?? "",
       descripcion: "",
+      zona: zonaDePais(args.evento.pais),
       accesoQr: args.evento.acceso_qr,
       mapaUrl: args.evento.mapa_url,
     },
@@ -312,12 +314,19 @@ async function enviarEmail(args: {
       attachment,
       tags: ["confirmacion-registro"],
     });
-    if (!res.ok) return { status: "failed", reason: "brevo_email" };
+    if (!res.ok) {
+      return { status: "failed", reason: await detalleBrevo("email", res) };
+    }
     const data = await res.json().catch(() => ({})) as { messageId?: string };
     return { status: "sent", message_id: data.messageId };
   } catch {
     return { status: "failed", reason: "brevo_email" };
   }
+}
+
+async function detalleBrevo(canal: "email" | "sms", res: Response): Promise<string> {
+  const cuerpo = (await res.text()).slice(0, 300);
+  return `brevo_${canal}:${res.status}:${cuerpo}`;
 }
 
 function bytesABase64(bytes: Uint8Array): string {
@@ -346,7 +355,9 @@ async function enviarSms(args: {
   if (!numero) return { status: "skipped", reason: "sin_telefono" };
   try {
     const res = await enviarSmsBrevo({ recipient: numero, content: texto.text });
-    if (!res.ok) return { status: "failed", reason: "brevo_sms" };
+    if (!res.ok) {
+      return { status: "failed", reason: await detalleBrevo("sms", res) };
+    }
     return { status: "sent" };
   } catch {
     return { status: "failed", reason: "brevo_sms" };
