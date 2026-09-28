@@ -480,15 +480,83 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     required bool puedeForzar,
   }) async {
     if (!mounted) return;
+    // El build ya observa los talleres.
+    final talleres =
+        ref.read(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const [];
+    final nombre = talleres
+            .where((taller) => taller.id == subeventoId)
+            .map((taller) => taller.nombre)
+            .firstOrNull ??
+        'este taller';
+    final sinRed = !ref.read(isOnlineProvider);
     final ok = await confirmDialog(
       context,
       title: 'No está inscrito',
-      message: puedeForzar
-          ? 'Puedes inscribir y marcar, incluso si el cupo está lleno.'
-          : 'Puedes inscribir y marcar la asistencia.',
+      message: sinRed
+          ? 'Sin conexión no se puede comprobar el cupo. Si el taller está lleno, quedará en sobrecupo.'
+          : 'Esta persona no está inscrita en $nombre.',
       confirmLabel: 'Inscribir y marcar',
     );
     if (!ok || !mounted) return;
+    try {
+      final Map<String, dynamic>? resultado;
+      if (sinRed) {
+        resultado = await persistirAsistenciaSubevento(
+          ref,
+          eventoId: widget.eventoId,
+          registradoId: registrado.id,
+          subeventoId: subeventoId,
+          accion: 'inscribir_y_marcar',
+          forzar: true,
+        );
+      } else {
+        resultado = await inscribirConAvisoDeCupo(
+          intentar: (forzar) => _intentarInscribir(
+            registrado: registrado,
+            subeventoId: subeventoId,
+            forzar: forzar,
+          ),
+          confirmarSobrecupo: _confirmarSobrecupo,
+          puedeForzar: puedeForzar,
+        );
+      }
+      if (resultado == null || !mounted) return;
+      _scanner.showFeedback(
+        resultado['ya_inscrito'] == true
+            ? 'Ya estaba inscrito; asistencia marcada.'
+            : 'Inscrito y asistencia marcada.',
+        isError: false,
+      );
+    } on AsistenciaRechazada catch (rechazo) {
+      if (rechazo.motivo == 'sin_cupo') {
+        _scanner.showFeedback('Sin cupo en este taller.', isError: true);
+        return;
+      }
+      await _resolverRechazoInscripcion(
+        rechazo,
+        registrado: registrado,
+        subeventoId: subeventoId,
+        puedeForzar: puedeForzar,
+      );
+    }
+  }
+
+  Future<bool> _confirmarSobrecupo() {
+    return confirmDialog(
+      context,
+      title: 'Taller lleno',
+      message: 'El taller no tiene cupo. ¿Inscribir en sobrecupo?',
+      confirmLabel: 'Inscribir en sobrecupo',
+    );
+  }
+
+  Future<Map<String, dynamic>> _intentarInscribir({
+    required Registrado registrado,
+    required String subeventoId,
+    required bool forzar,
+    bool reemplazar = false,
+  }) async {
     try {
       final resultado = await persistirAsistenciaSubevento(
         ref,
@@ -496,21 +564,16 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
         registradoId: registrado.id,
         subeventoId: subeventoId,
         accion: 'inscribir_y_marcar',
-        forzar: puedeForzar,
+        forzar: forzar,
+        reemplazar: reemplazar,
       );
-      _scanner.showFeedback(
-        resultado?['ya_inscrito'] == true
-            ? 'Ya estaba inscrito; asistencia marcada.'
-            : 'Inscrito y asistencia marcada.',
-        isError: false,
-      );
+      return resultado ?? const {'ok': true};
     } on AsistenciaRechazada catch (rechazo) {
-      await _resolverRechazoInscripcion(
-        rechazo,
-        registrado: registrado,
-        subeventoId: subeventoId,
-        puedeForzar: puedeForzar,
-      );
+      return {
+        'ok': false,
+        'motivo': rechazo.motivo,
+        'conflictos': rechazo.conflictos,
+      };
     }
   }
 
@@ -567,19 +630,40 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
           : 'Mover desde el taller solapado',
     );
     if (!mover || !mounted) return;
+    final sinRed = !ref.read(isOnlineProvider);
     try {
-      await persistirAsistenciaSubevento(
-        ref,
-        eventoId: widget.eventoId,
-        registradoId: registrado.id,
-        subeventoId: subeventoId,
-        accion: 'inscribir_y_marcar',
-        forzar: puedeForzar,
-        reemplazar: true,
-      );
+      final Map<String, dynamic>? resultado;
+      if (sinRed) {
+        resultado = await persistirAsistenciaSubevento(
+          ref,
+          eventoId: widget.eventoId,
+          registradoId: registrado.id,
+          subeventoId: subeventoId,
+          accion: 'inscribir_y_marcar',
+          forzar: true,
+          reemplazar: true,
+        );
+      } else {
+        resultado = await inscribirConAvisoDeCupo(
+          intentar: (forzar) => _intentarInscribir(
+            registrado: registrado,
+            subeventoId: subeventoId,
+            forzar: forzar,
+            reemplazar: true,
+          ),
+          confirmarSobrecupo: _confirmarSobrecupo,
+          puedeForzar: puedeForzar,
+        );
+      }
+      if (resultado == null || !mounted) return;
       _scanner.showFeedback('Movido y asistencia marcada.', isError: false);
-    } on AsistenciaRechazada {
-      _scanner.showFeedback('No se pudo mover desde $etiqueta.', isError: true);
+    } on AsistenciaRechazada catch (rechazo) {
+      _scanner.showFeedback(
+        rechazo.motivo == 'sin_cupo'
+            ? 'Sin cupo en este taller.'
+            : 'No se pudo mover desde $etiqueta.',
+        isError: true,
+      );
     }
   }
 
@@ -624,6 +708,34 @@ Future<InscripcionSubevento?> resolverInscripcionParaEscaneo({
     }
   }
   return null;
+}
+
+/// Primer intento sin sobrecupo. Si el taller está lleno y hay permiso,
+/// [confirmarSobrecupo] decide el segundo intento.
+@visibleForTesting
+Future<Map<String, dynamic>?> inscribirConAvisoDeCupo({
+  required Future<Map<String, dynamic>> Function(bool forzar) intentar,
+  required Future<bool> Function() confirmarSobrecupo,
+  required bool puedeForzar,
+}) async {
+  final primero = await intentar(false);
+  if (primero['ok'] != false) return primero;
+  if (primero['motivo']?.toString() != 'sin_cupo') {
+    throw AsistenciaRechazada(
+      primero['motivo']?.toString() ?? 'rechazo',
+      conflictos: idsDeConflictos(primero['conflictos']),
+    );
+  }
+  if (!puedeForzar) throw const AsistenciaRechazada('sin_cupo');
+  if (!await confirmarSobrecupo()) return null;
+  final segundo = await intentar(true);
+  if (segundo['ok'] == false) {
+    throw AsistenciaRechazada(
+      segundo['motivo']?.toString() ?? 'rechazo',
+      conflictos: idsDeConflictos(segundo['conflictos']),
+    );
+  }
+  return segundo;
 }
 
 /// Con red pide esa fila al servidor; sin red (o si el GET falla) usa el padrón

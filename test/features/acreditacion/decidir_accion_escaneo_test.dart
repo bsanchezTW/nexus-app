@@ -3,6 +3,7 @@ import 'package:transworld_nexus/data/models/inscripcion_subevento.dart';
 import 'package:transworld_nexus/data/models/registrado.dart';
 import 'package:transworld_nexus/features/acreditacion/decidir_accion_escaneo.dart';
 import 'package:transworld_nexus/features/acreditacion/screens/acreditar_qr_screen.dart';
+import 'package:transworld_nexus/features/subeventos/providers/inscripciones_providers.dart';
 
 void main() {
   const persona = Registrado(
@@ -133,5 +134,50 @@ void main() {
       subeventoId: 's1',
     );
     expect(hallada?.id, 'i1');
+  });
+
+  test('inscribir sin cupo pregunta solo si se puede forzar', () async {
+    final sinPregunta = <bool>[];
+    var preguntas = 0;
+    final hecho = await inscribirConAvisoDeCupo(
+      intentar: (forzar) async {
+        sinPregunta.add(forzar);
+        return const {'ok': true};
+      },
+      confirmarSobrecupo: () async {
+        preguntas++;
+        return true;
+      },
+      puedeForzar: true,
+    );
+    expect(hecho?['ok'], true);
+    expect(preguntas, 0);
+    expect(sinPregunta, [false]);
+
+    final reintento = <bool>[];
+    await inscribirConAvisoDeCupo(
+      intentar: (forzar) async {
+        reintento.add(forzar);
+        if (!forzar) return const {'ok': false, 'motivo': 'sin_cupo'};
+        return const {'ok': true};
+      },
+      confirmarSobrecupo: () async => true,
+      puedeForzar: true,
+    );
+    expect(reintento, [false, true]);
+
+    final sinPermiso = <bool>[];
+    expect(
+      () => inscribirConAvisoDeCupo(
+        intentar: (forzar) async {
+          sinPermiso.add(forzar);
+          return const {'ok': false, 'motivo': 'sin_cupo'};
+        },
+        confirmarSobrecupo: () async => true,
+        puedeForzar: false,
+      ),
+      throwsA(isA<AsistenciaRechazada>()),
+    );
+    expect(sinPermiso, [false]);
   });
 }
