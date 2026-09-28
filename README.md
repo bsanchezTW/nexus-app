@@ -103,7 +103,8 @@ docs/
 - **  Backend**: Supabase (Postgres + Auth + Storage + Edge Functions),
   esquema `public`. Ver `supabase/schema.sql` para el modelo completo,
   políticas RLS, triggers y funciones RPC. Es la fuente de verdad
-  consolidada; `supabase/migrations/` se mantiene vacío a propósito.
+  consolidada. Las migraciones en `supabase/migrations/` son la historia
+  aplicada; este archivo debe reflejar el mismo modelo.
 
 ## Cómo correr el proyecto
 
