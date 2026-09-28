@@ -26,10 +26,12 @@ import '../../capturador/services/evento_lead_interno_service.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/tw_toast.dart';
 import '../qr_codigo_parser.dart';
 import '../decidir_accion_escaneo.dart';
 import '../../subeventos/providers/inscripciones_providers.dart';
 import '../../subeventos/providers/subeventos_providers.dart';
+import '../../subeventos/sugerir_subevento_en_curso.dart';
 import '../scanner/qr_scanner_service.dart';
 import '../scanner/scanner_controller.dart';
 import '../scanner/widgets/scanner_view.dart';
@@ -54,6 +56,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     with WidgetsBindingObserver {
   late final ScannerController _scanner;
   late String? _subeventoId;
+  bool _avisoTaller = false;
 
   @override
   void initState() {
@@ -667,12 +670,29 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     }
   }
 
+  void _programarAvisoDeTaller() {
+    if (_avisoTaller || widget.subeventoId != null) return;
+    // El build ya observa los talleres.
+    final talleres = ref
+        .read(subeventosPorEventoProvider(widget.eventoId))
+        .valueOrNull;
+    if (talleres == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _avisoTaller || widget.subeventoId != null) return;
+      _avisoTaller = true;
+      final sugerido = sugerirSubeventoEnCurso(talleres, DateTime.now());
+      if (sugerido == null) return;
+      TwToast.info(context, 'Taller en curso: ${sugerido.nombre}. ¿Cambiar?');
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     // Precarga asistentes, talleres e inscripciones sin reconstruir el preview.
     ref.watch(registradosPorEventoProvider(widget.eventoId));
     ref.watch(subeventosPorEventoProvider(widget.eventoId));
     ref.watch(inscripcionesPorEventoProvider(widget.eventoId));
+    _programarAvisoDeTaller();
 
     return PopScope(
       // El gesto iOS de deslizar atrás exige canPop: el cierre (botón o
