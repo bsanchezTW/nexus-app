@@ -16,6 +16,7 @@ import '../../../core/widgets/evento_list_context_menu.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/shell_tab_scroll.dart';
 import '../../../data/models/evento.dart';
+import '../../../data/models/subevento.dart';
 import '../../../data/offline/offline_availability.dart';
 import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/eventos_repository.dart';
@@ -24,8 +25,11 @@ import '../../../data/repositories/storage_cleanup_service.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../fijados/providers/fijados_providers.dart';
 import '../../home/providers/home_featured_providers.dart';
+import '../../subeventos/providers/subeventos_providers.dart';
+import '../eventos_agrupados.dart';
 import '../providers/eventos_providers.dart';
 import '../widgets/evento_acceso_button.dart';
+import '../widgets/talleres_anidados.dart';
 
 class ListarEventosScreen extends ConsumerStatefulWidget {
   const ListarEventosScreen({super.key});
@@ -45,11 +49,18 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
     ref.invalidate(usuarioEventosAutorizadosProvider);
     ref.invalidate(eventosListProvider);
     ref.invalidate(eventosFijadosProvider);
+    ref.invalidate(subeventosTodosProvider);
   }
 
   final _searchController = TextEditingController();
   String _query = '';
   String _filtro = 'Todos';
+
+  /// Eventos principales con sus talleres desplegados a mano.
+  final _abiertos = <String>{};
+
+  /// Grupos que la búsqueda abrió y el usuario volvió a cerrar.
+  final _cerrados = <String>{};
 
   @override
   void dispose() {
@@ -57,29 +68,43 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
     super.dispose();
   }
 
-  List<Evento> _filtrar(List<Evento> eventos, Set<String> fijados) {
-    final porEstado = switch (_filtro) {
-      'Activos' => eventos.where((e) => !e.yaOcurrio).toList(),
-      'Finalizados' => eventos.where((e) => e.yaOcurrio).toList(),
-      _ => List<Evento>.from(eventos),
-    };
-
-    final q = _query.trim().toLowerCase();
-    final filtrados = q.isEmpty
-        ? porEstado
-        : porEstado.where((e) {
-            final lugar = (e.lugar ?? e.pais ?? '').toLowerCase();
-            return e.nombre.toLowerCase().contains(q) || lugar.contains(q);
-          }).toList();
-
+  ({List<EventoAgrupado> grupos, Set<String> abiertosPorBusqueda}) _filtrar(
+    List<Evento> eventos,
+    List<Subevento> talleres,
+    Set<String> fijados,
+  ) {
+    final ordenados = List<Evento>.from(eventos);
     ordenarEventoListItems(
-      items: filtrados,
+      items: ordenados,
       fijados: fijados,
       id: (e) => e.id,
       fecha: (e) => e.fecha,
       finalizado: (e) => e.yaOcurrio,
     );
-    return filtrados;
+
+    final grupos = agruparEventos(ordenados, talleres).where((grupo) {
+      return switch (_filtro) {
+        'Activos' => !grupo.evento.yaOcurrio,
+        'Finalizados' => grupo.evento.yaOcurrio,
+        _ => true,
+      };
+    }).toList();
+
+    return filtrarGruposPorTexto(grupos, _query);
+  }
+
+  void _abrirTaller(Evento principal, Subevento taller, List<Evento> eventos) {
+    final origen = taller.eventoOrigenId;
+    if (origen != null && eventos.any((e) => e.id == origen)) {
+      context.push(RoutePaths.usarEvento(origen));
+      return;
+    }
+    if (ref.read(canCreateContentProvider)) {
+      if (!requireOnline(context, ref)) return;
+      context.push(RoutePaths.editarSubevento(principal.id, taller.id));
+      return;
+    }
+    context.push(RoutePaths.usarEvento(principal.id));
   }
 
   Future<void> _mostrarMenuEvento(Evento evento, Set<String> fijados) async {
@@ -283,6 +308,10 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
     final esUsuario =
         ref.watch(currentPerfilProvider).valueOrNull?.rol.isUsuario ?? false;
     final fijados = fijadosAsync.valueOrNull ?? const <String>{};
+    // Los talleres no bloquean la lista: si tardan o fallan, los eventos se
+    // ven igual y los grupos aparecen cuando llegan.
+    final talleres =
+        ref.watch(subeventosTodosProvider).valueOrNull ?? const <Subevento>[];
     // Sin red solo se puede entrar a lo que quedó en disco: la caché conserva
     // el set activo y suelta los eventos vencidos (ver
     // `offline_retention_policy.dart`).
@@ -297,11 +326,13 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
           ref.invalidate(usuarioEventosAutorizadosProvider);
           ref.invalidate(eventosListProvider);
           ref.invalidate(eventosFijadosProvider);
+          ref.invalidate(subeventosTodosProvider);
         },
         pendientes: () => [
           ref.read(usuarioEventosAutorizadosProvider.future),
           ref.read(eventosListProvider.future),
           ref.read(eventosFijadosProvider.future),
+          ref.read(subeventosTodosProvider.future),
         ],
       ),
       pinnedContent: _buildPinnedControls(puedeCrear: puedeCrear),
@@ -317,8 +348,11 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
               loading: () => _buildHeader(),
               error: (_, _) => _buildHeader(),
               data: (eventos) {
-                final proximos = eventos.where((e) => !e.yaOcurrio).length;
-                return _buildHeader(total: eventos.length, proximos: proximos);
+                final grupos = agruparEventos(eventos, talleres);
+                final proximos = grupos
+                    .where((g) => !g.evento.yaOcurrio)
+                    .length;
+                return _buildHeader(total: grupos.length, proximos: proximos);
               },
             ),
           ),
@@ -340,7 +374,11 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
             ),
           ],
           data: (eventos) {
-            final filtrados = _filtrar(eventos, fijados);
+            final (:grupos, :abiertosPorBusqueda) = _filtrar(
+              eventos,
+              talleres,
+              fijados,
+            );
             if (eventos.isEmpty) {
               return [
                 SliverFillRemaining(
@@ -353,7 +391,7 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
                 ),
               ];
             }
-            if (filtrados.isEmpty) {
+            if (grupos.isEmpty) {
               final porBusqueda = _query.trim().isNotEmpty;
               return [
                 SliverFillRemaining(
@@ -372,21 +410,50 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
                 sliver: SliverList.separated(
-                  itemCount: filtrados.length,
+                  itemCount: grupos.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
-                    final evento = filtrados[index];
+                    final grupo = grupos[index];
+                    final evento = grupo.evento;
                     final fijado = fijados.contains(evento.id);
                     final sinCache =
                         sinRed && !eventoDisponibleOffline(cache, evento.id);
+                    final abierto =
+                        _abiertos.contains(evento.id) ||
+                        (abiertosPorBusqueda.contains(evento.id) &&
+                            !_cerrados.contains(evento.id));
                     return EventRow(
+                      footer: !grupo.tieneTalleres
+                          ? null
+                          : TalleresAnidados(
+                              principal: evento,
+                              talleres: grupo.talleres,
+                              abierto: abierto,
+                              deshabilitado: sinCache,
+                              onToggle: () => setState(() {
+                                if (abierto) {
+                                  _abiertos.remove(evento.id);
+                                  _cerrados.add(evento.id);
+                                } else {
+                                  _abiertos.add(evento.id);
+                                  _cerrados.remove(evento.id);
+                                }
+                              }),
+                              onTallerTap: (taller) =>
+                                  _abrirTaller(evento, taller, eventos),
+                            ),
                       date: evento.fecha,
                       title: evento.nombre,
                       place: evento.lugar ?? evento.pais ?? '',
                       finalizado: evento.yaOcurrio,
                       fijado: fijado,
                       sinCache: sinCache,
-                      chip: evento.esMultiDia
+                      chip: evento.esTaller
+                          ? const StatusChip(
+                              label: 'Taller',
+                              variant: StatusChipVariant.neutral,
+                            )
+                          : evento.esMultiDia
                           ? StatusChip(
                               label: evento.etiquetaDuracion,
                               variant: StatusChipVariant.neutral,

@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../theme/app_theme.dart';
 import '../utils/registro_asistente.dart';
 import 'app_modals.dart';
+import 'form_sections.dart';
 
 /// Aplica [formatear] al texto cuando el campo pierde el foco.
 class FormatoAlSalir extends StatelessWidget {
@@ -91,92 +92,139 @@ class CamposRegistroAsistente extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        FormatoAlSalir(
-          controller: nombreController,
-          formatear: formatearNombreCompleto,
-          child: TextFormField(
-            controller: nombreController,
-            enabled: enabled,
-            textCapitalization: TextCapitalization.words,
-            textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(labelText: 'Nombre completo'),
-            validator: validarNombreCompleto,
-          ),
+        FormSection(
+          icon: Symbols.person_rounded,
+          title: 'Datos del asistente',
+          subtitle: 'El código QR llega a este correo y teléfono.',
+          children: [
+            FormLabeledField(
+              label: 'Nombre completo',
+              child: FormatoAlSalir(
+                controller: nombreController,
+                formatear: formatearNombreCompleto,
+                child: TextFormField(
+                  controller: nombreController,
+                  enabled: enabled,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(hintText: 'Ej. Ana Rojas'),
+                  validator: validarNombreCompleto,
+                ),
+              ),
+            ),
+            FormLabeledField(
+              label: 'Correo',
+              child: FormatoAlSalir(
+                controller: emailController,
+                formatear: formatearEmail,
+                child: TextFormField(
+                  controller: emailController,
+                  enabled: enabled,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  inputFormatters: const [LowerCaseTextFormatter()],
+                  decoration: const InputDecoration(
+                    hintText: 'correo@empresa.com',
+                  ),
+                  validator: validarEmailRegistro,
+                ),
+              ),
+            ),
+            FormLabeledField(
+              label: 'Teléfono',
+              child: CampoTelefonoInternacional(
+                controller: telefonoController,
+                pais: pais,
+                onPaisChanged: onPaisChanged,
+                enabled: enabled,
+                labelText: null,
+              ),
+            ),
+          ],
         ),
-        AppSpacing.field,
-        FormatoAlSalir(
-          controller: emailController,
-          formatear: formatearEmail,
-          child: TextFormField(
-            controller: emailController,
-            enabled: enabled,
-            keyboardType: TextInputType.emailAddress,
-            textInputAction: TextInputAction.next,
-            autocorrect: false,
-            enableSuggestions: false,
-            inputFormatters: const [LowerCaseTextFormatter()],
-            decoration: const InputDecoration(labelText: 'Email'),
-            validator: validarEmailRegistro,
-          ),
-        ),
-        AppSpacing.field,
-        FormatoAlSalir(
-          controller: empresaController,
-          formatear: formatearEmpresa,
-          child: TextFormField(
-            controller: empresaController,
-            enabled: enabled,
-            textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(labelText: 'Empresa'),
-            validator: validarEmpresa,
-          ),
-        ),
-        AppSpacing.field,
-        FormatoAlSalir(
-          controller: cargoController,
-          formatear: formatearCargo,
-          child: TextFormField(
-            controller: cargoController,
-            enabled: enabled,
-            textCapitalization: TextCapitalization.words,
-            textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(labelText: 'Cargo'),
-            validator: validarCargo,
-          ),
-        ),
-        AppSpacing.field,
-        CampoTelefonoInternacional(
-          controller: telefonoController,
-          pais: pais,
-          onPaisChanged: onPaisChanged,
-          enabled: enabled,
+        const SizedBox(height: FormSection.gap),
+        FormSection(
+          icon: Symbols.business_center_rounded,
+          title: 'Empresa',
+          children: [
+            FormLabeledField(
+              label: 'Empresa',
+              child: FormatoAlSalir(
+                controller: empresaController,
+                formatear: formatearEmpresa,
+                child: TextFormField(
+                  controller: empresaController,
+                  enabled: enabled,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(hintText: 'Ej. Transworld'),
+                  validator: validarEmpresa,
+                ),
+              ),
+            ),
+            FormLabeledField(
+              label: 'Cargo',
+              child: FormatoAlSalir(
+                controller: cargoController,
+                formatear: formatearCargo,
+                child: TextFormField(
+                  controller: cargoController,
+                  enabled: enabled,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    hintText: 'Ej. Jefe de proyectos',
+                  ),
+                  validator: validarCargo,
+                ),
+              ),
+            ),
+          ],
         ),
         if (mostrarCertificacion) ...[
-          AppSpacing.field,
-          FormatoAlSalir(
-            controller: rutController!,
-            formatear: (v) => pais.iso == 'CL' ? formatearRut(v) : v.trim(),
-            child: TextFormField(
-              controller: rutController,
-              enabled: enabled,
-              textInputAction: TextInputAction.next,
-              decoration: InputDecoration(
-                labelText: pais.iso == 'CL' ? 'RUT' : 'RUT / RUC',
+          const SizedBox(height: FormSection.gap),
+          FormSection(
+            icon: Symbols.workspace_premium_rounded,
+            title: 'Certificación',
+            subtitle: 'Este evento entrega certificado.',
+            children: [
+              FormFieldRow(
+                minWidth: 280,
+                left: FormLabeledField(
+                  label: pais.iso == 'CL' ? 'RUT' : 'RUT / RUC',
+                  child: FormatoAlSalir(
+                    controller: rutController!,
+                    formatear: (v) =>
+                        pais.iso == 'CL' ? formatearRut(v) : v.trim(),
+                    child: TextFormField(
+                      controller: rutController,
+                      enabled: enabled,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        hintText: '12.345.678-9',
+                      ),
+                      validator: (v) =>
+                          validarRut(v, esChile: pais.iso == 'CL'),
+                    ),
+                  ),
+                ),
+                right: FormLabeledField(
+                  label: 'Patente',
+                  child: FormatoAlSalir(
+                    controller: patenteController!,
+                    formatear: formatearPatente,
+                    child: TextFormField(
+                      controller: patenteController,
+                      enabled: enabled,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(hintText: 'ABCD12'),
+                      validator: validarPatente,
+                    ),
+                  ),
+                ),
               ),
-              validator: (v) => validarRut(v, esChile: pais.iso == 'CL'),
-            ),
-          ),
-          AppSpacing.field,
-          FormatoAlSalir(
-            controller: patenteController!,
-            formatear: formatearPatente,
-            child: TextFormField(
-              controller: patenteController,
-              enabled: enabled,
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(labelText: 'Patente'),
-              validator: validarPatente,
-            ),
+            ],
           ),
         ],
       ],

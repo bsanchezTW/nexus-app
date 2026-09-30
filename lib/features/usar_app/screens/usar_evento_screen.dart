@@ -250,7 +250,7 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
                     onTap: () => _crearEventoLead(evento),
                   ),
                 ],
-                if (puedeEditar) ...[
+                if (puedeEditar && !evento.esTaller) ...[
                   const SizedBox(height: TwSpacing.tileGap),
                   TwActionTile(
                     icon: Symbols.calendar_view_day_rounded,

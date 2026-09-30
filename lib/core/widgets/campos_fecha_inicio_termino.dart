@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../constants/duracion_actividad.dart';
-import '../theme/app_theme.dart';
+import '../theme/tw_tokens.dart';
+import 'form_sections.dart';
 import 'nexus_components.dart';
 
 /// Fecha de inicio + fecha de término. Al cambiar el inicio, el término
@@ -56,45 +58,45 @@ class CamposFechaInicioTermino extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _Label('Fecha de inicio'),
-        const SizedBox(height: 6),
-        FechaPickerField(
-          fecha: fechaInicio,
-          onTap: () => _elegirInicio(context),
-          enabled: enabledInicio,
-        ),
-        const SizedBox(height: 14),
-        const _Label('Fecha de término'),
-        const SizedBox(height: 6),
-        FechaPickerField(
-          fecha: _fechaTermino,
-          onTap: () => _elegirTermino(context),
-          enabled: enabledTermino,
+        FormFieldRow(
+          left: FormLabeledField(
+            label: 'Fecha de inicio',
+            child: FechaPickerField(
+              fecha: fechaInicio,
+              onTap: () => _elegirInicio(context),
+              enabled: enabledInicio,
+            ),
+          ),
+          right: FormLabeledField(
+            label: 'Fecha de término',
+            child: FechaPickerField(
+              fecha: _fechaTermino,
+              onTap: () => _elegirTermino(context),
+              enabled: enabledTermino,
+            ),
+          ),
         ),
         const SizedBox(height: 8),
-        Text(
-          textoDuracion,
-          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        Padding(
+          padding: const EdgeInsets.only(left: 2),
+          child: Row(
+            children: [
+              const Icon(
+                Symbols.schedule_rounded,
+                size: 15,
+                color: TwColors.muted,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  textoDuracion,
+                  style: TwText.tileSubtitle.copyWith(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
-    );
-  }
-}
-
-class _Label extends StatelessWidget {
-  const _Label(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-        color: AppColors.textSecondary,
-      ),
     );
   }
 }

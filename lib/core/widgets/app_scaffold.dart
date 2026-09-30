@@ -40,6 +40,7 @@ class AppScaffold extends StatelessWidget {
     this.actions,
     this.headerBottom,
     this.floatingActionButton,
+    this.bottomBar,
     this.maxContentWidth = 760,
     this.onWillPop,
   });
@@ -50,6 +51,11 @@ class AppScaffold extends StatelessWidget {
   final List<Widget>? actions;
   final Widget? headerBottom;
   final Widget? floatingActionButton;
+
+  /// Barra fija al pie, a todo el ancho (p. ej. `FormActionBar`). Se encarga
+  /// de su propio safe area.
+  final Widget? bottomBar;
+
   final double maxContentWidth;
 
   /// Si no es null, intercepta el botón atrás de la cabecera (y el back
@@ -100,6 +106,7 @@ class AppScaffold extends StatelessWidget {
                     ),
                   ),
                 Expanded(child: _constrained(body)),
+                ?bottomBar,
               ],
             ),
           ),

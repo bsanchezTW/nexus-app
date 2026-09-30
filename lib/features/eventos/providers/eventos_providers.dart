@@ -70,3 +70,22 @@ final eventoByIdProvider = FutureProvider.autoDispose.family<Evento, String>((
   }
   throw Exception('No se pudo cargar el evento.');
 });
+
+/// Evento para el formulario de edición.
+///
+/// A diferencia de [eventoByIdProvider] (cache-first), con red lee siempre del
+/// servidor: el formulario se precarga una sola vez, así que partir de la copia
+/// en disco mostraba datos anteriores al último guardado (descripción, cierre
+/// de inscripciones…) y descartaba la versión fresca que llegaba después.
+/// Sin red cae a la copia local (el formulario queda en solo lectura).
+final eventoParaEditarProvider = FutureProvider.autoDispose
+    .family<Evento, String>((ref, id) async {
+      if (ref.read(isOnlineProvider)) {
+        try {
+          return await ref.read(eventosRepositoryProvider).obtenerPorId(id);
+        } catch (error) {
+          if (!isNetworkTransportError(error)) rethrow;
+        }
+      }
+      return ref.read(eventoByIdProvider(id).future);
+    });

@@ -13,7 +13,8 @@ import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
-import '../../../core/widgets/nexus_components.dart';
+import '../../../core/theme/tw_tokens.dart';
+import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/require_admin.dart';
 import '../../../core/widgets/selector_imagen.dart';
 import '../../../data/repositories/auth_repository.dart';
@@ -22,6 +23,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../providers/usuarios_providers.dart';
 import '../widgets/selector_eventos_multiples.dart';
+import '../widgets/selector_rol_usuario.dart';
 import '../../../data/repositories/storage_cleanup_service.dart';
 
 /// Edición de usuario: nombre, rol, activo, regenerar contraseña y eliminar.
@@ -372,7 +374,6 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
         sesionId == widget.usuarioId;
     // Regenerar solo bloquea el campo de contraseña; el resto del form sigue usable.
     final ocupado = _guardando || _eliminando;
-    final bloquearActivoPropio = esCuentaPropia;
 
     return AppScaffold(
       title: 'Editar usuario',
@@ -383,6 +384,13 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
         save: _guardar,
       ),
       actions: [
+        NexusHeaderAction(
+          icon: Symbols.share_rounded,
+          tooltip: 'Compartir credenciales',
+          onTap: ocupado
+              ? null
+              : () => _compartir(_nombreController.text.trim()),
+        ),
         if (!esCuentaPropia)
           NexusHeaderAction(
             icon: Symbols.delete_outline_rounded,
@@ -399,6 +407,13 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
                   },
           ),
       ],
+      bottomBar: usuarioAsync.hasValue
+          ? FormActionBar(
+              label: 'Guardar cambios',
+              loading: _guardando,
+              onPressed: ocupado ? null : _guardar,
+            )
+          : null,
       body: usuarioAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) =>
@@ -425,243 +440,258 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
           final eventosAsync = asignaEventos
               ? ref.watch(eventosListProvider)
               : null;
+          final tieneFoto =
+              _fotoBytes != null ||
+              (!_quitarFoto && (usuario.fotoUrl?.isNotEmpty ?? false));
 
           return SingleChildScrollView(
-            padding: AppSpacing.form,
+            padding: const EdgeInsets.fromLTRB(
+              TwSpacing.screenH,
+              14,
+              TwSpacing.screenH,
+              28,
+            ),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const _FieldLabel('Foto'),
-                  const SizedBox(height: 6),
-                  SelectorImagen(
-                    bytes: _fotoBytes,
-                    urlExistente: _quitarFoto ? null : usuario.fotoUrl,
-                    enabled: !ocupado,
-                    aspectRatio: kProporcionFotoLead,
-                    anchoMaximo: kAnchoSelectorFotoLead,
-                    circular: true,
-                    etiquetaVacio: 'Agregar foto del usuario',
-                    onElegir: _elegirFoto,
-                    onQuitar:
-                        (_fotoBytes != null ||
-                            (!_quitarFoto &&
-                                (usuario.fotoUrl?.isNotEmpty ?? false)))
-                        ? () => setState(() {
-                            _fotoBytes = null;
-                            _quitarFoto = true;
-                          })
-                        : null,
-                  ),
-                  const SizedBox(height: 14),
-                  const _FieldLabel('Nombre completo'),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _nombreController,
-                    enabled: !ocupado,
-                    decoration: const InputDecoration(
-                      hintText: 'Ej. Juan Pérez',
-                    ),
-                    textInputAction: TextInputAction.next,
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-                  ),
-                  const SizedBox(height: 14),
-                  const _FieldLabel('Correo'),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _emailController,
-                    readOnly: true,
-                    enableInteractiveSelection: true,
-                    decoration: twReadOnlyDecoration(hintText: 'Cargando…'),
-                  ),
-                  const SizedBox(height: 14),
-                  const _FieldLabel('Contraseña'),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _passwordController,
-                    readOnly: true,
-                    obscureText: _passwordGenerada == null,
-                    decoration: twReadOnlyDecoration(
-                      hintText: 'No visible',
-                      helperText: esCuentaPropia
-                          ? 'Para cambiar tu contraseña usa Mi perfil.'
-                          : null,
-                      helperMaxLines: 2,
-                      suffixIcon: esCuentaPropia
-                          ? null
-                          : IconButton(
-                              tooltip: 'Generar nueva y enviar por correo',
-                              onPressed: (ocupado || _regenerando)
-                                  ? null
-                                  : _regenerarPassword,
-                              icon: _regenerando
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Symbols.refresh_rounded),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  const _FieldLabel('Tipo de usuario'),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<AppRole>(
-                    initialValue: _rol,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Selecciona un tipo',
-                    ),
-                    items: _rolesDisponibles
-                        .map(
-                          (r) =>
-                              DropdownMenuItem(value: r, child: Text(r.label)),
-                        )
-                        .toList(),
-                    onChanged: (ocupado || esCuentaPropia)
-                        ? null
-                        : (v) {
-                            if (v == null) return;
-                            setState(() {
-                              _rol = v;
-                              if (v != AppRole.user && v != AppRole.externo) {
-                                _eventoIds.clear();
-                              }
-                            });
-                          },
-                    validator: (v) =>
-                        v == null ? 'Selecciona el tipo de usuario' : null,
-                  ),
-                  if (asignaEventos) ...[
-                    const SizedBox(height: 14),
-                    const _FieldLabel('Eventos autorizados'),
-                    const SizedBox(height: 6),
-                    if (!_eventosCargados)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: LinearProgressIndicator(),
-                      )
-                    else if (_eventosCargaError)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  FormSection(
+                    icon: Symbols.person_rounded,
+                    title: 'Cuenta',
+                    children: [
+                      Row(
                         children: [
-                          const Text(
-                            'No se pudieron cargar las asignaciones actuales.',
-                            style: TextStyle(color: AppColors.danger),
+                          SizedBox(
+                            width: 76,
+                            child: SelectorImagen(
+                              bytes: _fotoBytes,
+                              urlExistente: _quitarFoto
+                                  ? null
+                                  : usuario.fotoUrl,
+                              enabled: !ocupado,
+                              aspectRatio: kProporcionFotoLead,
+                              circular: true,
+                              etiquetaVacio: '',
+                              onElegir: _elegirFoto,
+                            ),
                           ),
-                          TextButton.icon(
-                            onPressed: ocupado
-                                ? null
-                                : () {
-                                    setState(() {
-                                      _eventosCargados = false;
-                                      _eventosCargaError = false;
-                                    });
-                                    _cargarEventosAutorizados();
-                                  },
-                            icon: const Icon(Symbols.refresh_rounded),
-                            label: const Text('Reintentar'),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Foto de perfil',
+                                  style: TwText.tileTitle.copyWith(
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Wrap(
+                                  spacing: 4,
+                                  children: [
+                                    TextButton(
+                                      onPressed: ocupado ? null : _elegirFoto,
+                                      child: Text(
+                                        tieneFoto ? 'Cambiar' : 'Agregar',
+                                      ),
+                                    ),
+                                    if (tieneFoto)
+                                      TextButton(
+                                        onPressed: ocupado
+                                            ? null
+                                            : () => setState(() {
+                                                _fotoBytes = null;
+                                                _quitarFoto = true;
+                                              }),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: TwColors.danger,
+                                        ),
+                                        child: const Text('Quitar'),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ],
-                      )
-                    else
-                      eventosAsync!.when(
-                        loading: () => const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: LinearProgressIndicator(),
-                        ),
-                        error: (_, _) => const Text(
-                          'No se pudieron cargar los eventos.',
-                          style: TextStyle(color: AppColors.danger),
-                        ),
-                        data: (eventos) {
-                          return SelectorEventosMultiples(
-                            eventos: eventos,
-                            seleccionados: _eventoIds,
-                            enabled: !ocupado,
-                            soloActivosDisponibles: esExterno,
-                            emptyHelperText: esExterno
-                                ? 'Selecciona al menos un evento.'
-                                : 'Sin eventos asignados: el usuario no podrá operar eventos.',
-                            errorText:
-                                esExterno &&
-                                    _intentoGuardar &&
-                                    _eventoIds.isEmpty
-                                ? 'Selecciona al menos un evento'
-                                : null,
-                            onChanged: (ids) => setState(() {
-                              _eventoIds
-                                ..clear()
-                                ..addAll(ids);
-                            }),
-                          );
-                        },
                       ),
-                  ],
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Cuenta activa',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.ink,
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Desactivar bloquea el acceso a la app',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
+                      FormLabeledField(
+                        label: 'Nombre completo',
+                        child: TextFormField(
+                          controller: _nombreController,
+                          enabled: !ocupado,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            hintText: 'Ej. Juan Pérez',
+                          ),
+                          textInputAction: TextInputAction.next,
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Escribe el nombre.'
+                              : null,
                         ),
                       ),
-                      IgnorePointer(
-                        ignoring: ocupado || bloquearActivoPropio,
-                        child: Opacity(
-                          opacity: (ocupado || bloquearActivoPropio) ? 0.5 : 1,
-                          child: NexusToggle(
-                            value: _activo,
-                            onChanged: bloquearActivoPropio
-                                ? (_) {}
-                                : (v) => setState(() => _activo = v),
+                      FormLabeledField(
+                        label: 'Correo',
+                        child: TextFormField(
+                          controller: _emailController,
+                          readOnly: true,
+                          enableInteractiveSelection: true,
+                          decoration: twReadOnlyDecoration(
+                            hintText: 'Cargando…',
+                          ),
+                        ),
+                      ),
+                      FormLabeledField(
+                        label: 'Contraseña',
+                        ayuda: esCuentaPropia
+                            ? 'Para cambiar tu contraseña usa Mi perfil.'
+                            : 'Genera una nueva y se envía por correo.',
+                        child: TextFormField(
+                          controller: _passwordController,
+                          readOnly: true,
+                          obscureText: _passwordGenerada == null,
+                          decoration: twReadOnlyDecoration(
+                            hintText: 'No visible',
+                            suffixIcon: esCuentaPropia
+                                ? null
+                                : IconButton(
+                                    tooltip:
+                                        'Generar nueva y enviar por correo',
+                                    onPressed: (ocupado || _regenerando)
+                                        ? null
+                                        : _regenerarPassword,
+                                    icon: _regenerando
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(Symbols.refresh_rounded),
+                                  ),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 28),
-                  Row(
+                  const SizedBox(height: FormSection.gap),
+                  FormSection(
+                    icon: Symbols.shield_person_rounded,
+                    title: 'Tipo de usuario',
+                    subtitle: esCuentaPropia
+                        ? 'No puedes cambiar tu propio rol.'
+                        : 'Define qué puede ver y hacer en la app.',
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: ocupado
-                              ? null
-                              : () => _compartir(_nombreController.text.trim()),
-                          icon: const Icon(Symbols.share_rounded),
-                          label: const Text('Compartir'),
-                        ),
+                      SelectorRolUsuario(
+                        roles: _rolesDisponibles,
+                        value: _rol,
+                        onChanged: (ocupado || esCuentaPropia)
+                            ? null
+                            : (v) => setState(() {
+                                _rol = v;
+                                if (!v.requiresEventAssignment) {
+                                  _eventoIds.clear();
+                                }
+                              }),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: PrimaryGradientButton(
-                          label: _guardando ? 'Guardando…' : 'Guardar',
-                          loading: _guardando,
-                          onPressed: ocupado ? null : _guardar,
-                        ),
+                    ],
+                  ),
+                  if (asignaEventos) ...[
+                    const SizedBox(height: FormSection.gap),
+                    FormSection(
+                      icon: Symbols.event_rounded,
+                      title: 'Eventos autorizados',
+                      subtitle: esExterno
+                          ? 'Solo verá los eventos que elijas.'
+                          : 'Podrá registrar y acreditar en estos eventos.',
+                      children: [
+                        if (!_eventosCargados)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: LinearProgressIndicator(),
+                          )
+                        else if (_eventosCargaError)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const FormNotice(
+                                'No se pudieron cargar las asignaciones '
+                                'actuales.',
+                                error: true,
+                              ),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton.icon(
+                                  onPressed: ocupado
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            _eventosCargados = false;
+                                            _eventosCargaError = false;
+                                          });
+                                          _cargarEventosAutorizados();
+                                        },
+                                  icon: const Icon(Symbols.refresh_rounded),
+                                  label: const Text('Reintentar'),
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          eventosAsync!.when(
+                            loading: () => const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: LinearProgressIndicator(),
+                            ),
+                            error: (_, _) => const FormNotice(
+                              'No se pudieron cargar los eventos.',
+                              error: true,
+                            ),
+                            data: (eventos) {
+                              return SelectorEventosMultiples(
+                                eventos: eventos,
+                                seleccionados: _eventoIds,
+                                enabled: !ocupado,
+                                soloActivosDisponibles: esExterno,
+                                emptyHelperText: esExterno
+                                    ? 'Selecciona al menos un evento.'
+                                    : 'Sin eventos asignados: el usuario no podrá operar eventos.',
+                                errorText:
+                                    esExterno &&
+                                        _intentoGuardar &&
+                                        _eventoIds.isEmpty
+                                    ? 'Selecciona al menos un evento'
+                                    : null,
+                                onChanged: (ids) => setState(() {
+                                  _eventoIds
+                                    ..clear()
+                                    ..addAll(ids);
+                                }),
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: FormSection.gap),
+                  FormSection(
+                    icon: Symbols.toggle_on_rounded,
+                    title: 'Estado',
+                    children: [
+                      FormToggleRow(
+                        icon: Symbols.lock_open_rounded,
+                        title: 'Cuenta activa',
+                        subtitle: esCuentaPropia
+                            ? 'No puedes desactivar tu propia cuenta.'
+                            : 'Desactivarla bloquea el acceso a la app.',
+                        value: _activo,
+                        onChanged: (ocupado || esCuentaPropia)
+                            ? null
+                            : (v) => setState(() => _activo = v),
                       ),
                     ],
                   ),
@@ -670,24 +700,6 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _FieldLabel extends StatelessWidget {
-  const _FieldLabel(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
-        color: AppColors.ink,
       ),
     );
   }

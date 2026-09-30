@@ -137,6 +137,16 @@ ALTER TABLE public.eventos
   ADD CONSTRAINT eventos_duracion_dias_check
   CHECK (duracion_dias >= 1 AND duracion_dias <= 366);
 
+-- Un evento principal agrupa talleres. Un taller se selecciona desde
+-- la sección de subeventos del principal.
+ALTER TABLE public.eventos
+  ADD COLUMN IF NOT EXISTS tipo text NOT NULL DEFAULT 'evento';
+ALTER TABLE public.eventos
+  DROP CONSTRAINT IF EXISTS eventos_tipo_check;
+ALTER TABLE public.eventos
+  ADD CONSTRAINT eventos_tipo_check
+  CHECK (tipo IN ('evento', 'taller'));
+
 CREATE OR REPLACE FUNCTION public.rpe_fecha_termino_evento(
   p_fecha date,
   p_duracion_dias integer
@@ -3952,7 +3962,22 @@ BEGIN
     ALTER TABLE public.subeventos ADD CONSTRAINT subeventos_descripcion_largo
       CHECK (descripcion IS NULL OR char_length(descripcion) <= 2000);
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'subeventos_evento_origen_id_fkey') THEN
+    ALTER TABLE public.subeventos
+      ADD COLUMN IF NOT EXISTS evento_origen_id uuid;
+    ALTER TABLE public.subeventos
+      ADD CONSTRAINT subeventos_evento_origen_id_fkey
+      FOREIGN KEY (evento_origen_id) REFERENCES public.eventos (id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'subeventos_origen_distinto') THEN
+    ALTER TABLE public.subeventos ADD CONSTRAINT subeventos_origen_distinto
+      CHECK (evento_origen_id IS NULL OR evento_origen_id <> evento_id);
+  END IF;
 END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS subeventos_evento_origen_unique
+  ON public.subeventos (evento_id, evento_origen_id)
+  WHERE evento_origen_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.inscripciones_subevento (
   id             uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,

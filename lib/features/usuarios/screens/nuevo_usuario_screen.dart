@@ -7,19 +7,20 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/constants/app_role.dart';
 import '../../../core/network/offline_guard.dart';
 import '../../../core/router/route_paths.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/tw_tokens.dart';
 import '../../../core/utils/password_generator.dart';
 import '../../../core/utils/password_policy.dart';
 import '../../../core/utils/registro_asistente.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
-import '../../../core/widgets/nexus_components.dart';
+import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/require_admin.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../providers/usuarios_providers.dart';
 import '../widgets/selector_eventos_multiples.dart';
+import '../widgets/selector_rol_usuario.dart';
 
 /// Crea un usuario (cualquier rol) desde gestión de administradores.
 class NuevoUsuarioScreen extends StatelessWidget {
@@ -153,192 +154,194 @@ class _NuevoUsuarioFormState extends ConsumerState<_NuevoUsuarioForm> {
     }
   }
 
+  bool get _hayDatos =>
+      _nombreController.text.trim().isNotEmpty ||
+      _emailController.text.trim().isNotEmpty ||
+      _rol != null;
+
+  void _compartirConEventos() {
+    final eventos = ref.read(eventosListProvider).valueOrNull ?? [];
+    final nombres = eventos
+        .where((e) => _eventoIds.contains(e.id))
+        .map((e) => e.nombre)
+        .toList();
+    _compartir(eventoNombres: nombres);
+  }
+
   @override
   Widget build(BuildContext context) {
     final eventosAsync = ref.watch(eventosListProvider);
 
     return AppScaffold(
       title: 'Nuevo usuario',
-      onWillPop: () => confirmDiscardCreate(context),
+      onWillPop: () => confirmDiscardCreate(context, hayDatos: _hayDatos),
+      actions: [
+        NexusHeaderAction(
+          icon: Symbols.share_rounded,
+          tooltip: 'Compartir credenciales',
+          onTap: _guardando ? null : _compartirConEventos,
+        ),
+      ],
+      bottomBar: FormActionBar(
+        label: 'Crear usuario',
+        loading: _guardando,
+        onPressed: _guardando ? null : _guardar,
+      ),
       body: AbsorbPointer(
         absorbing: _guardando,
         child: SingleChildScrollView(
-          padding: AppSpacing.form,
+          padding: const EdgeInsets.fromLTRB(
+            TwSpacing.screenH,
+            14,
+            TwSpacing.screenH,
+            28,
+          ),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Crea una cuenta y envía las credenciales al correo del usuario.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
+                const FormNotice(
+                  'Al crear la cuenta se envían las credenciales al correo '
+                  'del usuario.',
                 ),
-                const SizedBox(height: 18),
-                const _FieldLabel('Nombre completo'),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _nombreController,
-                  enabled: !_guardando,
-                  decoration: const InputDecoration(hintText: 'Ej. Juan Pérez'),
-                  textInputAction: TextInputAction.next,
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-                ),
-                const SizedBox(height: 14),
-                const _FieldLabel('Correo'),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _emailController,
-                  enabled: !_guardando,
-                  decoration: const InputDecoration(
-                    hintText: 'usuario@empresa.com',
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  inputFormatters: const [LowerCaseTextFormatter()],
-                  validator: validarEmailRegistro,
-                ),
-                const SizedBox(height: 14),
-                const _FieldLabel('Contraseña'),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _passwordController,
-                  enabled: !_guardando,
-                  decoration: InputDecoration(
-                    hintText: 'Autogenerada',
-                    helperText: kPasswordHelperText,
-                    helperMaxLines: 3,
-                    suffixIcon: IconButton(
-                      tooltip: 'Regenerar',
-                      onPressed: _guardando
-                          ? null
-                          : () {
-                              setState(() {
-                                _passwordController.text =
-                                    generarContrasenaInvitacion();
-                              });
-                            },
-                      icon: const Icon(Symbols.refresh_rounded),
-                    ),
-                  ),
-                  validator: validarContrasenaFuerte,
-                ),
-                const SizedBox(height: 14),
-                const _FieldLabel('Tipo de usuario'),
-                const SizedBox(height: 6),
-                DropdownButtonFormField<AppRole>(
-                  initialValue: _rol,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    hintText: 'Selecciona un tipo',
-                  ),
-                  items: AppRole.creatableRoles
-                      .map(
-                        (r) => DropdownMenuItem(value: r, child: Text(r.label)),
-                      )
-                      .toList(),
-                  onChanged: _guardando
-                      ? null
-                      : (v) => setState(() {
-                          _rol = v;
-                          if (v != AppRole.user && v != AppRole.externo) {
-                            _eventoIds.clear();
-                          }
-                        }),
-                  validator: (v) =>
-                      v == null ? 'Selecciona el tipo de usuario' : null,
-                ),
-                if (_asignaEventos) ...[
-                  const SizedBox(height: 14),
-                  const _FieldLabel('Eventos autorizados'),
-                  const SizedBox(height: 6),
-                  eventosAsync.when(
-                    loading: () => const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: LinearProgressIndicator(),
-                    ),
-                    error: (_, _) => const Text(
-                      'No se pudieron cargar los eventos.',
-                      style: TextStyle(color: AppColors.danger),
-                    ),
-                    data: (eventos) {
-                      return SelectorEventosMultiples(
-                        eventos: eventos,
-                        seleccionados: _eventoIds,
-                        enabled: !_guardando,
-                        soloActivosDisponibles: _esExterno,
-                        emptyHelperText: _esExterno
-                            ? 'Selecciona al menos un evento.'
-                            : 'Sin eventos asignados: el usuario no podrá operar eventos.',
-                        errorText:
-                            _esExterno && _intentoGuardar && _eventoIds.isEmpty
-                            ? 'Selecciona al menos un evento'
-                            : null,
-                        onChanged: (ids) => setState(() {
-                          _eventoIds
-                            ..clear()
-                            ..addAll(ids);
-                        }),
-                      );
-                    },
-                  ),
-                ],
-                const SizedBox(height: 28),
-                Row(
+                const SizedBox(height: FormSection.gap),
+                FormSection(
+                  icon: Symbols.person_rounded,
+                  title: 'Datos de la cuenta',
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _guardando
-                            ? null
-                            : () {
-                                final eventos = eventosAsync.valueOrNull ?? [];
-                                final nombres = eventos
-                                    .where((e) => _eventoIds.contains(e.id))
-                                    .map((e) => e.nombre)
-                                    .toList();
-                                _compartir(eventoNombres: nombres);
-                              },
-                        icon: const Icon(Symbols.share_rounded),
-                        label: const Text('Compartir'),
+                    FormLabeledField(
+                      label: 'Nombre completo',
+                      child: TextFormField(
+                        controller: _nombreController,
+                        enabled: !_guardando,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(
+                          hintText: 'Ej. Juan Pérez',
+                        ),
+                        textInputAction: TextInputAction.next,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Escribe el nombre.'
+                            : null,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: PrimaryGradientButton(
-                        label: _guardando ? 'Guardando…' : 'Guardar',
-                        loading: _guardando,
-                        onPressed: _guardando ? null : _guardar,
+                    FormLabeledField(
+                      label: 'Correo',
+                      child: TextFormField(
+                        controller: _emailController,
+                        enabled: !_guardando,
+                        decoration: const InputDecoration(
+                          hintText: 'usuario@empresa.com',
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        inputFormatters: const [LowerCaseTextFormatter()],
+                        validator: validarEmailRegistro,
+                      ),
+                    ),
+                    FormLabeledField(
+                      label: 'Contraseña inicial',
+                      ayuda: kPasswordHelperText,
+                      child: TextFormField(
+                        controller: _passwordController,
+                        enabled: !_guardando,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        decoration: InputDecoration(
+                          hintText: 'Autogenerada',
+                          suffixIcon: IconButton(
+                            tooltip: 'Generar otra',
+                            onPressed: _guardando
+                                ? null
+                                : () => setState(() {
+                                    _passwordController.text =
+                                        generarContrasenaInvitacion();
+                                  }),
+                            icon: const Icon(Symbols.refresh_rounded),
+                          ),
+                        ),
+                        validator: validarContrasenaFuerte,
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: FormSection.gap),
+                FormSection(
+                  icon: Symbols.shield_person_rounded,
+                  title: 'Tipo de usuario',
+                  subtitle: 'Define qué puede ver y hacer en la app.',
+                  children: [
+                    SelectorRolUsuario(
+                      roles: AppRole.creatableRoles,
+                      value: _rol,
+                      error: _intentoGuardar && _rol == null,
+                      onChanged: _guardando
+                          ? null
+                          : (v) => setState(() {
+                              _rol = v;
+                              if (!v.requiresEventAssignment) {
+                                _eventoIds.clear();
+                              }
+                            }),
+                    ),
+                    if (_intentoGuardar && _rol == null)
+                      const FormNotice(
+                        'Elige el tipo de usuario.',
+                        error: true,
+                      ),
+                  ],
+                ),
+                if (_asignaEventos) ...[
+                  const SizedBox(height: FormSection.gap),
+                  FormSection(
+                    icon: Symbols.event_rounded,
+                    title: 'Eventos autorizados',
+                    subtitle: _esExterno
+                        ? 'Solo verá los eventos que elijas.'
+                        : 'Podrá registrar y acreditar en estos eventos.',
+                    children: [
+                      eventosAsync.when(
+                        loading: () => const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: LinearProgressIndicator(),
+                        ),
+                        error: (_, _) => const FormNotice(
+                          'No se pudieron cargar los eventos.',
+                          error: true,
+                        ),
+                        data: (eventos) {
+                          return SelectorEventosMultiples(
+                            eventos: eventos,
+                            seleccionados: _eventoIds,
+                            enabled: !_guardando,
+                            soloActivosDisponibles: _esExterno,
+                            emptyHelperText: _esExterno
+                                ? 'Selecciona al menos un evento.'
+                                : 'Sin eventos asignados: el usuario no podrá operar eventos.',
+                            errorText:
+                                _esExterno &&
+                                    _intentoGuardar &&
+                                    _eventoIds.isEmpty
+                                ? 'Selecciona al menos un evento'
+                                : null,
+                            onChanged: (ids) => setState(() {
+                              _eventoIds
+                                ..clear()
+                                ..addAll(ids);
+                            }),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _FieldLabel extends StatelessWidget {
-  const _FieldLabel(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
-        color: AppColors.ink,
       ),
     );
   }

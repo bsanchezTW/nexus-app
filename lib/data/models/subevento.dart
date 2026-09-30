@@ -18,6 +18,7 @@ class Subevento {
     this.cupoMaximo,
     this.orden = 0,
     this.visiblePublico = true,
+    this.eventoOrigenId,
   });
 
   final String id;
@@ -34,6 +35,7 @@ class Subevento {
   final int? cupoMaximo;
   final int orden;
   final bool visiblePublico;
+  final String? eventoOrigenId;
 
   bool seSuperponeCon(Subevento otro) {
     if (dia.year != otro.dia.year ||
@@ -49,13 +51,31 @@ class Subevento {
   }
 
   bool enCurso(DateTime ahora, {Duration antes = const Duration(minutes: 30)}) {
-    final inicio = DateTime(dia.year, dia.month, dia.day, horaInicio.hour, horaInicio.minute);
-    final fin = DateTime(dia.year, dia.month, dia.day, horaFin.hour, horaFin.minute);
+    final inicio = DateTime(
+      dia.year,
+      dia.month,
+      dia.day,
+      horaInicio.hour,
+      horaInicio.minute,
+    );
+    final fin = DateTime(
+      dia.year,
+      dia.month,
+      dia.day,
+      horaFin.hour,
+      horaFin.minute,
+    );
     return !ahora.isBefore(inicio.subtract(antes)) && ahora.isBefore(fin);
   }
 
   bool yaTermino(DateTime ahora) {
-    final fin = DateTime(dia.year, dia.month, dia.day, horaFin.hour, horaFin.minute);
+    final fin = DateTime(
+      dia.year,
+      dia.month,
+      dia.day,
+      horaFin.hour,
+      horaFin.minute,
+    );
     return !ahora.isBefore(fin);
   }
 
@@ -67,9 +87,11 @@ class Subevento {
       nombre: map['nombre'] as String,
       descripcion: map['descripcion'] as String?,
       dia: DateTime.parse(map['dia'] as String),
-      horaInicio: horaDesdeTexto(map['hora_inicio'] as String?) ??
+      horaInicio:
+          horaDesdeTexto(map['hora_inicio'] as String?) ??
           const TimeOfDay(hour: 0, minute: 0),
-      horaFin: horaDesdeTexto(map['hora_fin'] as String?) ??
+      horaFin:
+          horaDesdeTexto(map['hora_fin'] as String?) ??
           const TimeOfDay(hour: 0, minute: 0),
       sala: map['sala'] as String?,
       expositor: map['expositor'] as String?,
@@ -77,6 +99,7 @@ class Subevento {
       cupoMaximo: map['cupo_maximo'] as int?,
       orden: (map['orden'] as num?)?.toInt() ?? 0,
       visiblePublico: (map['visible_publico'] as bool?) ?? true,
+      eventoOrigenId: map['evento_origen_id'] as String?,
     );
   }
 
@@ -95,6 +118,7 @@ class Subevento {
     'cupo_maximo': cupoMaximo,
     'orden': orden,
     'visible_publico': visiblePublico,
+    'evento_origen_id': eventoOrigenId,
   };
 
   Map<String, dynamic> toInsertMap() => {
@@ -111,6 +135,7 @@ class Subevento {
     'cupo_maximo': cupoMaximo,
     'orden': orden,
     'visible_publico': visiblePublico,
+    if (eventoOrigenId != null) 'evento_origen_id': eventoOrigenId,
   };
 
   Subevento copyWith({
@@ -137,6 +162,7 @@ class Subevento {
       cupoMaximo: cupoMaximo,
       orden: orden ?? this.orden,
       visiblePublico: visiblePublico ?? this.visiblePublico,
+      eventoOrigenId: eventoOrigenId,
     );
   }
 }

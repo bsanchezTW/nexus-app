@@ -55,8 +55,15 @@ class EventosRepository {
     return Evento.fromMap(row);
   }
 
-  Future<void> actualizar(String id, Map<String, dynamic> changes) async {
-    await _client.from(SupabaseTables.eventos).update(changes).eq('id', id);
+  /// Devuelve la fila tal como quedó, para reflejarla en la caché local.
+  Future<Evento> actualizar(String id, Map<String, dynamic> changes) async {
+    final row = await _client
+        .from(SupabaseTables.eventos)
+        .update(changes)
+        .eq('id', id)
+        .select()
+        .single();
+    return Evento.fromMap(row);
   }
 
   Future<void> eliminar(String id) async {

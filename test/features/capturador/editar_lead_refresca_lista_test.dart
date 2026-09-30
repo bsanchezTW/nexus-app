@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:transworld_nexus/core/constants/app_role.dart';
 import 'package:transworld_nexus/core/network/connectivity_service.dart';
 import 'package:transworld_nexus/core/router/route_paths.dart';
-import 'package:transworld_nexus/core/widgets/nexus_components.dart';
+import 'package:transworld_nexus/core/widgets/form_sections.dart';
 import 'package:transworld_nexus/data/models/evento_lead.dart';
 import 'package:transworld_nexus/data/models/lead.dart';
 import 'package:transworld_nexus/data/models/lead_write_result.dart';
@@ -114,10 +114,10 @@ void main() {
       find.byType(TextFormField).first,
       'Lead actualizado',
     );
-    await tester.ensureVisible(find.byType(PrimaryGradientButton));
+    await tester.ensureVisible(find.byType(FormActionBar));
     await tester.pumpAndSettle();
-    final guardar = tester.widget<PrimaryGradientButton>(
-      find.byType(PrimaryGradientButton),
+    final guardar = tester.widget<FormActionBar>(
+      find.byType(FormActionBar),
     );
     expect(guardar.onPressed, isNotNull);
     guardar.onPressed!();

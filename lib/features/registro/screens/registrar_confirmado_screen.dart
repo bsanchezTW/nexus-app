@@ -4,13 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/network/offline_guard.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tw_tokens.dart';
 import '../../../core/utils/registro_asistente.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
-import '../../../core/widgets/nexus_components.dart';
+import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/tw_toast.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../data/models/resultado_registro.dart';
@@ -55,6 +54,19 @@ class _RegistrarConfirmadoScreenState
   bool _guardando = false;
   bool _autovalidar = false;
   final Set<String> _talleres = {};
+
+  /// ¿Hay algo escrito que se perdería al salir?
+  bool get _hayDatos =>
+      [
+        _nombreController,
+        _emailController,
+        _empresaController,
+        _cargoController,
+        _telefonoController,
+        _rutController,
+        _patenteController,
+      ].any((c) => c.text.trim().isNotEmpty) ||
+      _talleres.isNotEmpty;
 
   @override
   void dispose() {
@@ -249,10 +261,25 @@ class _RegistrarConfirmadoScreenState
   @override
   Widget build(BuildContext context) {
     final eventoAsync = ref.watch(eventoByIdProvider(widget.eventoId));
+    final evento = eventoAsync.valueOrNull;
+    final talleres =
+        ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const [];
 
     return AppScaffold(
       title: 'Registrar asistente',
-      onWillPop: () => confirmDiscardCreate(context),
+      onWillPop: () => confirmDiscardCreate(context, hayDatos: _hayDatos),
+      bottomBar: evento == null
+          ? null
+          : FormActionBar(
+              label: 'Guardar registro',
+              loading: _guardando,
+              onPressed: _guardando
+                  ? null
+                  : () => _guardar(
+                      requiereCertificacion: evento.certificacionCapacitacion,
+                    ),
+            ),
       body: eventoAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) =>
@@ -261,7 +288,13 @@ class _RegistrarConfirmadoScreenState
           _inicializarPais(evento.pais);
           final requiereCertificacion = evento.certificacionCapacitacion;
           return SingleChildScrollView(
-            padding: AppSpacing.form,
+            padding: const EdgeInsets.fromLTRB(
+              TwSpacing.screenH,
+              14,
+              TwSpacing.screenH,
+              28,
+            ),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             child: Form(
               key: _formKey,
               autovalidateMode: _autovalidar
@@ -270,7 +303,11 @@ class _RegistrarConfirmadoScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const _InfoRegistroCard(),
+                  FormNotice(
+                    'Registro en ${evento.nombre}. Al guardar se envía el '
+                    'código QR al correo indicado.',
+                  ),
+                  const SizedBox(height: FormSection.gap),
                   CamposRegistroAsistente(
                     nombreController: _nombreController,
                     emailController: _emailController,
@@ -284,144 +321,52 @@ class _RegistrarConfirmadoScreenState
                     rutController: _rutController,
                     patenteController: _patenteController,
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-                  Text('Talleres', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: AppSpacing.sm),
-                  SelectorSubeventos(
-                    subeventos: ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ?? const [],
-                    ocupacion: ref.watch(ocupacionEventoProvider(widget.eventoId)).valueOrNull,
-                    seleccionados: _talleres,
-                    permitirSobrecupo: ref.watch(canCreateContentProvider),
-                    onChanged: (ids) => setState(() {
-                      _talleres
-                        ..clear()
-                        ..addAll(ids);
-                    }),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  _ToggleRow(
-                    title: 'Acreditar de inmediato',
-                    subtitle: 'Marca al asistente como acreditado al guardar',
-                    value: _acreditarAhora,
-                    onChanged: _guardando
-                        ? (_) {}
-                        : (v) => setState(() => _acreditarAhora = v),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  PrimaryGradientButton(
-                    label: 'Guardar registro',
-                    loading: _guardando,
-                    onPressed: _guardando
-                        ? null
-                        : () => _guardar(
-                            requiereCertificacion: requiereCertificacion,
+                  if (talleres.isNotEmpty) ...[
+                    const SizedBox(height: FormSection.gap),
+                    FormSection(
+                      icon: Symbols.co_present_rounded,
+                      title: 'Talleres',
+                      subtitle: 'Opcional. Inscríbelo en los que asistirá.',
+                      children: [
+                        SelectorSubeventos(
+                          subeventos: talleres,
+                          ocupacion: ref
+                              .watch(ocupacionEventoProvider(widget.eventoId))
+                              .valueOrNull,
+                          seleccionados: _talleres,
+                          permitirSobrecupo: ref.watch(
+                            canCreateContentProvider,
                           ),
+                          onChanged: (ids) => setState(() {
+                            _talleres
+                              ..clear()
+                              ..addAll(ids);
+                          }),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: FormSection.gap),
+                  FormSection(
+                    icon: Symbols.verified_rounded,
+                    title: 'Acreditación',
+                    children: [
+                      FormToggleRow(
+                        icon: Symbols.how_to_reg_rounded,
+                        title: 'Acreditar de inmediato',
+                        subtitle: 'Queda con la entrada marcada al guardar.',
+                        value: _acreditarAhora,
+                        onChanged: _guardando
+                            ? null
+                            : (v) => setState(() => _acreditarAhora = v),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _InfoRegistroCard extends StatelessWidget {
-  const _InfoRegistroCard();
-
-  static const mensaje =
-      'Completa los datos del asistente. Al guardar se enviará el código QR '
-      'al correo indicado.';
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 10, bottom: 18),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-        decoration: BoxDecoration(
-          color: TwColors.surfaceTint,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: const Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              Symbols.info_rounded,
-              size: 18,
-              color: AppColors.textSecondary,
-            ),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                mensaje,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                  height: 1.45,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ToggleRow extends StatelessWidget {
-  const _ToggleRow({
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          NexusToggle(value: value, onChanged: onChanged),
-        ],
       ),
     );
   }

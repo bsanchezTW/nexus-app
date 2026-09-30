@@ -331,7 +331,12 @@ class EventRow extends StatelessWidget {
     this.actions,
     this.chip,
     this.sinCache = false,
+    this.footer,
   });
+
+  /// Contenido pegado al borde inferior, dentro de la misma tarjeta (p. ej.
+  /// la pestaña de talleres de un evento principal).
+  final Widget? footer;
 
   final DateTime date;
   final String title;
@@ -362,9 +367,114 @@ class EventRow extends StatelessWidget {
                 color: TwColors.chevron,
               );
 
+    final fila = Row(
+      children: [
+        Expanded(
+          child: Pressable(
+            onTap: onTap,
+            // Fijar, editar o eliminar exigen red: sin caché tampoco hay menú.
+            onLongPress: sinCache ? null : onLongPress,
+            child: Padding(
+              padding: const EdgeInsets.all(13),
+              child: Row(
+                children: [
+                  DateTile(date: date, muted: finalizado),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            if (fijado) ...[
+                              const Icon(
+                                Symbols.push_pin_rounded,
+                                size: 14,
+                                fill: 1,
+                                color: TwColors.hero700,
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            Expanded(
+                              child: Text(
+                                title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TwText.tileTitle.copyWith(
+                                  fontSize: 14,
+                                  height: 1.35,
+                                  color: finalizado
+                                      ? TwColors.secondary
+                                      : TwColors.ink,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (place.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(
+                                Symbols.location_on_rounded,
+                                size: 14,
+                                color: TwColors.muted,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  place,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TwText.tileSubtitle.copyWith(
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        if (chip != null || finalizado || sinCache) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              ?chip,
+                              if (finalizado)
+                                const StatusChip(
+                                  label: 'Evento finalizado',
+                                  variant: StatusChipVariant.danger,
+                                ),
+                              if (sinCache)
+                                const StatusChip(
+                                  label: 'No descargado',
+                                  variant: StatusChipVariant.neutral,
+                                ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (actions == null || sinCache) chevron,
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (actions != null && !sinCache)
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: Row(mainAxisSize: MainAxisSize.min, children: actions!),
+          ),
+      ],
+    );
+
     return Opacity(
       opacity: sinCache ? 0.55 : 1,
       child: Container(
+        clipBehavior: footer == null ? Clip.none : Clip.antiAlias,
         decoration: BoxDecoration(
           color: TwColors.surface,
           borderRadius: TwRadii.tile,
@@ -374,109 +484,12 @@ class EventRow extends StatelessWidget {
           ),
           boxShadow: TwShadows.card,
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Pressable(
-                onTap: onTap,
-                // Fijar, editar o eliminar exigen red: sin caché tampoco hay menú.
-                onLongPress: sinCache ? null : onLongPress,
-                child: Padding(
-                  padding: const EdgeInsets.all(13),
-                  child: Row(
-                    children: [
-                      DateTile(date: date, muted: finalizado),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                if (fijado) ...[
-                                  const Icon(
-                                    Symbols.push_pin_rounded,
-                                    size: 14,
-                                    fill: 1,
-                                    color: TwColors.hero700,
-                                  ),
-                                  const SizedBox(width: 6),
-                                ],
-                                Expanded(
-                                  child: Text(
-                                    title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TwText.tileTitle.copyWith(
-                                      fontSize: 14,
-                                      height: 1.35,
-                                      color: finalizado
-                                          ? TwColors.secondary
-                                          : TwColors.ink,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (place.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Symbols.location_on_rounded,
-                                    size: 14,
-                                    color: TwColors.muted,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      place,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TwText.tileSubtitle.copyWith(
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                            if (chip != null || finalizado || sinCache) ...[
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: [
-                                  ?chip,
-                                  if (finalizado)
-                                    const StatusChip(
-                                      label: 'Evento finalizado',
-                                      variant: StatusChipVariant.danger,
-                                    ),
-                                  if (sinCache)
-                                    const StatusChip(
-                                      label: 'No descargado',
-                                      variant: StatusChipVariant.neutral,
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      if (actions == null || sinCache) chevron,
-                    ],
-                  ),
-                ),
+        child: footer == null
+            ? fila
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [fila, footer!],
               ),
-            ),
-            if (actions != null && !sinCache)
-              Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: Row(mainAxisSize: MainAxisSize.min, children: actions!),
-              ),
-          ],
-        ),
       ),
     );
   }

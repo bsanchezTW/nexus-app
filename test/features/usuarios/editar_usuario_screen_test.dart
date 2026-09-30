@@ -214,8 +214,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('Guardar'));
-    await tester.tap(find.text('Guardar'));
+    await tester.ensureVisible(find.text('Guardar cambios'));
+    await tester.tap(find.text('Guardar cambios'));
     await tester.pumpAndSettle();
 
     expect(find.text('lista-usuarios'), findsOneWidget);

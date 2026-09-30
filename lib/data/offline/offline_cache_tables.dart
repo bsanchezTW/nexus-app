@@ -12,6 +12,9 @@ class OfflineCacheTables {
   /// Catálogo de eventos visible para el perfil (RLS ya lo recorta).
   static const eventos = 'catalogo_eventos';
 
+  /// Talleres de todos los eventos visibles, para agruparlos en la lista.
+  static const catalogoSubeventos = 'catalogo_subeventos';
+
   /// Un evento por clave, para poder abrir su detalle sin red.
   static const eventoDetalle = 'evento_detalle';
 

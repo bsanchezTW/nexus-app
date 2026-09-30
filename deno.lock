@@ -1,0 +1,750 @@
+{
+  "version": "5",
+  "specifiers": {
+    "npm:@getbrevo/brevo@^6.0.3": "6.0.3",
+    "npm:firebase@^12.18.0": "12.19.0",
+    "npm:qrcode@1.5.4": "1.5.4"
+  },
+  "npm": {
+    "@firebase/ai@2.16.0_@firebase+app@0.16.2_@firebase+app-types@0.9.6": {
+      "integrity": "sha512-WRVxl58B61Orwf7st7949ZIW2L4huV80Gpaum1z8v2eH+m2xaxWtC8mOjQyVAOirr6O/yf89cBjlPvoyBpBfTg==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/app-check-interop-types",
+        "@firebase/app-types",
+        "@firebase/component",
+        "@firebase/logger",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/analytics-compat@0.2.31_@firebase+app@0.16.2_@firebase+app-compat@0.5.18": {
+      "integrity": "sha512-msTlG9REujk5rjtOHNLngiuPmvaWGQte8ugL4/F6ZCMb+92Ue7SgjSEpNxINkM8ZtTrbGS83j5SZkt0r+M1Tjw==",
+      "dependencies": [
+        "@firebase/analytics",
+        "@firebase/analytics-types",
+        "@firebase/app",
+        "@firebase/app-compat",
+        "@firebase/component",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/analytics-types@0.8.5": {
+      "integrity": "sha512-kdnooE7Bis2jEnsqcerRwn/UQpH5D3uvHpku7OdUM9TJN3omlu6iYtbyAQ6XkAJRgJtO0aNf9OOkW8J6D59oCA=="
+    },
+    "@firebase/analytics@0.10.25_@firebase+app@0.16.2": {
+      "integrity": "sha512-oDagV3PHeNXBdxemksZCdj+GmUT19eCnTOcLdQePIIovFXlm3zWy3Gjeaokt9Nqx24kc4ljK8lU0XGcGmmKZ1A==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/component",
+        "@firebase/installations",
+        "@firebase/logger",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/app-check-compat@0.4.7_@firebase+app@0.16.2_@firebase+app-compat@0.5.18": {
+      "integrity": "sha512-fBb/xSMyIKv1nDmccfzz3IAGBzx/cQOxmZai66rJzifb1hMMkztf824Xx7LhpTUe7HNUbXwY90IvJ66fi8q6yg==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/app-check",
+        "@firebase/app-check-types",
+        "@firebase/app-compat",
+        "@firebase/component",
+        "@firebase/logger",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/app-check-interop-types@0.3.5": {
+      "integrity": "sha512-qId34pVZ2CXTmtu4ofW5leiI93DvnOvIcr/5GT7MZPw5WXAi6nZoU+g9cNRgl7K90UJSbK0cXxten4meYMPyZg=="
+    },
+    "@firebase/app-check-types@0.5.5": {
+      "integrity": "sha512-+DF4gzFrlwGFyky38o4T/YN/r51l70yCtJ2HTkwmRj8FCMwPjm4hLH4fQbj6BUvzkiFqliBkitFsRpf1/YZkWA=="
+    },
+    "@firebase/app-check@0.13.1_@firebase+app@0.16.2": {
+      "integrity": "sha512-l8y3dmnhodXks/APAwx4tWqRl3tk8b9874KF1FJyKg1DIU+kMD0l52iz7S9/MW+eK8k6cjJg0G0iJ5KQAsQpow==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/component",
+        "@firebase/logger",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/app-compat@0.5.18": {
+      "integrity": "sha512-77H57WuGEsgrv59HdtuhHG+eQdP8di6myz7O93yW6yTZlR/tLSmsCxCq5vHp6AWWDwSV0EVtKUvizXQiQZVBWA==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/component",
+        "@firebase/logger",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/app-types@0.9.6": {
+      "integrity": "sha512-yPLahy7Esfu2w/yme3msVK4xTkDXQqq6szfQn8yVOQpCKiT5GVFjqNpLbuz6NkX0WuTwUidkmPewW3r4xkvpeg==",
+      "dependencies": [
+        "@firebase/logger"
+      ]
+    },
+    "@firebase/app@0.16.2": {
+      "integrity": "sha512-fyCLPahl3r0Zb7Wzm+JLWcOOH3SaDgAyJzJ8EWIDiv51aNiv+2Pjbpa6myEuP7iXxjmJqrcbVm0GUF7h229T1Q==",
+      "dependencies": [
+        "@firebase/component",
+        "@firebase/logger",
+        "@firebase/util",
+        "idb",
+        "tslib"
+      ]
+    },
+    "@firebase/auth-compat@0.6.11_@firebase+app@0.16.2_@firebase+app-compat@0.5.18_@firebase+app-types@0.9.6": {
+      "integrity": "sha512-L+xp3DTJQrBV08Vt0UhcL/ofUOSjXom7JOJfbT6oas4o7gCrQnTYFKs8wfiuKLmHoo8BxMr5LdgjAs7o6aAsqQ==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/app-compat",
+        "@firebase/auth",
+        "@firebase/auth-types",
+        "@firebase/component",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/auth-interop-types@0.2.6": {
+      "integrity": "sha512-FgwZqDrBqgK0BHI70QTv1v/5wmuDF9f8fsJFvKSxoRlK2PPfSQtZAk2jhXu4pe9BZzFi/e4UYusU/bEQHdf6Qg=="
+    },
+    "@firebase/auth-types@0.13.2_@firebase+app-types@0.9.6_@firebase+util@1.15.3": {
+      "integrity": "sha512-OU+miuoSxIWYN7GT291d2ylVJBL3k/OePo7/JDSoQtkFQoEiGBc4AHuMjj/seqFIsHrqnjrAfRCk4pfufoJolQ==",
+      "dependencies": [
+        "@firebase/app-types",
+        "@firebase/util"
+      ]
+    },
+    "@firebase/auth@1.13.6_@firebase+app@0.16.2": {
+      "integrity": "sha512-MKRLvF72HJ/irNn2fJR0Gv5FOZNtqv1IBeJHRwK8l8pZ/wi9vuUw8ecyCMvQDDNxfS6uW0MWACL5KC4Y8Pp+fA==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/component",
+        "@firebase/logger",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/component@0.7.5": {
+      "integrity": "sha512-vuFDcL91Q+2ZuBJkyOh86T4q0B4ffNTDjc/A38tybO56odQABxRTFLTIowCWqAKeIcgo37GowWMVgFF73gD8Qw==",
+      "dependencies": [
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/data-connect@0.7.4_@firebase+app@0.16.2": {
+      "integrity": "sha512-su1aGWlzhxb+xtggCUSsufJn1FDa06SBDK71y+fpQ+g2zMhMExik6FUv/odkKzOF/xfWVjabCbWBcjJY3MceDA==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/auth-interop-types",
+        "@firebase/component",
+        "@firebase/logger",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/database-compat@2.1.7_@firebase+app@0.16.2_@firebase+app-compat@0.5.18": {
+      "integrity": "sha512-lBq9sJm8MnJINKJnkAKSOj2MbC66xGoSVCcGkPtstl+lkoKEBtD46qHLbuDgW/WbLPoKVm17RIN8BxHj+Z2F2w==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/app-compat",
+        "@firebase/component",
+        "@firebase/database",
+        "@firebase/database-types",
+        "@firebase/logger",
+        "@firebase/util",
+        "tslib"
+      ],
+      "optionalPeers": [
+        "@firebase/app",
+        "@firebase/app-compat"
+      ]
+    },
+    "@firebase/database-types@1.0.22": {
+      "integrity": "sha512-YAZNXsjY9EQQ+pKw/3ax8n5FgolHC7Qew7EY5RceYdl0R2ZP+kCv1O0DkKlcceue8uQCOreHCNN7PWVFpY1Nug==",
+      "dependencies": [
+        "@firebase/app-types",
+        "@firebase/util"
+      ]
+    },
+    "@firebase/database@1.1.5": {
+      "integrity": "sha512-/JGpvszLoNXNgzilRXocigGfFF4hbcPA9wN1i1kjJx6oKkXgkHteZYl3lQs1lJX3ETDf6bv7zI15lPMVUp4sAQ==",
+      "dependencies": [
+        "@firebase/app-check-interop-types",
+        "@firebase/auth-interop-types",
+        "@firebase/component",
+        "@firebase/logger",
+        "@firebase/util",
+        "faye-websocket",
+        "tslib"
+      ]
+    },
+    "@firebase/firestore-compat@0.4.14_@firebase+app@0.16.2_@firebase+app-compat@0.5.18_@firebase+app-types@0.9.6": {
+      "integrity": "sha512-HJ2HBNgNPrRsWIJ4E+Kc0u0h1U7HlF7If8AtYjie9HZXlMUmwYSJaXBj9VFm6gkSj5dlKZNcOQ0Ou25CVVG6rA==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/app-compat",
+        "@firebase/component",
+        "@firebase/firestore",
+        "@firebase/firestore-types",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/firestore-types@3.0.5_@firebase+app-types@0.9.6_@firebase+util@1.15.3": {
+      "integrity": "sha512-dbdMAQkMd5dwWc48eupz/Y6/E9ruat3+gY5lhVKscvvT/HnDBEEMzJW38zdKhgdnglZHGk2vUsJMOHAphMHGMA==",
+      "dependencies": [
+        "@firebase/app-types",
+        "@firebase/util"
+      ]
+    },
+    "@firebase/firestore@4.17.2_@firebase+app@0.16.2": {
+      "integrity": "sha512-SiyQEK1dYPOjItFVA+kZGdvOoRAtMebDBvUaSxJPNZMkKcRwYYK2kzWo5UXTZZj523uMxJnkr+KKVySEMme3kQ==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/component",
+        "@firebase/logger",
+        "@firebase/util",
+        "@firebase/webchannel-wrapper",
+        "@grpc/grpc-js",
+        "@grpc/proto-loader",
+        "re2js",
+        "tslib"
+      ]
+    },
+    "@firebase/functions-compat@0.5.0_@firebase+app@0.16.2_@firebase+app-compat@0.5.18": {
+      "integrity": "sha512-T3BDIToESZUHt7438wyKYMkRjKg3m1xAIux5fVpNvTRQlDOFLukWniQWBDhJ2znpU9kxMTR6+e31TVo8P15PZw==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/app-compat",
+        "@firebase/component",
+        "@firebase/functions",
+        "@firebase/functions-types",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/functions-types@0.6.5": {
+      "integrity": "sha512-Zc0pURjthHXzSj54ZivCkzKDSV1r/wIpnmHdhq82q2yFFPVoncG/ZJjnVMiANvQfeww/QnElhzODpfwUucVwdA=="
+    },
+    "@firebase/functions@0.14.0_@firebase+app@0.16.2": {
+      "integrity": "sha512-DhuYFr0eMhp+s/PNEk6SiMsYkc00+XVOUeKbrl8MOzQNZI3SKQpqoDR1d+keNDAutwmHRWTUAdXBoVPD+xxVUw==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/app-check-interop-types",
+        "@firebase/auth-interop-types",
+        "@firebase/component",
+        "@firebase/messaging-interop-types",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/installations-compat@0.2.24_@firebase+app@0.16.2_@firebase+app-compat@0.5.18_@firebase+app-types@0.9.6": {
+      "integrity": "sha512-8M5nlcWwYt881x83COP2odq5vgf+NgwJh+RMd4LRSv8JI1pxwDfgrDJOERrjTgfC9J5Z0vnQX4b1pdN914e0Zw==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/app-compat",
+        "@firebase/component",
+        "@firebase/installations",
+        "@firebase/installations-types",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/installations-types@0.5.5_@firebase+app-types@0.9.6": {
+      "integrity": "sha512-e9UYcju3puDl1vdrcKIi5dExzHLameOT/Tc61Q48PYwxtsM1NzZh/ikGbdBQTsbRgg0EMZqdPr0/m5ODUBobrg==",
+      "dependencies": [
+        "@firebase/app-types"
+      ]
+    },
+    "@firebase/installations@0.6.24_@firebase+app@0.16.2": {
+      "integrity": "sha512-Ui52ey8wHoWqkBbXRKJEKYWylI0JZogZmoLS+o8Anh1bxWtK27ZYjLla1UJAAdC5DCKLJ2qAp0VpJOjg8VOX1g==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/component",
+        "@firebase/util",
+        "idb",
+        "tslib"
+      ]
+    },
+    "@firebase/logger@0.5.2": {
+      "integrity": "sha512-J2VO4NFTc0xQFrxV1B/lm5balicm9cwuX2acR9Yn41fN8KgUeQFo+VJV222IqW2FPSXKDu9uo5WdQFWf9TPbYg==",
+      "dependencies": [
+        "tslib"
+      ]
+    },
+    "@firebase/messaging-compat@0.2.30_@firebase+app@0.16.2_@firebase+app-compat@0.5.18": {
+      "integrity": "sha512-m1DPT2ET5x0qYqXLoHwKMAyf1mgZZOhuoE6H6/H4OPsp8zSxMIDEFPaW7MaffPJsCA5J7kHzo+BHVNXK4ZoV+w==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/app-compat",
+        "@firebase/component",
+        "@firebase/messaging",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/messaging-interop-types@0.2.6": {
+      "integrity": "sha512-MVzvkKe2V4H2dHu5oOxRfeKQcfTwWmCgnzsC4V1q3ixun5iiL8riCZ2qI35rDhCL4glPGiu0jHxDbpVNuTKfow=="
+    },
+    "@firebase/messaging@0.13.3_@firebase+app@0.16.2": {
+      "integrity": "sha512-nRXPAp+z0kA3KziJtRY9kktHECvRwaaONzHvislFgllhCwJMscW7icWNQA5IjyP8Uc2+GS/4px8Uz6rx6ftTag==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/component",
+        "@firebase/installations",
+        "@firebase/messaging-interop-types",
+        "@firebase/util",
+        "idb",
+        "tslib"
+      ]
+    },
+    "@firebase/performance-compat@0.2.27_@firebase+app@0.16.2_@firebase+app-compat@0.5.18": {
+      "integrity": "sha512-O/ozTf/EbChN94Pk7bd1eUC0PAC36726AwsaiJyC0bZzSBWfLGSWASGPH5pebUWXQPJtGxIJYRkkbX5l0Qa+Hw==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/app-compat",
+        "@firebase/component",
+        "@firebase/logger",
+        "@firebase/performance",
+        "@firebase/performance-types",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/performance-types@0.2.5": {
+      "integrity": "sha512-PRzOgB+/M+6AKlEkY8a9xy5Ff5SfZPIh4iShXhn2WAcL/euSbK7bdLqWysHduunNJhGFsXa22Ag3ixqL6rQtYg=="
+    },
+    "@firebase/performance@0.7.14_@firebase+app@0.16.2": {
+      "integrity": "sha512-9PH1XEZVHErxGdbXluvGz4Uyjw4W955H8v7Mv9rHIybRrg5F2Ac2tvf5+mSf5EtnxWNmxrD2WLnvMFaZP4sMrQ==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/component",
+        "@firebase/installations",
+        "@firebase/logger",
+        "@firebase/util",
+        "tslib",
+        "web-vitals"
+      ]
+    },
+    "@firebase/remote-config-compat@0.2.29_@firebase+app@0.16.2_@firebase+app-compat@0.5.18": {
+      "integrity": "sha512-mY7JtTISK6F4g4T0x3kVepr5cp0NXL7f5yjIUXXGaTrg4qUlFBWRbENaHaqZ78dwmNcLm24h/yPsOVRlDXEXhA==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/app-compat",
+        "@firebase/component",
+        "@firebase/logger",
+        "@firebase/remote-config",
+        "@firebase/remote-config-types",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/remote-config-types@0.5.2": {
+      "integrity": "sha512-i8k1omVfoAnaT1ZPv2FFjxMZrATYsO/GnFgHEj5+7fAJLzi8wLnGGv1WK06oEAD6ltrWXSO1HzeNyajn/NjMWw=="
+    },
+    "@firebase/remote-config@0.9.2_@firebase+app@0.16.2": {
+      "integrity": "sha512-Rii93DkXjM+RE/ytHdYa7EIiQLJbdBr+W8EEiqd/vbLCOC+1FdkDuRiumJBp6t3yewHGbdqbpjB3fk3z0cZ+8g==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/component",
+        "@firebase/installations",
+        "@firebase/logger",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/storage-compat@0.4.5_@firebase+app@0.16.2_@firebase+app-compat@0.5.18_@firebase+app-types@0.9.6": {
+      "integrity": "sha512-vO0tFPxXbKDKdlTu8tYT08S9t9ezUTJYEdLCULpWxWq2aq6zojwN1QmAB+1a50AI/g47GlWUJn1XPncm/PDZsw==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/app-compat",
+        "@firebase/component",
+        "@firebase/storage",
+        "@firebase/storage-types",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/storage-types@0.8.5_@firebase+app-types@0.9.6_@firebase+util@1.15.3": {
+      "integrity": "sha512-GEDs5P+rNUfNcS+wxIdOLAHficife2YXtvTJnyi3ssrX11AAtBg+nDUdbYh8vuBzWehVQZPmztGUUnud4L+4yg==",
+      "dependencies": [
+        "@firebase/app-types",
+        "@firebase/util"
+      ]
+    },
+    "@firebase/storage@0.14.5_@firebase+app@0.16.2": {
+      "integrity": "sha512-r2tozN/BlEewLi70tJNUQPzWwbex9GM7NgXZsamHKQrjKEfcR0i4jGgHBKAKA4hbwiPE9eNMb3hcxWnDpeJZwg==",
+      "dependencies": [
+        "@firebase/app",
+        "@firebase/component",
+        "@firebase/util",
+        "tslib"
+      ]
+    },
+    "@firebase/util@1.15.3": {
+      "integrity": "sha512-c/z/gaIlaaLZEuGbE6sLUuJ61tskg1JghvhcNQzW948ASBinbVBBRnZTC4b4yt4LaEtJQkYlyzqLHcutFwEIvA==",
+      "dependencies": [
+        "tslib"
+      ],
+      "scripts": true
+    },
+    "@firebase/webchannel-wrapper@1.0.7": {
+      "integrity": "sha512-phBFwieDLvkZGYN9CE9ZFNEIoBVksprzsnCzQejCmCHtgwCXReeuRpoEGN9C4EbhONztv8NRV1tau6Rb9pONwQ=="
+    },
+    "@getbrevo/brevo@6.0.3": {
+      "integrity": "sha512-yWBLKoHC8P5HLZ8z6iRuqDYLpCRKPTUETnZOLZzNDWGFYL78y4SHOTxQVrKH5ROX7f4q+SQ19LD3GWtJlIuNXA=="
+    },
+    "@grpc/grpc-js@1.9.16": {
+      "integrity": "sha512-wE4Ut/olIzfKqp631XrG+wbF0v1vWFN4YL9FyXC2LJiG33DsV7PLzURjrCvY/6je2ntdRkeLpPDluzSRGaVltQ==",
+      "dependencies": [
+        "@grpc/proto-loader",
+        "@types/node"
+      ]
+    },
+    "@grpc/proto-loader@0.7.15": {
+      "integrity": "sha512-tMXdRCfYVixjuFK+Hk0Q1s38gV9zDiDJfWL3h1rv4Qc39oILCu1TRTDt7+fGUI8K4G1Fj125Hx/ru3azECWTyQ==",
+      "dependencies": [
+        "lodash.camelcase",
+        "long",
+        "protobufjs",
+        "yargs@17.7.3"
+      ],
+      "bin": true
+    },
+    "@protobufjs/aspromise@1.1.2": {
+      "integrity": "sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ=="
+    },
+    "@protobufjs/base64@1.1.2": {
+      "integrity": "sha512-AZkcAA5vnN/v4PDqKyMR5lx7hZttPDgClv83E//FMNhR2TMcLUhfRUBHCmSl0oi9zMgDDqRUJkSxO3wm85+XLg=="
+    },
+    "@protobufjs/codegen@2.0.5": {
+      "integrity": "sha512-zgXFLzW3Ap33e6d0Wlj4MGIm6Ce8O89n/apUaGNB/jx+hw+ruWEp7EwGUshdLKVRCxZW12fp9r40E1mQrf/34g=="
+    },
+    "@protobufjs/eventemitter@1.1.1": {
+      "integrity": "sha512-vW1GmwMZNnL+gMRaovlh9yZX74kc+TTU3FObkkurpMaRtBfLP3ldjS9KQWlwZgraRE0+dheEEoAxdzcJQ8eXZg=="
+    },
+    "@protobufjs/fetch@1.1.1": {
+      "integrity": "sha512-GpptLrs57adMSuHi3VNj0mAF8dwh36LMaYF6XyJ6JMWlVsc+t42tm1HSEDmOs3A8fC9yyeisgLhsTVQokOZ0zw==",
+      "dependencies": [
+        "@protobufjs/aspromise"
+      ]
+    },
+    "@protobufjs/float@1.0.2": {
+      "integrity": "sha512-Ddb+kVXlXst9d+R9PfTIxh1EdNkgoRe5tOX6t01f1lYWOvJnSPDBlG241QLzcyPdoNTsblLUdujGSE4RzrTZGQ=="
+    },
+    "@protobufjs/path@1.1.2": {
+      "integrity": "sha512-6JOcJ5Tm08dOHAbdR3GrvP+yUUfkjG5ePsHYczMFLq3ZmMkAD98cDgcT2iA1lJ9NVwFd4tH/iSSoe44YWkltEA=="
+    },
+    "@protobufjs/pool@1.1.0": {
+      "integrity": "sha512-0kELaGSIDBKvcgS4zkjz1PeddatrjYcmMWOlAuAPwAeccUrPHdUqo/J6LiymHHEiJT5NrF1UVwxY14f+fy4WQw=="
+    },
+    "@protobufjs/utf8@1.1.2": {
+      "integrity": "sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug=="
+    },
+    "@types/node@26.6.3": {
+      "integrity": "sha512-dsqMQQoeTLqu9wynDD00q573mNzso3IdQOAfHRJqLCcmCFPoGo9A1bDpUcv/9tnKpErQWv9uKeGfl37EIS02Yg==",
+      "dependencies": [
+        "undici-types"
+      ]
+    },
+    "ansi-regex@5.0.1": {
+      "integrity": "sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ=="
+    },
+    "ansi-styles@4.3.0": {
+      "integrity": "sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg==",
+      "dependencies": [
+        "color-convert"
+      ]
+    },
+    "camelcase@5.3.1": {
+      "integrity": "sha512-L28STB170nwWS63UjtlEOE3dldQApaJXZkOI1uMFfzf3rRuPegHaHesyee+YxQ+W6SvRDQV6UrdOdRiR153wJg=="
+    },
+    "cliui@6.0.0": {
+      "integrity": "sha512-t6wbgtoCXvAzst7QgXxJYqPt0usEfbgQdftEPbLL/cvv6HPE5VgvqCuAIDR0NgU52ds6rFwqrgakNLrHEjCbrQ==",
+      "dependencies": [
+        "string-width",
+        "strip-ansi",
+        "wrap-ansi@6.2.0"
+      ]
+    },
+    "cliui@8.0.1": {
+      "integrity": "sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ==",
+      "dependencies": [
+        "string-width",
+        "strip-ansi",
+        "wrap-ansi@7.0.0"
+      ]
+    },
+    "color-convert@2.0.1": {
+      "integrity": "sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==",
+      "dependencies": [
+        "color-name"
+      ]
+    },
+    "color-name@1.1.4": {
+      "integrity": "sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA=="
+    },
+    "decamelize@1.2.0": {
+      "integrity": "sha512-z2S+W9X73hAUUki+N+9Za2lBlun89zigOyGrsax+KUQ6wKW4ZoWpEYBkGhQjwAjjDCkWxhY0VKEhk8wzY7F5cA=="
+    },
+    "dijkstrajs@1.0.3": {
+      "integrity": "sha512-qiSlmBq9+BCdCA/L46dw8Uy93mloxsPSbwnm5yrKn2vMPiy8KyAskTF6zuV/j5BMsmOGZDPs7KjU+mjb670kfA=="
+    },
+    "emoji-regex@8.0.0": {
+      "integrity": "sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A=="
+    },
+    "escalade@3.2.0": {
+      "integrity": "sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA=="
+    },
+    "faye-websocket@0.11.4": {
+      "integrity": "sha512-CzbClwlXAuiRQAlUyfqPgvPoNKTckTPGfwZV4ZdAhVcP2lh9KUxJg2b5GkE7XbjKQ3YJnQ9z6D9ntLAlB+tP8g==",
+      "dependencies": [
+        "websocket-driver"
+      ]
+    },
+    "find-up@4.1.0": {
+      "integrity": "sha512-PpOwAdQ/YlXQ2vj8a3h8IipDuYRi3wceVQQGYWxNINccq40Anw7BlsEXCMbt1Zt+OLA6Fq9suIpIWD0OsnISlw==",
+      "dependencies": [
+        "locate-path",
+        "path-exists"
+      ]
+    },
+    "firebase@12.19.0": {
+      "integrity": "sha512-kwXCLcI0ly2lkwygkbuRx6SsX3DSO96355YrWh9SWZ5ncsxK/y5cirn3sY6nZVSiBVE++2nL6Hchzu1EB8uohQ==",
+      "dependencies": [
+        "@firebase/ai",
+        "@firebase/analytics",
+        "@firebase/analytics-compat",
+        "@firebase/app",
+        "@firebase/app-check",
+        "@firebase/app-check-compat",
+        "@firebase/app-compat",
+        "@firebase/app-types",
+        "@firebase/auth",
+        "@firebase/auth-compat",
+        "@firebase/data-connect",
+        "@firebase/database",
+        "@firebase/database-compat",
+        "@firebase/firestore",
+        "@firebase/firestore-compat",
+        "@firebase/functions",
+        "@firebase/functions-compat",
+        "@firebase/installations",
+        "@firebase/installations-compat",
+        "@firebase/messaging",
+        "@firebase/messaging-compat",
+        "@firebase/performance",
+        "@firebase/performance-compat",
+        "@firebase/remote-config",
+        "@firebase/remote-config-compat",
+        "@firebase/storage",
+        "@firebase/storage-compat",
+        "@firebase/util"
+      ]
+    },
+    "get-caller-file@2.0.5": {
+      "integrity": "sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg=="
+    },
+    "http-parser-js@0.5.10": {
+      "integrity": "sha512-Pysuw9XpUq5dVc/2SMHpuTY01RFl8fttgcyunjL7eEMhGM3cI4eOmiCycJDVCo/7O7ClfQD3SaI6ftDzqOXYMA=="
+    },
+    "idb@7.1.1": {
+      "integrity": "sha512-gchesWBzyvGHRO9W8tzUWFDycow5gwjvFKfyV9FF32Y7F50yZMp7mP+T2mJIWFx49zicqyC4uefHM17o6xKIVQ=="
+    },
+    "is-fullwidth-code-point@3.0.0": {
+      "integrity": "sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg=="
+    },
+    "locate-path@5.0.0": {
+      "integrity": "sha512-t7hw9pI+WvuwNJXwk5zVHpyhIqzg2qTlklJOf0mVxGSbe3Fp2VieZcduNYjaLDoy6p9uGpQEGWG87WpMKlNq8g==",
+      "dependencies": [
+        "p-locate"
+      ]
+    },
+    "lodash.camelcase@4.3.0": {
+      "integrity": "sha512-TwuEnCnxbc3rAvhf/LbG7tJUDzhqXyFnv3dtzLOPgCG/hODL7WFnsbwktkD7yUV0RrreP/l1PALq/YSg6VvjlA=="
+    },
+    "long@5.3.2": {
+      "integrity": "sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA=="
+    },
+    "p-limit@2.3.0": {
+      "integrity": "sha512-//88mFWSJx8lxCzwdAABTJL2MyWB12+eIY7MDL2SqLmAkeKU9qxRvWuSyTjm3FUmpBEMuFfckAIqEaVGUDxb6w==",
+      "dependencies": [
+        "p-try"
+      ]
+    },
+    "p-locate@4.1.0": {
+      "integrity": "sha512-R79ZZ/0wAxKGu3oYMlz8jy/kbhsNrS7SKZ7PxEHBgJ5+F2mtFW2fK2cOtBh1cHYkQsbzFV7I+EoRKe6Yt0oK7A==",
+      "dependencies": [
+        "p-limit"
+      ]
+    },
+    "p-try@2.2.0": {
+      "integrity": "sha512-R4nPAVTAU0B9D35/Gk3uJf/7XYbQcyohSKdvAxIRSNghFl4e71hVoGnBNQz9cWaXxO2I10KTC+3jMdvvoKw6dQ=="
+    },
+    "path-exists@4.0.0": {
+      "integrity": "sha512-ak9Qy5Q7jYb2Wwcey5Fpvg2KoAc/ZIhLSLOSBmRmygPsGwkVVt0fZa0qrtMz+m6tJTAHfZQ8FnmB4MG4LWy7/w=="
+    },
+    "pngjs@5.0.0": {
+      "integrity": "sha512-40QW5YalBNfQo5yRYmiw7Yz6TKKVr3h6970B2YE+3fQpsWcrbj1PzJgxeJ19DRQjhMbKPIuMY8rFaXc8moolVw=="
+    },
+    "protobufjs@7.6.6": {
+      "integrity": "sha512-dYDWdjSl5RNb7SgPxGQcRU+GtvP7s2fpkrY0r432PcOIaZ0/rBcxEZnQN67iJhFuQiVw754JDoPruPCNdGsbjg==",
+      "dependencies": [
+        "@protobufjs/aspromise",
+        "@protobufjs/base64",
+        "@protobufjs/codegen",
+        "@protobufjs/eventemitter",
+        "@protobufjs/fetch",
+        "@protobufjs/float",
+        "@protobufjs/path",
+        "@protobufjs/pool",
+        "@protobufjs/utf8",
+        "@types/node",
+        "long"
+      ],
+      "scripts": true
+    },
+    "qrcode@1.5.4": {
+      "integrity": "sha512-1ca71Zgiu6ORjHqFBDpnSMTR2ReToX4l1Au1VFLyVeBTFavzQnv5JxMFr3ukHVKpSrSA2MCk0lNJSykjUfz7Zg==",
+      "dependencies": [
+        "dijkstrajs",
+        "pngjs",
+        "yargs@15.4.1"
+      ],
+      "bin": true
+    },
+    "re2js@2.8.6": {
+      "integrity": "sha512-xLgQil4kIUCrAzVk9fRSkxkFNwmygLFjVxXrLc65aE1F0+Zsb8rxumFBy4XKyvgMCTL6kilDq3EZ0piE2dP/Dg=="
+    },
+    "require-directory@2.1.1": {
+      "integrity": "sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q=="
+    },
+    "require-main-filename@2.0.0": {
+      "integrity": "sha512-NKN5kMDylKuldxYLSUfrbo5Tuzh4hd+2E8NPPX02mZtn1VuREQToYe/ZdlJy+J3uCpfaiGF05e7B8W0iXbQHmg=="
+    },
+    "safe-buffer@5.2.1": {
+      "integrity": "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ=="
+    },
+    "set-blocking@2.0.0": {
+      "integrity": "sha512-KiKBS8AnWGEyLzofFfmvKwpdPzqiy16LvQfK3yv/fVH7Bj13/wl3JSR1J+rfgRE9q7xUJK4qvgS8raSOeLUehw=="
+    },
+    "string-width@4.2.3": {
+      "integrity": "sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==",
+      "dependencies": [
+        "emoji-regex",
+        "is-fullwidth-code-point",
+        "strip-ansi"
+      ]
+    },
+    "strip-ansi@6.0.1": {
+      "integrity": "sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==",
+      "dependencies": [
+        "ansi-regex"
+      ]
+    },
+    "tslib@2.8.1": {
+      "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="
+    },
+    "undici-types@8.9.0": {
+      "integrity": "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="
+    },
+    "web-vitals@4.2.4": {
+      "integrity": "sha512-r4DIlprAGwJ7YM11VZp4R884m0Vmgr6EAKe3P+kO0PPj3Unqyvv59rczf6UiGcb9Z8QxZVcqKNwv/g0WNdWwsw=="
+    },
+    "websocket-driver@0.7.5": {
+      "integrity": "sha512-ZL2+3c7kMBdIRCMz6l8jQMHyGVxj+UL+xVk74Ombiciboca8rHa15L86B19E5oh1pL9Ii/uj54gtsIrZGMo6zA==",
+      "dependencies": [
+        "http-parser-js",
+        "safe-buffer",
+        "websocket-extensions"
+      ]
+    },
+    "websocket-extensions@0.1.4": {
+      "integrity": "sha512-OqedPIGOfsDlo31UNwYbCFMSaO9m9G/0faIHj5/dZFDMFqPTcx6UwqyOy3COEaEOg/9VsGIpdqn62W5KhoKSpg=="
+    },
+    "which-module@2.0.1": {
+      "integrity": "sha512-iBdZ57RDvnOR9AGBhML2vFZf7h8vmBjhoaZqODJBFWHVtKkDmKuHai3cx5PgVMrX5YDNp27AofYbAwctSS+vhQ=="
+    },
+    "wrap-ansi@6.2.0": {
+      "integrity": "sha512-r6lPcBGxZXlIcymEu7InxDMhdW0KDxpLgoFLcguasxCaJ/SOIZwINatK9KY/tf+ZrlywOKU0UDj3ATXUBfxJXA==",
+      "dependencies": [
+        "ansi-styles",
+        "string-width",
+        "strip-ansi"
+      ]
+    },
+    "wrap-ansi@7.0.0": {
+      "integrity": "sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==",
+      "dependencies": [
+        "ansi-styles",
+        "string-width",
+        "strip-ansi"
+      ]
+    },
+    "y18n@4.0.3": {
+      "integrity": "sha512-JKhqTOwSrqNA1NY5lSztJ1GrBiUodLMmIZuLiDaMRJ+itFd+ABVE8XBjOvIWL+rSqNDC74LCSFmlb/U4UZ4hJQ=="
+    },
+    "y18n@5.0.8": {
+      "integrity": "sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA=="
+    },
+    "yargs-parser@18.1.3": {
+      "integrity": "sha512-o50j0JeToy/4K6OZcaQmW6lyXXKhq7csREXcDwk2omFPJEwUNOVtJKvmDr9EI1fAJZUyZcRF7kxGBWmRXudrCQ==",
+      "dependencies": [
+        "camelcase",
+        "decamelize"
+      ]
+    },
+    "yargs-parser@21.1.1": {
+      "integrity": "sha512-tVpsJW7DdjecAiFpbIB1e3qxIQsE6NoPc5/eTdrbbIC4h0LVsWhnoa3g+m2HclBIujHzsxZ4VJVA+GUuc2/LBw=="
+    },
+    "yargs@15.4.1": {
+      "integrity": "sha512-aePbxDmcYW++PaqBsJ+HYUFwCdv4LVvdnhBy78E57PIor8/OVvhMrADFFEDh8DHDFRv/O9i3lPhsENjO7QX0+A==",
+      "dependencies": [
+        "cliui@6.0.0",
+        "decamelize",
+        "find-up",
+        "get-caller-file",
+        "require-directory",
+        "require-main-filename",
+        "set-blocking",
+        "string-width",
+        "which-module",
+        "y18n@4.0.3",
+        "yargs-parser@18.1.3"
+      ]
+    },
+    "yargs@17.7.3": {
+      "integrity": "sha512-GZtjxm/J/4TSxuL3FNYjCmLktBTnIw/rVmKSIyKeYAZpmJB2ig9VauCC5xsa82GNKVKDAqpOn3KVzNt0zmrU0g==",
+      "dependencies": [
+        "cliui@8.0.1",
+        "escalade",
+        "get-caller-file",
+        "require-directory",
+        "string-width",
+        "y18n@5.0.8",
+        "yargs-parser@21.1.1"
+      ]
+    }
+  },
+  "remote": {
+    "https://deno.land/std@0.168.0/fmt/colors.ts": "03ad95e543d2808bc43c17a3dd29d25b43d0f16287fe562a0be89bf632454a12",
+    "https://deno.land/std@0.168.0/testing/_diff.ts": "a23e7fc2b4d8daa3e158fa06856bedf5334ce2a2831e8bf9e509717f455adb2c",
+    "https://deno.land/std@0.168.0/testing/_format.ts": "cd11136e1797791045e639e9f0f4640d5b4166148796cad37e6ef75f7d7f3832",
+    "https://deno.land/std@0.168.0/testing/asserts.ts": "51353e79437361d4b02d8e32f3fc83b22231bc8f8d4c841d86fd32b0b0afe940"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@getbrevo/brevo@^6.0.3",
+        "npm:firebase@^12.18.0"
+      ]
+    }
+  }
+}

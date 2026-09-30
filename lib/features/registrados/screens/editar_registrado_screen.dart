@@ -14,6 +14,8 @@ import '../../../core/utils/registro_asistente.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
+import '../../../core/theme/tw_tokens.dart';
+import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../data/models/inscripcion_subevento.dart';
 import '../../../data/models/registrado.dart';
@@ -367,6 +369,13 @@ class _EditarRegistradoScreenState
             onTap: (_guardando || !hayRed) ? null : _eliminar,
           ),
       ],
+      bottomBar: registradosAsync.hasValue
+          ? FormActionBar(
+              label: 'Guardar cambios',
+              loading: _guardando,
+              onPressed: (_guardando || !hayRed) ? null : _guardar,
+            )
+          : null,
       body: registradosAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => const ErrorView(message: 'No se pudo cargar.'),
@@ -382,11 +391,25 @@ class _EditarRegistradoScreenState
           }
           _precargar(registrado, puedeVerContacto: puedeVerContacto);
           final telefonoProtegido = _telefonoProtegido(puedeVerContacto);
+          final talleres =
+              ref
+                  .watch(subeventosPorEventoProvider(widget.eventoId))
+                  .valueOrNull ??
+              const [];
+          final hayTalleres =
+              talleres.isNotEmpty || _talleresIniciales.isNotEmpty;
 
           return AbsorbPointer(
             absorbing: _guardando,
             child: SingleChildScrollView(
-              padding: AppSpacing.form,
+              padding: const EdgeInsets.fromLTRB(
+                TwSpacing.screenH,
+                2,
+                TwSpacing.screenH,
+                28,
+              ),
+              keyboardDismissBehavior:
+                  ScrollViewKeyboardDismissBehavior.onDrag,
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -409,121 +432,183 @@ class _EditarRegistradoScreenState
                             : StatusChipVariant.warning,
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    NexusFormTextField(
-                      label: 'Empresa',
-                      controller: _empresaController,
-                      hintText: 'Ej. Transworld',
-                      enabled: !_guardando && hayRed,
-                    ),
-                    const SizedBox(height: 14),
-                    NexusFormTextField(
-                      label: 'Cargo',
-                      controller: _cargoController,
-                      hintText: 'Ej. Gerente comercial',
-                      enabled: !_guardando && hayRed,
-                    ),
-                    const SizedBox(height: 14),
-                    if (telefonoProtegido)
-                      NexusFormTextField(
-                        label: 'Teléfono',
-                        controller: _telefonoController,
-                        hintText: 'Contacto protegido',
-                        keyboardType: TextInputType.phone,
-                        enabled: !_guardando && hayRed,
-                        readOnly: true,
-                        helperText:
-                            'Solo visible para administradores y organizadores',
-                        suffixIcon: const Icon(
-                          Symbols.lock_rounded,
-                          size: 18,
-                          color: AppColors.textTertiary,
-                        ),
-                      )
-                    else
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const NexusFieldLabel('Teléfono'),
-                          const SizedBox(height: 6),
-                          CampoTelefonoInternacional(
-                            controller: _telefonoController,
-                            pais: _paisTelefono,
-                            onPaisChanged: (pais) =>
-                                setState(() => _paisTelefono = pais),
+                    const SizedBox(height: FormSection.gap),
+                    FormSection(
+                      icon: Symbols.business_center_rounded,
+                      title: 'Empresa',
+                      children: [
+                        FormLabeledField(
+                          label: 'Empresa',
+                          child: TextFormField(
+                            controller: _empresaController,
                             enabled: !_guardando && hayRed,
-                            labelText: null,
-                          ),
-                        ],
-                      ),
-                    const SizedBox(height: 14),
-                    NexusFormTextField(
-                      label: _paisTelefono.iso == 'CL' ? 'RUT' : 'RUT / RUC',
-                      controller: _rutController,
-                      hintText: _paisTelefono.iso == 'CL'
-                          ? '12.345.678-5'
-                          : 'Documento tributario',
-                      enabled: !_guardando && hayRed,
-                      validator: (v) => validarRut(
-                        v,
-                        requerido: false,
-                        esChile: _paisTelefono.iso == 'CL',
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    NexusFormTextField(
-                      label: 'Patente',
-                      controller: _patenteController,
-                      hintText: 'ABCD12',
-                      enabled: !_guardando && hayRed,
-                      validator: (v) => validarPatente(v, requerido: false),
-                    ),
-                    const SizedBox(height: 14),
-                    _ToggleRow(
-                      title: 'Acreditado',
-                      subtitle: 'Estado de ingreso al evento',
-                      value: _acreditado,
-                      onChanged: hayRed
-                          ? (v) => setState(() => _acreditado = v)
-                          : (_) {},
-                    ),
-                    const SizedBox(height: 14),
-                    Text('Talleres', style: Theme.of(context).textTheme.titleMedium),
-                    if (inscripcionesAsync.hasError && !_talleresCargados)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('No se pudieron cargar los talleres'),
-                          TextButton(
-                            onPressed: () => ref.invalidate(
-                              inscripcionesPorEventoProvider(widget.eventoId),
+                            decoration: const InputDecoration(
+                              hintText: 'Ej. Transworld',
                             ),
-                            child: const Text('Reintentar'),
                           ),
-                        ],
-                      )
-                    else if (inscripcionesAsync.isLoading && !_talleresCargados)
-                      const SizedBox(height: 88, child: LoadingView())
-                    else
-                      SelectorSubeventos(
-                      subeventos: ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ?? const [],
-                      ocupacion: ref.watch(ocupacionEventoProvider(widget.eventoId)).valueOrNull,
-                      seleccionados: _talleresSeleccionados,
-                      yaInscritos: _talleresIniciales,
-                      permitirSobrecupo: ref.watch(canCreateContentProvider),
-                      onChanged: hayRed && !esIdSoloLocal(widget.registradoId)
-                          ? (ids) => setState(() {
-                              _talleresSeleccionados
-                                ..clear()
-                                ..addAll(ids);
-                            })
-                          : (_) {},
+                        ),
+                        FormLabeledField(
+                          label: 'Cargo',
+                          child: TextFormField(
+                            controller: _cargoController,
+                            enabled: !_guardando && hayRed,
+                            decoration: const InputDecoration(
+                              hintText: 'Ej. Gerente comercial',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 24),
-                    PrimaryGradientButton(
-                      label: 'Guardar cambios',
-                      loading: _guardando,
-                      onPressed: (_guardando || !hayRed) ? null : _guardar,
+                    const SizedBox(height: FormSection.gap),
+                    FormSection(
+                      icon: Symbols.contact_phone_rounded,
+                      title: 'Contacto',
+                      subtitle: telefonoProtegido
+                          ? 'Solo visible para administradores y organizadores.'
+                          : null,
+                      children: [
+                        FormLabeledField(
+                          label: 'Teléfono',
+                          child: telefonoProtegido
+                              ? TextFormField(
+                                  controller: _telefonoController,
+                                  readOnly: true,
+                                  keyboardType: TextInputType.phone,
+                                  decoration: twReadOnlyDecoration(
+                                    hintText: 'Contacto protegido',
+                                    suffixIcon: const Icon(
+                                      Symbols.lock_rounded,
+                                      size: 18,
+                                      color: AppColors.textTertiary,
+                                    ),
+                                  ),
+                                )
+                              : CampoTelefonoInternacional(
+                                  controller: _telefonoController,
+                                  pais: _paisTelefono,
+                                  onPaisChanged: (pais) =>
+                                      setState(() => _paisTelefono = pais),
+                                  enabled: !_guardando && hayRed,
+                                  labelText: null,
+                                ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: FormSection.gap),
+                    FormSection(
+                      icon: Symbols.workspace_premium_rounded,
+                      title: 'Certificación',
+                      subtitle: 'Solo si el evento entrega certificado.',
+                      children: [
+                        FormFieldRow(
+                          minWidth: 280,
+                          left: FormLabeledField(
+                            label: _paisTelefono.iso == 'CL'
+                                ? 'RUT'
+                                : 'RUT / RUC',
+                            opcional: true,
+                            child: TextFormField(
+                              controller: _rutController,
+                              enabled: !_guardando && hayRed,
+                              decoration: InputDecoration(
+                                hintText: _paisTelefono.iso == 'CL'
+                                    ? '12.345.678-5'
+                                    : 'Documento',
+                              ),
+                              validator: (v) => validarRut(
+                                v,
+                                requerido: false,
+                                esChile: _paisTelefono.iso == 'CL',
+                              ),
+                            ),
+                          ),
+                          right: FormLabeledField(
+                            label: 'Patente',
+                            opcional: true,
+                            child: TextFormField(
+                              controller: _patenteController,
+                              enabled: !_guardando && hayRed,
+                              textCapitalization: TextCapitalization.characters,
+                              decoration: const InputDecoration(
+                                hintText: 'ABCD12',
+                              ),
+                              validator: (v) =>
+                                  validarPatente(v, requerido: false),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (hayTalleres) ...[
+                      const SizedBox(height: FormSection.gap),
+                      FormSection(
+                        icon: Symbols.co_present_rounded,
+                        title: 'Talleres',
+                        children: [
+                          if (inscripcionesAsync.hasError && !_talleresCargados)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const FormNotice(
+                                  'No se pudieron cargar los talleres.',
+                                  error: true,
+                                ),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: TextButton(
+                                    onPressed: () => ref.invalidate(
+                                      inscripcionesPorEventoProvider(
+                                        widget.eventoId,
+                                      ),
+                                    ),
+                                    child: const Text('Reintentar'),
+                                  ),
+                                ),
+                              ],
+                            )
+                          else if (inscripcionesAsync.isLoading &&
+                              !_talleresCargados)
+                            const SizedBox(height: 88, child: LoadingView())
+                          else
+                            SelectorSubeventos(
+                              subeventos: talleres,
+                              ocupacion: ref
+                                  .watch(
+                                    ocupacionEventoProvider(widget.eventoId),
+                                  )
+                                  .valueOrNull,
+                              seleccionados: _talleresSeleccionados,
+                              yaInscritos: _talleresIniciales,
+                              permitirSobrecupo: ref.watch(
+                                canCreateContentProvider,
+                              ),
+                              onChanged:
+                                  hayRed && !esIdSoloLocal(widget.registradoId)
+                                  ? (ids) => setState(() {
+                                      _talleresSeleccionados
+                                        ..clear()
+                                        ..addAll(ids);
+                                    })
+                                  : (_) {},
+                            ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: FormSection.gap),
+                    FormSection(
+                      icon: Symbols.verified_rounded,
+                      title: 'Acreditación',
+                      children: [
+                        FormToggleRow(
+                          icon: Symbols.how_to_reg_rounded,
+                          title: 'Acreditado',
+                          subtitle: 'Ya ingresó al evento.',
+                          value: _acreditado,
+                          onChanged: hayRed
+                              ? (v) => setState(() => _acreditado = v)
+                              : null,
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -531,61 +616,6 @@ class _EditarRegistradoScreenState
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _ToggleRow extends StatelessWidget {
-  const _ToggleRow({
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          NexusToggle(value: value, onChanged: onChanged),
-        ],
       ),
     );
   }

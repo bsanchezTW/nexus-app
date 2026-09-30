@@ -16,7 +16,8 @@ import '../../../core/utils/registro_asistente.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
-import '../../../core/widgets/evento_hero_banner.dart';
+import '../../../core/theme/tw_tokens.dart';
+import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/selector_imagen.dart';
 import '../../../data/models/lead.dart';
@@ -615,36 +616,60 @@ class _CrearLeadScreenState extends ConsumerState<CrearLeadScreen> {
     String? Function(String?)? validator,
     TextInputType? keyboardType,
     int maxLines = 1,
+    bool opcional = false,
     bool protegido = false,
     bool autocorrect = true,
     bool enableSuggestions = true,
     List<TextInputFormatter>? inputFormatters,
   }) {
     final escuchando = campoVoz != null && _escuchandoCampo == campoVoz;
-    return NexusFormTextField(
+    final sufijo = protegido
+        ? const Icon(
+            Symbols.lock_rounded,
+            size: 18,
+            color: AppColors.textTertiary,
+          )
+        : (campoVoz == null ? null : _botonVoz(campoVoz));
+    return FormLabeledField(
       label: label,
-      controller: controller,
-      hintText: hintText,
-      enabled: !escuchando && !_guardando,
-      readOnly: protegido,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      validator: validator,
-      autocorrect: autocorrect,
-      enableSuggestions: enableSuggestions,
-      inputFormatters: inputFormatters,
-      helperText: protegido
+      opcional: opcional,
+      ayuda: protegido
           ? 'Solo visible para administradores y organizadores'
           : null,
-      suffixIcon: protegido
-          ? const Icon(
-              Symbols.lock_rounded,
-              size: 18,
-              color: AppColors.textTertiary,
-            )
-          : (campoVoz == null ? null : _botonVoz(campoVoz)),
+      child: TextFormField(
+        controller: controller,
+        enabled: !escuchando && !_guardando,
+        readOnly: protegido,
+        keyboardType: keyboardType,
+        minLines: maxLines > 1 ? 3 : null,
+        maxLines: maxLines,
+        validator: validator,
+        autocorrect: autocorrect,
+        enableSuggestions: enableSuggestions,
+        inputFormatters: inputFormatters,
+        textCapitalization: keyboardType == null
+            ? TextCapitalization.sentences
+            : TextCapitalization.none,
+        decoration:
+            (protegido
+                    ? twReadOnlyDecoration(hintText: hintText)
+                    : InputDecoration(hintText: hintText))
+                .copyWith(alignLabelWithHint: maxLines > 1, suffixIcon: sufijo),
+      ),
     );
   }
+
+  bool get _hayDatos =>
+      [
+        _nombreController,
+        _empresaController,
+        _cargoController,
+        _descripcionController,
+      ].any((c) => c.text.trim().isNotEmpty) ||
+      (_emailPrefill == null && _emailController.text.trim().isNotEmpty) ||
+      (_telefonoPrefill == null &&
+          _telefonoController.text.trim().isNotEmpty) ||
+      _fotoBytes != null;
 
   @override
   Widget build(BuildContext context) {
@@ -677,28 +702,25 @@ class _CrearLeadScreenState extends ConsumerState<CrearLeadScreen> {
         loading: () => const Text('Capturar lead'),
         error: (_, _) => const Text('Capturar lead'),
       ),
-      onWillPop: () => confirmDiscardCreate(context),
+      onWillPop: () => confirmDiscardCreate(context, hayDatos: _hayDatos),
+      bottomBar: FormActionBar(
+        label: 'Guardar lead',
+        loading: _guardando,
+        onPressed: _guardando ? null : _guardar,
+      ),
       body: SingleChildScrollView(
-        padding: AppSpacing.form,
+        padding: const EdgeInsets.fromLTRB(
+          TwSpacing.screenH,
+          2,
+          TwSpacing.screenH,
+          28,
+        ),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (eventoAsync.asData?.value.tieneImagen == true) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  child: SizedBox(
-                    height: 120,
-                    width: double.infinity,
-                    child: EventoHeroFoto(
-                      imagenUrl: eventoAsync.asData!.value.imagenUrl!,
-                      velo: 0.28,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
               ListenableBuilder(
                 listenable: _emailController,
                 builder: (context, _) {
@@ -723,75 +745,85 @@ class _CrearLeadScreenState extends ConsumerState<CrearLeadScreen> {
                   );
                 },
               ),
-              const SizedBox(height: 14),
-              _campoTexto(
-                label: 'Empresa',
-                controller: _empresaController,
-                hintText: 'Ej. Transworld',
-                campoVoz: _CampoVoz.empresa,
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+              const SizedBox(height: FormSection.gap),
+              FormSection(
+                icon: Symbols.business_center_rounded,
+                title: 'Empresa',
+                children: [
+                  _campoTexto(
+                    label: 'Empresa',
+                    controller: _empresaController,
+                    hintText: 'Ej. Transworld',
+                    campoVoz: _CampoVoz.empresa,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Escribe la empresa.'
+                        : null,
+                  ),
+                  _campoTexto(
+                    label: 'Cargo',
+                    controller: _cargoController,
+                    hintText: 'Ej. Gerente comercial',
+                    campoVoz: _CampoVoz.cargo,
+                    opcional: true,
+                  ),
+                ],
               ),
-              const SizedBox(height: 14),
-              _campoTexto(
-                label: 'Cargo',
-                controller: _cargoController,
-                hintText: 'Ej. Gerente comercial',
-                campoVoz: _CampoVoz.cargo,
-              ),
-              const SizedBox(height: 14),
-              if (telefonoBloqueado)
-                _campoTexto(
-                  label: 'Teléfono',
-                  controller: _telefonoController,
-                  hintText: 'Contacto protegido',
-                  keyboardType: TextInputType.phone,
-                  protegido: true,
-                )
-              else
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const NexusFieldLabel('Teléfono'),
-                    const SizedBox(height: 6),
-                    CampoTelefonoInternacional(
+              const SizedBox(height: FormSection.gap),
+              FormSection(
+                icon: Symbols.contact_phone_rounded,
+                title: 'Contacto',
+                children: [
+                  if (telefonoBloqueado)
+                    _campoTexto(
+                      label: 'Teléfono',
                       controller: _telefonoController,
-                      pais: _paisTelefono,
-                      onPaisChanged: (pais) =>
-                          setState(() => _paisTelefono = pais),
-                      enabled: !_guardando,
-                      requerido: false,
-                      labelText: null,
+                      hintText: 'Contacto protegido',
+                      keyboardType: TextInputType.phone,
+                      protegido: true,
+                    )
+                  else
+                    FormLabeledField(
+                      label: 'Teléfono',
+                      opcional: true,
+                      child: CampoTelefonoInternacional(
+                        controller: _telefonoController,
+                        pais: _paisTelefono,
+                        onPaisChanged: (pais) =>
+                            setState(() => _paisTelefono = pais),
+                        enabled: !_guardando,
+                        requerido: false,
+                        labelText: null,
+                      ),
                     ),
-                  ],
-                ),
-              const SizedBox(height: 14),
-              _campoTexto(
-                label: 'Email',
-                controller: _emailController,
-                hintText: 'correo@empresa.com',
-                campoVoz: emailBloqueado ? null : _CampoVoz.email,
-                keyboardType: TextInputType.emailAddress,
-                validator: emailBloqueado ? null : validarEmailRegistro,
-                protegido: emailBloqueado,
-                autocorrect: false,
-                enableSuggestions: false,
-                inputFormatters: const [LowerCaseTextFormatter()],
+                  _campoTexto(
+                    label: 'Correo',
+                    controller: _emailController,
+                    hintText: 'correo@empresa.com',
+                    campoVoz: emailBloqueado ? null : _CampoVoz.email,
+                    keyboardType: TextInputType.emailAddress,
+                    validator: emailBloqueado ? null : validarEmailRegistro,
+                    protegido: emailBloqueado,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    inputFormatters: const [LowerCaseTextFormatter()],
+                  ),
+                ],
               ),
-              const SizedBox(height: 14),
-              _campoTexto(
-                label: 'Descripción',
-                controller: _descripcionController,
-                hintText: 'Notas u observaciones del lead',
-                campoVoz: _CampoVoz.descripcion,
-                keyboardType: TextInputType.multiline,
-                maxLines: 4,
-              ),
-              const SizedBox(height: 24),
-              PrimaryGradientButton(
-                label: 'Guardar lead',
-                loading: _guardando,
-                onPressed: _guardando ? null : _guardar,
+              const SizedBox(height: FormSection.gap),
+              FormSection(
+                icon: Symbols.sticky_note_2_rounded,
+                title: 'Notas',
+                children: [
+                  _campoTexto(
+                    label: 'Descripción',
+                    controller: _descripcionController,
+                    hintText: 'Qué le interesa, próximos pasos…',
+                    campoVoz: _CampoVoz.descripcion,
+                    keyboardType: TextInputType.multiline,
+                    maxLines: 5,
+                    opcional: true,
+                  ),
+                ],
               ),
             ],
           ),

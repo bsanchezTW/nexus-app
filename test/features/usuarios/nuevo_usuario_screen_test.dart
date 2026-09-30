@@ -101,13 +101,11 @@ void main() {
       'nuevo@transworld.cl',
     );
 
-    await tester.tap(find.byType(DropdownButtonFormField<AppRole>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Administrador').last);
+    await tester.ensureVisible(find.text('Administrador'));
+    await tester.tap(find.text('Administrador'));
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('Guardar'));
-    await tester.tap(find.text('Guardar'));
+    await tester.tap(find.text('Crear usuario'));
     await tester.pumpAndSettle();
 
     expect(find.text('lista-usuarios'), findsOneWidget);

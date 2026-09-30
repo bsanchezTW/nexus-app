@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/errors/rpe_exception.dart';
@@ -12,15 +13,18 @@ import '../../../core/network/offline_guard.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../core/constants/duracion_actividad.dart';
 import '../../../core/constants/paises_evento.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campo_pais_evento.dart';
 import '../../../core/widgets/campos_fecha_inicio_termino.dart';
-import '../../../core/widgets/nexus_components.dart';
+import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/selector_imagen.dart';
 import '../../../core/widgets/require_permission.dart';
+import '../../../core/widgets/tw_components.dart';
 import '../../../data/models/evento.dart';
+import '../../../data/offline/offline_cache_tables.dart';
+import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/eventos_repository.dart';
 import '../../../data/repositories/storage_repository.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -68,46 +72,72 @@ class _CrearEditarEventoFormState
   String _pais = kPaisEventoChile;
   bool _certificacion = false;
   bool _accesoQr = false;
+  TipoEvento _tipo = TipoEvento.evento;
   final _cupoController = TextEditingController();
   final _descripcionController = TextEditingController();
   final _mapaController = TextEditingController();
-  final _slugController = TextEditingController();
   TimeOfDay? _horaInicio;
   TimeOfDay? _horaFin;
   DateTime? _cierre;
-  Uint8List? _bannerBytes;
-  String? _bannerUrl;
   Uint8List? _imagenBytes;
   String? _imagenUrlExistente;
   bool _guardando = false;
   bool _cargado = false;
 
-  String _nombre0 = '';
-  String _pais0 = '';
-  String _tematica0 = '';
-  String _direccion0 = '';
-  String _lugar0 = '';
-  DateTime? _fecha0;
-  int _duracionDias0 = 1;
-  bool? _certificacion0;
-  bool? _accesoQr0;
-  String? _imagenUrl0;
+  /// Foto de lo que se precargó, para saber si hay cambios sin guardar.
+  Map<String, Object?> _original = const {};
 
   bool get _esEdicion => widget.eventoId != null;
 
+  Map<String, Object?> _instantanea() => {
+    'nombre': _nombreController.text,
+    'pais': _pais,
+    'tematica': _tematicaController.text,
+    'direccion': _direccionController.text,
+    'lugar': _lugarController.text,
+    'fecha': _fecha,
+    'duracion': _duracionDias,
+    'certificacion': _certificacion,
+    'accesoQr': _accesoQr,
+    'tipo': _tipo,
+    'cupo': _cupoController.text,
+    'descripcion': _descripcionController.text,
+    'mapa': _mapaController.text,
+    'horaInicio': _horaInicio,
+    'horaFin': _horaFin,
+    'cierre': _cierre,
+    'imagen': _imagenUrlExistente,
+  };
+
   bool get _hayCambios {
     if (!_esEdicion || !_cargado) return false;
-    return _nombreController.text != _nombre0 ||
-        _pais != _pais0 ||
-        _tematicaController.text != _tematica0 ||
-        _direccionController.text != _direccion0 ||
-        _lugarController.text != _lugar0 ||
-        _fecha != _fecha0 ||
-        _duracionDias != _duracionDias0 ||
-        _certificacion != _certificacion0 ||
-        _accesoQr != _accesoQr0 ||
-        _imagenBytes != null ||
-        _imagenUrlExistente != _imagenUrl0;
+    if (_imagenBytes != null) return true;
+    final actual = _instantanea();
+    return actual.entries.any((e) => _original[e.key] != e.value);
+  }
+
+  /// Al crear: ¿el usuario ya escribió o eligió algo que se perdería?
+  bool get _hayDatosNuevos =>
+      [
+        _nombreController,
+        _tematicaController,
+        _direccionController,
+        _lugarController,
+        _cupoController,
+        _descripcionController,
+        _mapaController,
+      ].any((c) => c.text.trim().isNotEmpty) ||
+      _imagenBytes != null ||
+      _horaInicio != null ||
+      _horaFin != null ||
+      _cierre != null;
+
+  /// El término del horario tiene que ir después del inicio.
+  bool get _horarioInvalido {
+    final inicio = _horaInicio;
+    final fin = _horaFin;
+    if (inicio == null || fin == null) return false;
+    return fin.hour * 60 + fin.minute <= inicio.hour * 60 + inicio.minute;
   }
 
   @override
@@ -119,7 +149,6 @@ class _CrearEditarEventoFormState
     _cupoController.dispose();
     _descripcionController.dispose();
     _mapaController.dispose();
-    _slugController.dispose();
     super.dispose();
   }
 
@@ -135,25 +164,15 @@ class _CrearEditarEventoFormState
     _duracionDias = evento.duracionDias;
     _certificacion = evento.certificacionCapacitacion;
     _accesoQr = evento.accesoQr;
+    _tipo = evento.tipo;
     _cupoController.text = evento.cupoMaximo?.toString() ?? '';
     _descripcionController.text = evento.descripcion ?? '';
     _mapaController.text = evento.mapaUrl ?? '';
-    _slugController.text = evento.slug;
     _horaInicio = evento.horaInicio;
     _horaFin = evento.horaFin;
     _cierre = evento.inscripcionesCierre;
-    _bannerUrl = evento.bannerUrl;
     _imagenUrlExistente = evento.imagenUrl;
-    _nombre0 = _nombreController.text;
-    _pais0 = _pais;
-    _tematica0 = _tematicaController.text;
-    _direccion0 = _direccionController.text;
-    _lugar0 = _lugarController.text;
-    _fecha0 = _fecha;
-    _duracionDias0 = _duracionDias;
-    _certificacion0 = _certificacion;
-    _accesoQr0 = _accesoQr;
-    _imagenUrl0 = _imagenUrlExistente;
+    _original = _instantanea();
   }
 
   Future<void> _elegirImagen() async {
@@ -173,9 +192,93 @@ class _CrearEditarEventoFormState
     });
   }
 
+  Future<void> _elegirHora({required bool inicio}) async {
+    final actual = inicio ? _horaInicio : _horaFin;
+    final hora = await showTimePicker(
+      context: context,
+      initialTime:
+          actual ??
+          (inicio
+              ? const TimeOfDay(hour: 9, minute: 0)
+              : const TimeOfDay(hour: 18, minute: 0)),
+    );
+    if (hora == null || !mounted) return;
+    setState(() {
+      if (inicio) {
+        _horaInicio = hora;
+      } else {
+        _horaFin = hora;
+      }
+    });
+  }
+
+  Future<void> _elegirCierre() async {
+    final base = _cierre ?? DateTime(_fecha.year, _fecha.month, _fecha.day);
+    final dia = await showDatePicker(
+      context: context,
+      initialDate: base,
+      firstDate: DateTime(2020),
+      lastDate: fechaTerminoActividad(_fecha, _duracionDias),
+    );
+    if (dia == null || !mounted) return;
+    final hora = await showTimePicker(
+      context: context,
+      initialTime: _cierre == null
+          ? const TimeOfDay(hour: 23, minute: 59)
+          : TimeOfDay.fromDateTime(_cierre!),
+    );
+    if (hora == null || !mounted) return;
+    setState(
+      () => _cierre = DateTime(
+        dia.year,
+        dia.month,
+        dia.day,
+        hora.hour,
+        hora.minute,
+      ),
+    );
+  }
+
+  Future<void> _cambiarTipo(TipoEvento tipo) async {
+    if (tipo == _tipo) return;
+    if (tipo.esTaller && widget.eventoId != null) {
+      try {
+        final talleres = await ref.read(
+          subeventosPorEventoProvider(widget.eventoId!).future,
+        );
+        if (!mounted) return;
+        if (talleres.isNotEmpty) {
+          showAppSnackBar(
+            context,
+            'Quita los subeventos antes de marcarlo como taller.',
+            isError: true,
+          );
+          return;
+        }
+      } catch (_) {
+        if (!mounted) return;
+        showAppSnackBar(
+          context,
+          'No se pudo comprobar si este evento tiene subeventos.',
+          isError: true,
+        );
+        return;
+      }
+    }
+    setState(() => _tipo = tipo);
+  }
+
   Future<void> _guardar() async {
     if (!requireOnline(context, ref)) return;
-    if (!_formKey.currentState!.validate()) return;
+    final formularioOk = _formKey.currentState!.validate();
+    if (!formularioOk || _horarioInvalido) {
+      showAppSnackBar(
+        context,
+        'Revisa los campos marcados antes de guardar.',
+        isError: true,
+      );
+      return;
+    }
     setState(() => _guardando = true);
 
     try {
@@ -185,14 +288,7 @@ class _CrearEditarEventoFormState
             .read(storageRepositoryProvider)
             .subirImagenEvento(_imagenBytes!, 'jpg');
       }
-      final cambioImagen = _esEdicion && imagenUrl != _imagenUrl0;
-
-      var bannerUrl = _bannerUrl;
-      if (_bannerBytes != null) {
-        bannerUrl = await ref
-            .read(storageRepositoryProvider)
-            .subirImagenEvento(_bannerBytes!, 'jpg');
-      }
+      final cambioImagen = _esEdicion && imagenUrl != _original['imagen'];
 
       final evento = Evento(
         id: widget.eventoId ?? '',
@@ -206,7 +302,7 @@ class _CrearEditarEventoFormState
         certificacionCapacitacion: _certificacion,
         imagenUrl: imagenUrl,
         accesoQr: _accesoQr,
-        slug: _slugController.text.trim(),
+        tipo: _tipo,
         cupoMaximo: int.tryParse(_cupoController.text.trim()),
         descripcion: _descripcionController.text.trim().isEmpty
             ? null
@@ -214,24 +310,18 @@ class _CrearEditarEventoFormState
         horaInicio: _horaInicio,
         horaFin: _horaFin,
         inscripcionesCierre: _cierre,
-        mapaUrl: _mapaController.text.trim().isEmpty
-            ? null
-            : _mapaController.text.trim(),
-        bannerUrl: bannerUrl,
+        mapaUrl: urlMapaEmbebible(_mapaController.text),
       );
 
       final repo = ref.read(eventosRepositoryProvider);
       if (_esEdicion) {
-        await conErroresRpe(
+        final guardado = await conErroresRpe(
           () => repo.actualizar(widget.eventoId!, evento.toInsertMap()),
         );
+        await _publicarEnCache(guardado);
       } else {
         await conErroresRpe(() => repo.crear(evento));
-      }
-
-      ref.invalidate(eventosListProvider);
-      if (widget.eventoId != null) {
-        ref.invalidate(eventoByIdProvider(widget.eventoId!));
+        ref.invalidate(eventosListProvider);
       }
       // Reemplazar la portada sube un UUID nuevo; quitarla también deja el
       // objeto anterior sin referencia. El trigger lo encola y aquí esperamos
@@ -259,6 +349,28 @@ class _CrearEditarEventoFormState
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
+  }
+
+  /// Las lecturas del evento son cache-first: sin este parche, el detalle y la
+  /// lista seguían mostrando la versión anterior al guardado hasta revalidar.
+  Future<void> _publicarEnCache(Evento guardado) async {
+    final cambios = guardado.toCacheMap();
+    await publicarCambioEnLecturaCacheada(
+      ref,
+      tabla: OfflineCacheTables.eventoDetalle,
+      eventoId: guardado.id,
+      id: guardado.id,
+      cambios: cambios,
+      invalidar: () => ref.invalidate(eventoByIdProvider(guardado.id)),
+    );
+    await publicarCambioEnLecturaCacheada(
+      ref,
+      tabla: OfflineCacheTables.eventos,
+      eventoId: cacheAmbitoGlobal,
+      id: guardado.id,
+      cambios: cambios,
+      invalidar: () => ref.invalidate(eventosListProvider),
+    );
   }
 
   Future<void> _eliminar() async {
@@ -298,18 +410,25 @@ class _CrearEditarEventoFormState
     final hayRed = ref.watch(isOnlineProvider);
     final eventoAsync = widget.eventoId == null
         ? null
-        : ref.watch(eventoByIdProvider(widget.eventoId!));
+        : ref.watch(eventoParaEditarProvider(widget.eventoId!));
 
     if (eventoAsync != null) {
       eventoAsync.whenData(_precargar);
     }
 
+    final editable = !_guardando && hayRed;
+    final cargando = eventoAsync != null && eventoAsync.isLoading && !_cargado;
+    final nombreTipo = _tipo.esTaller ? 'taller' : 'evento';
+
     return AppScaffold(
-      title: _esEdicion ? 'Editar evento' : 'Nuevo evento',
+      title: _esEdicion
+          ? (_tipo.esTaller ? 'Editar taller' : 'Editar evento')
+          : (_tipo.esTaller ? 'Nuevo taller' : 'Nuevo evento'),
       onWillPop: () => handleFormExit(
         context: context,
         isCreate: !_esEdicion,
         isDirty: _hayCambios,
+        createHasInput: _hayDatosNuevos,
         readOnly: !hayRed,
         save: _guardar,
       ),
@@ -322,293 +441,46 @@ class _CrearEditarEventoFormState
             onTap: (_guardando || !hayRed) ? null : _eliminar,
           ),
       ],
-      body: eventoAsync != null && eventoAsync.isLoading && !_cargado
+      bottomBar: cargando
+          ? null
+          : FormActionBar(
+              label: _esEdicion ? 'Guardar cambios' : 'Crear $nombreTipo',
+              loading: _guardando,
+              onPressed: (_guardando || !hayRed) ? null : _guardar,
+            ),
+      body: cargando
           ? const LoadingView()
           : AbsorbPointer(
               absorbing: _guardando,
               child: SingleChildScrollView(
-                padding: AppSpacing.form,
+                padding: const EdgeInsets.fromLTRB(
+                  TwSpacing.screenH,
+                  14,
+                  TwSpacing.screenH,
+                  28,
+                ),
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 child: Form(
                   key: _formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _FieldLabel('Foto'),
-                      const SizedBox(height: 6),
-                      SelectorImagen(
-                        bytes: _imagenBytes,
-                        urlExistente: _imagenUrlExistente,
-                        enabled: !_guardando && hayRed,
-                        aspectRatio: 16 / 9,
-                        anchoMaximo: kAnchoSelectorImagenEvento,
-                        etiquetaVacio: 'Agregar imagen del evento',
-                        onElegir: _elegirImagen,
-                        onQuitar:
-                            _imagenBytes == null && _imagenUrlExistente == null
-                            ? null
-                            : _quitarImagen,
-                      ),
-                      const SizedBox(height: 14),
-                      _FieldLabel('Nombre'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _nombreController,
-                        enabled: !_guardando && hayRed,
-                        decoration: const InputDecoration(
-                          hintText: 'Ej. Taller ALTAI 2026',
-                        ),
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Requerido'
-                            : null,
-                      ),
-                      const SizedBox(height: 14),
-                      CamposFechaInicioTermino(
-                        fechaInicio: _fecha,
-                        duracionDias: _duracionDias,
-                        textoDuracion: textoDuracionEvento(_duracionDias),
-                        enabledInicio: !_guardando && hayRed,
-                        enabledTermino: !_guardando && hayRed,
-                        onInicioChanged: (fecha) => setState(() {
-                          _fecha = fecha;
-                          _duracionDias = 1;
-                        }),
-                        onTerminoChanged: (termino) => setState(
-                          () => _duracionDias = duracionDesdeRango(
-                            _fecha,
-                            termino,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _FieldLabel('País'),
-                                const SizedBox(height: 6),
-                                CampoPaisEvento(
-                                  value: _pais,
-                                  enabled: !_guardando && hayRed,
-                                  onChanged: (pais) =>
-                                      setState(() => _pais = pais),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _FieldLabel('Lugar'),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _lugarController,
-                                  enabled: !_guardando && hayRed,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Hotel…',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      _FieldLabel('Dirección'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _direccionController,
-                        enabled: !_guardando && hayRed,
-                        decoration: const InputDecoration(
-                          hintText: 'Av. Vitacura 2885',
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      _FieldLabel('Temática'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _tematicaController,
-                        enabled: !_guardando && hayRed,
-                        decoration: const InputDecoration(
-                          hintText: 'Ej. Telecomunicaciones',
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      _FieldLabel('Acceso con QR'),
-                      const SizedBox(height: 6),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Los asistentes reciben un código QR'),
-                        value: _accesoQr,
-                        onChanged: (_guardando || !hayRed)
-                            ? null
-                            : (value) => setState(() => _accesoQr = value),
-                      ),
-                      const SizedBox(height: 14),
-                      _FieldLabel('Cupo máximo'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _cupoController,
-                        enabled: !_guardando && hayRed,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          hintText: 'Vacío si no hay límite',
-                        ),
-                        validator: (valor) {
-                          final texto = valor?.trim() ?? '';
-                          if (texto.isEmpty) return null;
-                          final cupo = int.tryParse(texto);
-                          if (cupo == null || cupo <= 0) {
-                            return 'El cupo debe ser mayor que 0.';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 14),
-                      _FieldLabel('Descripción'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _descripcionController,
-                        enabled: !_guardando && hayRed,
-                        maxLines: 4,
-                        decoration: const InputDecoration(
-                          hintText: 'Texto para la web pública',
-                        ),
-                        validator: (valor) => (valor ?? '').length > 5000
-                            ? 'Máximo 5000 caracteres.'
-                            : null,
-                      ),
-                      const SizedBox(height: 14),
-                      _FieldLabel('Horario'),
-                      const SizedBox(height: 6),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          _horaInicio == null
-                              ? 'Hora de inicio'
-                              : 'Inicio ${_horaInicio!.format(context)}',
-                        ),
-                        onTap: !_guardando && hayRed
-                            ? () async {
-                                final hora = await showTimePicker(
-                                  context: context,
-                                  initialTime: _horaInicio ??
-                                      const TimeOfDay(hour: 9, minute: 0),
-                                );
-                                if (hora != null) {
-                                  setState(() => _horaInicio = hora);
-                                }
-                              }
-                            : null,
-                      ),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          _horaFin == null
-                              ? 'Hora de término'
-                              : 'Término ${_horaFin!.format(context)}',
-                        ),
-                        onTap: !_guardando && hayRed
-                            ? () async {
-                                final hora = await showTimePicker(
-                                  context: context,
-                                  initialTime:
-                                      _horaFin ?? const TimeOfDay(hour: 18, minute: 0),
-                                );
-                                if (hora != null) setState(() => _horaFin = hora);
-                              }
-                            : null,
-                      ),
-                      const SizedBox(height: 14),
-                      _FieldLabel('Mapa'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _mapaController,
-                        enabled: !_guardando && hayRed,
-                        decoration: const InputDecoration(
-                          hintText: 'https://maps.google.com/...',
-                        ),
-                        validator: (valor) {
-                          final texto = valor?.trim() ?? '';
-                          if (texto.isEmpty || texto.startsWith('https://')) {
-                            return null;
-                          }
-                          return 'El mapa debe empezar con https://';
-                        },
-                      ),
-                      const SizedBox(height: 14),
-                      _FieldLabel('Banner'),
-                      const SizedBox(height: 6),
-                      SelectorImagen(
-                        bytes: _bannerBytes,
-                        urlExistente: _bannerUrl,
-                        enabled: !_guardando && hayRed,
-                        etiquetaVacio: 'Agregar banner',
-                        onElegir: () async {
-                          final bytes = await elegirImagenComprimida(
-                            context,
-                            recorteProporcion: kProporcionImagenEvento,
-                            tituloRecorte: 'Recortar banner',
-                          );
-                          if (bytes == null || !mounted) return;
-                          setState(() => _bannerBytes = bytes);
-                        },
-                        onQuitar: _bannerBytes == null && _bannerUrl == null
-                            ? null
-                            : () => setState(() {
-                                _bannerBytes = null;
-                                _bannerUrl = null;
-                              }),
-                      ),
-                      const SizedBox(height: 14),
-                      _FieldLabel('Avanzado'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _slugController,
-                        enabled: !_guardando && hayRed,
-                        decoration: const InputDecoration(
-                          hintText: 'Se genera solo si lo dejas vacío',
-                          helperText:
-                              'Cambiar el slug rompe los links ya compartidos.',
-                        ),
-                        validator: (valor) {
-                          final texto = valor?.trim() ?? '';
-                          if (texto.isEmpty) return null;
-                          final ok = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$')
-                                  .hasMatch(texto) &&
-                              texto.length >= 3 &&
-                              texto.length <= 80;
-                          return ok ? null : 'Slug inválido.';
-                        },
-                      ),
-                      if (_esEdicion) ...[
-                        const SizedBox(height: 14),
-                        OutlinedButton(
-                          onPressed: () => context.push(
-                            RoutePaths.subeventos(widget.eventoId!),
-                          ),
-                          child: Text(
-                            'Subeventos (${ref.watch(subeventosPorEventoProvider(widget.eventoId!)).valueOrNull?.length ?? 0})',
-                          ),
-                        ),
+                      _seccionTipo(editable),
+                      const SizedBox(height: FormSection.gap),
+                      _seccionGeneral(editable),
+                      const SizedBox(height: FormSection.gap),
+                      _seccionFechas(editable),
+                      const SizedBox(height: FormSection.gap),
+                      _seccionUbicacion(editable),
+                      const SizedBox(height: FormSection.gap),
+                      _seccionInscripcion(editable),
+                      const SizedBox(height: FormSection.gap),
+                      _seccionWeb(editable),
+                      if (_esEdicion && !_tipo.esTaller) ...[
+                        const SizedBox(height: FormSection.gap),
+                        _seccionTalleres(),
                       ],
-                      const SizedBox(height: 14),
-                      _ToggleCard(
-                        title: 'Requiere certificación',
-                        subtitle: 'Habilita los campos RUT y patente',
-                        value: _certificacion,
-                        onChanged: (v) => setState(() => _certificacion = v),
-                      ),
-                      const SizedBox(height: 20),
-                      PrimaryGradientButton(
-                        label: _esEdicion ? 'Guardar' : 'Crear evento',
-                        loading: _guardando,
-                        onPressed: (_guardando || !hayRed) ? null : _guardar,
-                      ),
                     ],
                   ),
                 ),
@@ -616,84 +488,323 @@ class _CrearEditarEventoFormState
             ),
     );
   }
-}
 
-class _FieldLabel extends StatelessWidget {
-  const _FieldLabel(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-        color: AppColors.textSecondary,
-      ),
+  Widget _seccionTipo(bool editable) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TwSectionLabel(_esEdicion ? 'Tipo' : '¿Qué vas a crear?', top: 4),
+        FormChoiceCards<TipoEvento>(
+          value: _tipo,
+          onChanged: editable ? _cambiarTipo : null,
+          choices: const [
+            FormChoice(
+              value: TipoEvento.evento,
+              icon: Symbols.event_rounded,
+              title: 'Evento',
+              description: 'Registra asistentes y puede agrupar talleres.',
+            ),
+            FormChoice(
+              value: TipoEvento.taller,
+              icon: Symbols.co_present_rounded,
+              title: 'Taller',
+              description: 'Actividad que luego se suma a un evento.',
+            ),
+          ],
+        ),
+      ],
     );
   }
-}
 
-class _ToggleCard extends StatelessWidget {
-  const _ToggleCard({
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: InkWell(
-        onTap: () => onChanged(!value),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textTertiary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              NexusToggle(value: value, onChanged: onChanged),
-            ],
+  Widget _seccionGeneral(bool editable) {
+    return FormSection(
+      icon: Symbols.info_rounded,
+      title: 'Información general',
+      subtitle: 'Lo primero que ven el equipo y los asistentes.',
+      children: [
+        FormLabeledField(
+          label: 'Portada',
+          opcional: true,
+          child: SelectorImagen(
+            bytes: _imagenBytes,
+            urlExistente: _imagenUrlExistente,
+            enabled: editable,
+            aspectRatio: 16 / 9,
+            anchoMaximo: 520,
+            etiquetaVacio: 'Agregar portada (16:9)',
+            onElegir: _elegirImagen,
+            onQuitar: _imagenBytes == null && _imagenUrlExistente == null
+                ? null
+                : _quitarImagen,
           ),
         ),
-      ),
+        FormLabeledField(
+          label: 'Nombre',
+          child: TextFormField(
+            controller: _nombreController,
+            enabled: editable,
+            textCapitalization: TextCapitalization.sentences,
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              hintText: _tipo.esTaller
+                  ? 'Ej. Taller de ventas consultivas'
+                  : 'Ej. Congreso ALTAI 2026',
+            ),
+            validator: (v) =>
+                (v == null || v.trim().isEmpty) ? 'Escribe un nombre.' : null,
+          ),
+        ),
+        FormLabeledField(
+          label: 'Temática',
+          opcional: true,
+          child: TextFormField(
+            controller: _tematicaController,
+            enabled: editable,
+            textCapitalization: TextCapitalization.sentences,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(
+              hintText: 'Ej. Telecomunicaciones',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _seccionFechas(bool editable) {
+    final cierre = _cierre == null
+        ? null
+        : DateFormat("EEE d MMM yyyy '·' HH:mm", 'es').format(_cierre!);
+    return FormSection(
+      icon: Symbols.calendar_month_rounded,
+      title: 'Fecha y horario',
+      children: [
+        CamposFechaInicioTermino(
+          fechaInicio: _fecha,
+          duracionDias: _duracionDias,
+          textoDuracion: _tipo.esTaller
+              ? textoDuracionActividad(_duracionDias)
+              : textoDuracionEvento(_duracionDias),
+          enabledInicio: editable,
+          enabledTermino: editable,
+          onInicioChanged: (fecha) => setState(() {
+            _fecha = fecha;
+            _duracionDias = 1;
+          }),
+          onTerminoChanged: (termino) => setState(
+            () => _duracionDias = duracionDesdeRango(_fecha, termino),
+          ),
+        ),
+        FormFieldRow(
+          minWidth: 260,
+          left: FormLabeledField(
+            label: 'Hora de inicio',
+            child: FormPickerField(
+              valor: _horaInicio?.format(context),
+              placeholder: 'Opcional',
+              icon: Symbols.schedule_rounded,
+              enabled: editable,
+              error: _horarioInvalido,
+              onTap: () => _elegirHora(inicio: true),
+              onClear: () => setState(() => _horaInicio = null),
+            ),
+          ),
+          right: FormLabeledField(
+            label: 'Hora de término',
+            child: FormPickerField(
+              valor: _horaFin?.format(context),
+              placeholder: 'Opcional',
+              icon: Symbols.schedule_rounded,
+              enabled: editable,
+              error: _horarioInvalido,
+              onTap: () => _elegirHora(inicio: false),
+              onClear: () => setState(() => _horaFin = null),
+            ),
+          ),
+        ),
+        if (_horarioInvalido)
+          const FormNotice(
+            'La hora de término debe ser posterior a la de inicio.',
+            error: true,
+          ),
+        FormLabeledField(
+          label: 'Cierre de inscripciones',
+          opcional: true,
+          ayuda: 'Después de esta fecha la web pública deja de inscribir.',
+          child: FormPickerField(
+            valor: cierre,
+            placeholder: 'Abiertas hasta el evento',
+            icon: Symbols.event_busy_rounded,
+            enabled: editable,
+            onTap: _elegirCierre,
+            onClear: () => setState(() => _cierre = null),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _seccionUbicacion(bool editable) {
+    return FormSection(
+      icon: Symbols.location_on_rounded,
+      title: 'Ubicación',
+      children: [
+        FormFieldRow(
+          minWidth: 280,
+          left: FormLabeledField(
+            label: 'País',
+            child: CampoPaisEvento(
+              value: _pais,
+              enabled: editable,
+              onChanged: (pais) => setState(() => _pais = pais),
+            ),
+          ),
+          right: FormLabeledField(
+            label: 'Lugar',
+            opcional: true,
+            child: TextFormField(
+              controller: _lugarController,
+              enabled: editable,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(hintText: 'Hotel, centro…'),
+            ),
+          ),
+        ),
+        FormLabeledField(
+          label: 'Dirección',
+          opcional: true,
+          child: TextFormField(
+            controller: _direccionController,
+            enabled: editable,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(hintText: 'Av. Vitacura 2885'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _seccionInscripcion(bool editable) {
+    return FormSection(
+      icon: Symbols.how_to_reg_rounded,
+      title: 'Inscripción y acceso',
+      children: [
+        FormLabeledField(
+          label: 'Cupo máximo',
+          opcional: true,
+          ayuda: 'Déjalo vacío si no hay límite de asistentes.',
+          child: TextFormField(
+            controller: _cupoController,
+            enabled: editable,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              hintText: 'Sin límite',
+              prefixIcon: Icon(Symbols.groups_rounded, size: 20),
+            ),
+            validator: (valor) {
+              final texto = valor?.trim() ?? '';
+              if (texto.isEmpty) return null;
+              final cupo = int.tryParse(texto);
+              if (cupo == null || cupo <= 0) {
+                return 'El cupo debe ser mayor que 0.';
+              }
+              return null;
+            },
+          ),
+        ),
+        const FormDivider(),
+        FormToggleRow(
+          icon: Symbols.qr_code_2_rounded,
+          title: 'Acceso con QR',
+          subtitle: 'Cada asistente recibe un código para entrar.',
+          value: _accesoQr,
+          onChanged: editable ? (v) => setState(() => _accesoQr = v) : null,
+        ),
+        const FormDivider(),
+        FormToggleRow(
+          icon: Symbols.workspace_premium_rounded,
+          title: 'Requiere certificación',
+          subtitle: 'Pide RUT y patente al registrar.',
+          value: _certificacion,
+          onChanged: editable
+              ? (v) => setState(() => _certificacion = v)
+              : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _seccionWeb(bool editable) {
+    return FormSection(
+      icon: Symbols.language_rounded,
+      title: 'Página pública',
+      subtitle: 'Lo que se muestra en la web de eventos.',
+      children: [
+        FormLabeledField(
+          label: 'Descripción',
+          opcional: true,
+          child: TextFormField(
+            controller: _descripcionController,
+            enabled: editable,
+            minLines: 3,
+            maxLines: 6,
+            maxLength: 5000,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              hintText: 'Cuenta de qué trata, a quién va dirigido…',
+              counterText: '',
+            ),
+            validator: (valor) =>
+                (valor ?? '').length > 5000 ? 'Máximo 5000 caracteres.' : null,
+          ),
+        ),
+        FormLabeledField(
+          label: 'Mapa (Google Maps)',
+          opcional: true,
+          ayuda:
+              'En Google Maps: Compartir → Insertar un mapa → Copiar HTML. '
+              'Pega aquí el código o solo el enlace; la web lo muestra en '
+              '«Cómo llegar», en el detalle público del evento.',
+          child: TextFormField(
+            controller: _mapaController,
+            enabled: editable,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            maxLines: null,
+            decoration: const InputDecoration(
+              hintText: 'https://www.google.com/maps/embed?pb=…',
+              prefixIcon: Icon(Symbols.map_rounded, size: 20),
+            ),
+            validator: (valor) {
+              final texto = valor?.trim() ?? '';
+              if (texto.isEmpty || urlMapaEmbebible(texto) != null) {
+                return null;
+              }
+              return 'Usa el enlace de "Insertar un mapa" de Google Maps '
+                  '(https://www.google.com/maps/embed?…).';
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _seccionTalleres() {
+    final talleres = ref
+        .watch(subeventosPorEventoProvider(widget.eventoId!))
+        .valueOrNull;
+    final total = talleres?.length ?? 0;
+    return TwActionTile(
+      icon: Symbols.account_tree_rounded,
+      iconStyle: TwIconBoxStyle.brand,
+      title: 'Talleres del evento',
+      subtitle: switch (total) {
+        0 => 'Todavía no tiene talleres',
+        1 => '1 taller agrupado',
+        _ => '$total talleres agrupados',
+      },
+      onTap: () => context.push(RoutePaths.subeventos(widget.eventoId!)),
     );
   }
 }

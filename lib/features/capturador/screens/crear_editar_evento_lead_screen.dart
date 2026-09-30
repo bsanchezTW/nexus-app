@@ -11,12 +11,12 @@ import '../../../core/network/offline_guard.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../core/constants/duracion_actividad.dart';
 import '../../../core/constants/paises_evento.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campo_pais_evento.dart';
 import '../../../core/widgets/campos_fecha_inicio_termino.dart';
-import '../../../core/widgets/nexus_components.dart';
+import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/require_permission.dart';
 import '../../../core/widgets/selector_imagen.dart';
 import '../../../data/models/evento_lead.dart';
@@ -238,6 +238,7 @@ class _CrearEditarEventoLeadFormState
     final eventoAsync = widget.eventoId == null
         ? null
         : ref.watch(eventoLeadByIdProvider(widget.eventoId!));
+    final editable = !_guardando && !_fichaSoloLectura && hayRed;
 
     if (eventoAsync != null) {
       eventoAsync.whenData(_precargar);
@@ -253,6 +254,10 @@ class _CrearEditarEventoLeadFormState
         context: context,
         isCreate: !_esEdicion,
         isDirty: _hayCambios,
+        createHasInput:
+            _nombreController.text.trim().isNotEmpty ||
+            _tematicaController.text.trim().isNotEmpty ||
+            _imagenBytes != null,
         readOnly: _fichaSoloLectura || !hayRed,
         save: _guardar,
       ),
@@ -265,156 +270,138 @@ class _CrearEditarEventoLeadFormState
             onTap: (_guardando || !hayRed) ? null : _eliminar,
           ),
       ],
+      bottomBar:
+          _fichaSoloLectura ||
+              (eventoAsync != null && eventoAsync.isLoading && !_cargado)
+          ? null
+          : FormActionBar(
+              label: _esEdicion ? 'Guardar cambios' : 'Crear actividad',
+              loading: _guardando,
+              onPressed: (_guardando || !hayRed) ? null : _guardar,
+            ),
       body: eventoAsync != null && eventoAsync.isLoading && !_cargado
           ? const LoadingView()
           : AbsorbPointer(
               absorbing: _guardando,
               child: SingleChildScrollView(
-                padding: AppSpacing.form,
+                padding: const EdgeInsets.fromLTRB(
+                  TwSpacing.screenH,
+                  14,
+                  TwSpacing.screenH,
+                  28,
+                ),
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 child: Form(
                   key: _formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (_fichaSoloLectura) ...[
-                        const _HerenciaBanner(),
-                        const SizedBox(height: 16),
-                      ],
-                      const _FieldLabel('Foto'),
-                      const SizedBox(height: 6),
-                      SelectorImagen(
-                        bytes: _imagenBytes,
-                        urlExistente: _imagenUrlExistente,
-                        enabled: !_guardando && !_fichaSoloLectura && hayRed,
-                        aspectRatio: 16 / 9,
-                        anchoMaximo: kAnchoSelectorImagenEvento,
-                        etiquetaVacio: 'Agregar imagen de la actividad',
-                        onElegir: _elegirImagen,
-                        onQuitar:
-                            _fichaSoloLectura ||
-                                (_imagenBytes == null &&
-                                    _imagenUrlExistente == null)
-                            ? null
-                            : _quitarImagen,
-                      ),
-                      const SizedBox(height: 14),
-                      const _FieldLabel('Nombre de la actividad'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _nombreController,
-                        enabled: !_guardando && !_fichaSoloLectura && hayRed,
-                        decoration: const InputDecoration(
-                          hintText: 'Ej. Feria retail 2026',
+                        const FormNotice(
+                          'Estos datos vienen del evento ligado y cambian con '
+                          'él. Para actualizarlos, edita el evento de registro.',
                         ),
-                        validator: (v) {
-                          if (_fichaSoloLectura) return null;
-                          return (v == null || v.trim().isEmpty)
-                              ? 'Requerido'
-                              : null;
-                        },
-                      ),
-                      const SizedBox(height: 14),
-                      CamposFechaInicioTermino(
-                        fechaInicio: _fecha,
-                        duracionDias: _duracionDias,
-                        textoDuracion: textoDuracionActividad(_duracionDias),
-                        enabledInicio:
-                            !_guardando && !_fichaSoloLectura && hayRed,
-                        enabledTermino:
-                            !_guardando && !_fichaSoloLectura && hayRed,
-                        onInicioChanged: (fecha) => setState(() {
-                          _fecha = fecha;
-                          _duracionDias = 1;
-                        }),
-                        onTerminoChanged: (termino) => setState(
-                          () => _duracionDias = duracionDesdeRango(
-                            _fecha,
-                            termino,
+                        const SizedBox(height: FormSection.gap),
+                      ],
+                      FormSection(
+                        icon: Symbols.info_rounded,
+                        title: 'Información general',
+                        children: [
+                          FormLabeledField(
+                            label: 'Portada',
+                            opcional: true,
+                            child: SelectorImagen(
+                              bytes: _imagenBytes,
+                              urlExistente: _imagenUrlExistente,
+                              enabled: editable,
+                              aspectRatio: 16 / 9,
+                              anchoMaximo: 520,
+                              etiquetaVacio: 'Agregar portada (16:9)',
+                              onElegir: _elegirImagen,
+                              onQuitar:
+                                  _fichaSoloLectura ||
+                                      (_imagenBytes == null &&
+                                          _imagenUrlExistente == null)
+                                  ? null
+                                  : _quitarImagen,
+                            ),
                           ),
-                        ),
+                          FormLabeledField(
+                            label: 'Nombre de la actividad',
+                            child: TextFormField(
+                              controller: _nombreController,
+                              enabled: editable,
+                              textCapitalization: TextCapitalization.sentences,
+                              decoration: const InputDecoration(
+                                hintText: 'Ej. Feria retail 2026',
+                              ),
+                              validator: (v) {
+                                if (_fichaSoloLectura) return null;
+                                return (v == null || v.trim().isEmpty)
+                                    ? 'Escribe un nombre.'
+                                    : null;
+                              },
+                            ),
+                          ),
+                          FormLabeledField(
+                            label: 'Temática',
+                            child: TextFormField(
+                              controller: _tematicaController,
+                              enabled: editable,
+                              textCapitalization: TextCapitalization.sentences,
+                              decoration: const InputDecoration(
+                                hintText: 'Ej. Telecomunicaciones',
+                              ),
+                              validator: (v) {
+                                if (_fichaSoloLectura) return null;
+                                return (v == null || v.trim().isEmpty)
+                                    ? 'Escribe la temática.'
+                                    : null;
+                              },
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 14),
-                      const _FieldLabel('País'),
-                      const SizedBox(height: 6),
-                      CampoPaisEvento(
-                        value: _pais,
-                        enabled: !_guardando && !_fichaSoloLectura && hayRed,
-                        onChanged: (pais) => setState(() => _pais = pais),
+                      const SizedBox(height: FormSection.gap),
+                      FormSection(
+                        icon: Symbols.calendar_month_rounded,
+                        title: 'Fecha y lugar',
+                        children: [
+                          CamposFechaInicioTermino(
+                            fechaInicio: _fecha,
+                            duracionDias: _duracionDias,
+                            textoDuracion: textoDuracionActividad(
+                              _duracionDias,
+                            ),
+                            enabledInicio: editable,
+                            enabledTermino: editable,
+                            onInicioChanged: (fecha) => setState(() {
+                              _fecha = fecha;
+                              _duracionDias = 1;
+                            }),
+                            onTerminoChanged: (termino) => setState(
+                              () => _duracionDias = duracionDesdeRango(
+                                _fecha,
+                                termino,
+                              ),
+                            ),
+                          ),
+                          FormLabeledField(
+                            label: 'País',
+                            child: CampoPaisEvento(
+                              value: _pais,
+                              enabled: editable,
+                              onChanged: (pais) => setState(() => _pais = pais),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 14),
-                      const _FieldLabel('Temática'),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _tematicaController,
-                        enabled: !_guardando && !_fichaSoloLectura && hayRed,
-                        decoration: const InputDecoration(
-                          hintText: 'Ej. Telecomunicaciones',
-                        ),
-                        validator: (v) {
-                          if (_fichaSoloLectura) return null;
-                          return (v == null || v.trim().isEmpty)
-                              ? 'Requerido'
-                              : null;
-                        },
-                      ),
-                      if (!_fichaSoloLectura) ...[
-                        const SizedBox(height: 24),
-                        PrimaryGradientButton(
-                          label: _esEdicion
-                              ? 'Guardar cambios'
-                              : 'Crear actividad',
-                          loading: _guardando,
-                          onPressed: (_guardando || !hayRed) ? null : _guardar,
-                        ),
-                      ],
                     ],
                   ),
                 ),
               ),
             ),
-    );
-  }
-}
-
-class _HerenciaBanner extends StatelessWidget {
-  const _HerenciaBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.tintNavy,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: const Text(
-        'Estos datos vienen del evento ligado y cambian con él. '
-        'Para actualizarlos, edita el evento de registro.',
-        style: TextStyle(
-          fontSize: 13,
-          height: 1.4,
-          color: AppColors.textSecondary,
-        ),
-      ),
-    );
-  }
-}
-
-class _FieldLabel extends StatelessWidget {
-  const _FieldLabel(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-        color: AppColors.textSecondary,
-      ),
     );
   }
 }

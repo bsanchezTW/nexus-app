@@ -218,7 +218,14 @@ Future<bool> confirmDialog(
 enum FormExitAction { stay, discard, save }
 
 /// Crear: al ir atrás, ¿descartar lo que se estaba creando?
-Future<bool> confirmDiscardCreate(BuildContext context) {
+///
+/// Con [hayDatos] en `false` (formulario todavía vacío) no hay nada que
+/// perder: se sale sin preguntar.
+Future<bool> confirmDiscardCreate(
+  BuildContext context, {
+  bool hayDatos = true,
+}) {
+  if (!hayDatos) return Future.value(true);
   return confirmDialog(
     context,
     title: '¿Descartar?',
@@ -263,9 +270,12 @@ Future<bool> handleFormExit({
   required bool isCreate,
   bool isDirty = false,
   bool readOnly = false,
+  bool createHasInput = true,
   Future<void> Function()? save,
 }) async {
-  if (isCreate) return confirmDiscardCreate(context);
+  if (isCreate) {
+    return confirmDiscardCreate(context, hayDatos: createHasInput);
+  }
   if (readOnly || !isDirty) return true;
   final action = await confirmSaveEdits(context);
   switch (action) {

@@ -56,7 +56,7 @@ void main() {
 
     expect(
       find.text(
-        'Completa los datos del asistente. Al guardar se enviará el código QR '
+        'Registro en Evento de prueba. Al guardar se envía el código QR '
         'al correo indicado.',
       ),
       findsOneWidget,
@@ -72,7 +72,7 @@ void main() {
     final cardTop = tester
         .getRect(
           find.text(
-            'Completa los datos del asistente. Al guardar se enviará el código QR '
+            'Registro en Evento de prueba. Al guardar se envía el código QR '
             'al correo indicado.',
           ),
         )

@@ -3,11 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:transworld_nexus/core/widgets/form_sections.dart';
 import 'package:transworld_nexus/core/constants/app_role.dart';
 import 'package:transworld_nexus/core/network/connectivity_service.dart';
 import 'package:transworld_nexus/core/router/refresh_on_visible.dart';
 import 'package:transworld_nexus/core/router/route_paths.dart';
-import 'package:transworld_nexus/core/widgets/nexus_components.dart';
 import 'package:transworld_nexus/data/models/ocupacion_evento.dart';
 import 'package:transworld_nexus/data/models/evento.dart';
 import 'package:transworld_nexus/data/models/perfil.dart';
@@ -124,10 +124,10 @@ void main() {
       find.byType(TextFormField).first,
       'Nombre actualizado',
     );
-    await tester.ensureVisible(find.byType(PrimaryGradientButton));
+    await tester.ensureVisible(find.byType(FormActionBar));
     await tester.pumpAndSettle();
-    final guardar = tester.widget<PrimaryGradientButton>(
-      find.byType(PrimaryGradientButton),
+    final guardar = tester.widget<FormActionBar>(
+      find.byType(FormActionBar),
     );
     expect(guardar.onPressed, isNotNull);
     guardar.onPressed!();

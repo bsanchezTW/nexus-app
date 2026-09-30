@@ -25,6 +25,20 @@ class SubeventosRepository {
     });
   }
 
+  /// Todos los talleres que el perfil puede ver (RLS recorta por evento).
+  /// La lista de eventos los usa para agruparlos bajo su evento principal.
+  Future<List<Subevento>> listarTodos() {
+    return conErroresRpe(() async {
+      final rows = await _client
+          .from(SupabaseTables.subeventos)
+          .select()
+          .order('dia')
+          .order('hora_inicio')
+          .order('orden');
+      return rows.map(Subevento.fromMap).toList();
+    });
+  }
+
   Future<Subevento> obtener(String id) {
     return conErroresRpe(() async {
       final row = await _client

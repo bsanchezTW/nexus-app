@@ -3,11 +3,23 @@ import 'package:flutter/material.dart';
 import '../../core/constants/duracion_actividad.dart';
 import 'supabase_row_parsers.dart';
 
+enum TipoEvento {
+  evento,
+  taller;
+
+  static TipoEvento desde(Object? valor) {
+    return valor == 'taller' ? TipoEvento.taller : TipoEvento.evento;
+  }
+
+  bool get esTaller => this == TipoEvento.taller;
+}
+
 class Evento {
   const Evento({
     required this.id,
     required this.nombre,
     required this.fecha,
+    this.tipo = TipoEvento.evento,
     this.duracionDias = kDuracionActividadMinDias,
     this.pais,
     this.tematica,
@@ -24,12 +36,12 @@ class Evento {
     this.horaFin,
     this.inscripcionesCierre,
     this.mapaUrl,
-    this.bannerUrl,
   });
 
   final String id;
   final String nombre;
   final DateTime fecha;
+  final TipoEvento tipo;
   final int duracionDias;
   final String? pais;
   final String? tematica;
@@ -46,7 +58,8 @@ class Evento {
   final TimeOfDay? horaFin;
   final DateTime? inscripcionesCierre;
   final String? mapaUrl;
-  final String? bannerUrl;
+
+  bool get esTaller => tipo.esTaller;
 
   bool get esMultiDia => duracionDias > 1;
 
@@ -73,6 +86,7 @@ class Evento {
       id: map['id'] as String,
       nombre: map['nombre'] as String,
       fecha: DateTime.parse(map['fecha'] as String),
+      tipo: TipoEvento.desde(map['tipo']),
       duracionDias: acotarDuracionActividad(
         SupabaseRowParsers.asInt(map['duracion_dias'], fallback: 1),
       ),
@@ -94,7 +108,6 @@ class Evento {
         map['inscripciones_cierre'] as String?,
       ),
       mapaUrl: map['mapa_url'] as String?,
-      bannerUrl: map['banner_url'] as String?,
     );
   }
 
@@ -103,6 +116,7 @@ class Evento {
       'id': id,
       'nombre': nombre,
       'fecha': fecha.toIso8601String(),
+      'tipo': tipo.name,
       'duracion_dias': duracionDias,
       'pais': pais,
       'tematica': tematica,
@@ -119,7 +133,6 @@ class Evento {
       'hora_fin': horaATexto(horaFin),
       'inscripciones_cierre': fechaLocalATexto(inscripcionesCierre),
       'mapa_url': mapaUrl,
-      'banner_url': bannerUrl,
     };
   }
 
@@ -127,6 +140,7 @@ class Evento {
     return {
       'nombre': nombre,
       'fecha': fecha.toIso8601String().split('T').first,
+      'tipo': tipo.name,
       'duracion_dias': duracionDias,
       'pais': pais,
       'tematica': tematica,
@@ -141,7 +155,6 @@ class Evento {
       'hora_fin': horaATexto(horaFin),
       'inscripciones_cierre': fechaLocalATexto(inscripcionesCierre),
       'mapa_url': mapaUrl,
-      'banner_url': bannerUrl,
       if (slug.isNotEmpty) 'slug': slug,
     };
   }
@@ -162,6 +175,7 @@ class Evento {
       id: id,
       nombre: nombre ?? this.nombre,
       fecha: fecha ?? this.fecha,
+      tipo: tipo,
       duracionDias: duracionDias ?? this.duracionDias,
       pais: pais ?? this.pais,
       tematica: tematica ?? this.tematica,
@@ -179,9 +193,33 @@ class Evento {
       horaFin: horaFin,
       inscripcionesCierre: inscripcionesCierre,
       mapaUrl: mapaUrl,
-      bannerUrl: bannerUrl,
     );
   }
+}
+
+final _srcIframe = RegExp(
+  r'''src\s*=\s*["']([^"']+)["']''',
+  caseSensitive: false,
+);
+final _mapaEmbebible = RegExp(
+  r'^https://(www\.google\.com/maps/embed\?|maps\.google\.com/maps\?.*output=embed)',
+);
+
+/// Enlace de Google Maps que la web de eventos puede insertar como mapa.
+///
+/// Misma regla que `embeddableMapUrl` en eventos-web (`domain/maps.js`): la web
+/// solo deja cargar iframes de `www.google.com` y `maps.google.com` (CSP) y lo
+/// muestra en «Cómo llegar» del detalle público (`/eventos/<slug>`).
+///
+/// Acepta el enlace de "Insertar un mapa" o el `<iframe>` completo que copia
+/// Google Maps (se toma su `src`). Devuelve null si está vacío o no sirve para
+/// insertar (p. ej. un enlace corto `maps.app.goo.gl`, que no se puede incrustar).
+String? urlMapaEmbebible(String? texto) {
+  var valor = (texto ?? '').trim();
+  if (valor.isEmpty) return null;
+  final src = _srcIframe.firstMatch(valor);
+  if (src != null) valor = src.group(1)!.replaceAll('&amp;', '&').trim();
+  return _mapaEmbebible.hasMatch(valor) ? valor : null;
 }
 
 TimeOfDay? horaDesdeTexto(String? raw) {

@@ -18,6 +18,9 @@ import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
 import '../../../core/widgets/collapsing_nav.dart';
+import '../../../core/theme/tw_tokens.dart';
+import '../../../core/widgets/form_sections.dart';
+import '../../../core/widgets/tw_components.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
 import '../../../core/widgets/selector_imagen.dart';
@@ -441,11 +444,9 @@ String? _sinVacios(String? valor) {
   return texto.isEmpty ? null : texto;
 }
 
-InputDecoration _decoracionProtegida(String label) {
+InputDecoration _decoracionProtegida() {
   return twReadOnlyDecoration(
-    labelText: label,
-    helperText: 'Solo visible para administradores y organizadores',
-    helperMaxLines: 2,
+    hintText: 'Contacto protegido',
     suffixIcon: const Icon(
       Symbols.lock_rounded,
       size: 18,
@@ -924,6 +925,13 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
             onTap: _guardando ? null : _eliminar,
           ),
       ],
+      bottomBar: puedeEditar && leadActual != null
+          ? FormActionBar(
+              label: 'Guardar cambios',
+              loading: _guardando,
+              onPressed: _guardando ? null : _guardar,
+            )
+          : null,
       body: leadsAsync.when(
         loading: () => const LoadingView(),
         error: (_, _) => ErrorView(
@@ -958,7 +966,13 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
               : fotoGuardada;
 
           return SingleChildScrollView(
-            padding: AppSpacing.form,
+            padding: const EdgeInsets.fromLTRB(
+              TwSpacing.screenH,
+              2,
+              TwSpacing.screenH,
+              28,
+            ),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             child: Form(
               key: _formKey,
               child: Column(
@@ -1003,89 +1017,136 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
                   ],
                   if ((lead.vendedorNombre ?? '').isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    Text(
-                      'Capturado por ${lead.vendedorNombre}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Text(
+                        'Capturado por ${lead.vendedorNombre}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                     ),
                   ],
-                  const SizedBox(height: AppSpacing.lg),
-                  TextFormField(
-                    controller: _empresaController,
-                    enabled: editable,
-                    decoration: const InputDecoration(labelText: 'Empresa'),
-                  ),
-                  AppSpacing.field,
-                  TextFormField(
-                    controller: _cargoController,
-                    enabled: editable,
-                    decoration: const InputDecoration(labelText: 'Cargo'),
-                  ),
-                  AppSpacing.field,
-                  if (puedeVerContacto)
-                    CampoTelefonoInternacional(
-                      controller: _telefonoController,
-                      pais: _paisTelefono,
-                      onPaisChanged: (pais) =>
-                          setState(() => _paisTelefono = pais),
-                      enabled: editable,
-                      requerido: false,
-                    )
-                  else
-                    TextFormField(
-                      controller: _telefonoController,
-                      enabled: editable,
-                      readOnly: true,
-                      keyboardType: TextInputType.phone,
-                      decoration: _decoracionProtegida('Teléfono'),
-                    ),
-                  AppSpacing.field,
-                  TextFormField(
-                    controller: _emailController,
-                    enabled: editable,
-                    readOnly: !puedeVerContacto,
-                    keyboardType: TextInputType.emailAddress,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    inputFormatters: const [LowerCaseTextFormatter()],
-                    decoration: puedeVerContacto
-                        ? const InputDecoration(labelText: 'Email')
-                        : _decoracionProtegida('Email'),
-                    validator: puedeVerContacto ? validarEmailRegistro : null,
-                  ),
-                  AppSpacing.field,
-                  TextFormField(
-                    controller: _descripcionController,
-                    enabled: editable,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      labelText: 'Descripción',
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                  if (puedeEditar) ...[
-                    const SizedBox(height: AppSpacing.xl),
-                    PrimaryGradientButton(
-                      label: 'Guardar cambios',
-                      loading: _guardando,
-                      onPressed: _guardando ? null : _guardar,
-                    ),
-                  ],
-                  const SizedBox(height: AppSpacing.lg),
-                  OutlinedButton.icon(
-                    onPressed: esPendiente
-                        ? null
-                        : () => irAComentariosLead(
-                            context,
-                            ref,
-                            eventoId: widget.eventoId,
-                            leadId: widget.leadId,
-                            desdeEvento: widget.desdeEvento,
+                  const SizedBox(height: FormSection.gap),
+                  FormSection(
+                    icon: Symbols.business_center_rounded,
+                    title: 'Empresa',
+                    children: [
+                      FormLabeledField(
+                        label: 'Empresa',
+                        child: TextFormField(
+                          controller: _empresaController,
+                          enabled: editable,
+                          decoration: const InputDecoration(
+                            hintText: 'Ej. Transworld',
                           ),
-                    icon: const Icon(Symbols.chat_rounded),
-                    label: const Text('Comentarios'),
+                        ),
+                      ),
+                      FormLabeledField(
+                        label: 'Cargo',
+                        opcional: true,
+                        child: TextFormField(
+                          controller: _cargoController,
+                          enabled: editable,
+                          decoration: const InputDecoration(
+                            hintText: 'Ej. Gerente comercial',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: FormSection.gap),
+                  FormSection(
+                    icon: Symbols.contact_phone_rounded,
+                    title: 'Contacto',
+                    subtitle: puedeVerContacto
+                        ? null
+                        : 'Solo visible para administradores y organizadores.',
+                    children: [
+                      FormLabeledField(
+                        label: 'Teléfono',
+                        opcional: puedeVerContacto,
+                        child: puedeVerContacto
+                            ? CampoTelefonoInternacional(
+                                controller: _telefonoController,
+                                pais: _paisTelefono,
+                                onPaisChanged: (pais) =>
+                                    setState(() => _paisTelefono = pais),
+                                enabled: editable,
+                                requerido: false,
+                                labelText: null,
+                              )
+                            : TextFormField(
+                                controller: _telefonoController,
+                                enabled: editable,
+                                readOnly: true,
+                                keyboardType: TextInputType.phone,
+                                decoration: _decoracionProtegida(),
+                              ),
+                      ),
+                      FormLabeledField(
+                        label: 'Correo',
+                        child: TextFormField(
+                          controller: _emailController,
+                          enabled: editable,
+                          readOnly: !puedeVerContacto,
+                          keyboardType: TextInputType.emailAddress,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          inputFormatters: const [LowerCaseTextFormatter()],
+                          decoration: puedeVerContacto
+                              ? const InputDecoration(
+                                  hintText: 'correo@empresa.com',
+                                )
+                              : _decoracionProtegida(),
+                          validator: puedeVerContacto
+                              ? validarEmailRegistro
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: FormSection.gap),
+                  FormSection(
+                    icon: Symbols.sticky_note_2_rounded,
+                    title: 'Notas',
+                    children: [
+                      FormLabeledField(
+                        label: 'Descripción',
+                        opcional: true,
+                        child: TextFormField(
+                          controller: _descripcionController,
+                          enabled: editable,
+                          minLines: 3,
+                          maxLines: 8,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: const InputDecoration(
+                            hintText: 'Qué le interesa, próximos pasos…',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: FormSection.gap),
+                  Opacity(
+                    opacity: esPendiente ? 0.5 : 1,
+                    child: TwActionTile(
+                      icon: Symbols.chat_rounded,
+                      title: 'Comentarios',
+                      subtitle: esPendiente
+                          ? 'Disponible cuando el lead se sincronice'
+                          : 'Seguimiento del equipo sobre este lead',
+                      onTap: esPendiente
+                          ? () {}
+                          : () => irAComentariosLead(
+                              context,
+                              ref,
+                              eventoId: widget.eventoId,
+                              leadId: widget.leadId,
+                              desdeEvento: widget.desdeEvento,
+                            ),
+                    ),
                   ),
                 ],
               ),

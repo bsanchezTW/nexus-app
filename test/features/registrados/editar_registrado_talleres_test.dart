@@ -4,10 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:transworld_nexus/core/widgets/form_sections.dart';
 import 'package:transworld_nexus/core/constants/app_role.dart';
 import 'package:transworld_nexus/core/network/connectivity_service.dart';
 import 'package:transworld_nexus/core/router/route_paths.dart';
-import 'package:transworld_nexus/core/widgets/nexus_components.dart';
 import 'package:transworld_nexus/data/models/evento.dart';
 import 'package:transworld_nexus/data/models/inscripcion_subevento.dart';
 import 'package:transworld_nexus/data/models/ocupacion_evento.dart';
@@ -178,9 +178,9 @@ void main() {
     );
     expect(fila.value, isTrue);
 
-    await tester.ensureVisible(find.byType(PrimaryGradientButton));
+    await tester.ensureVisible(find.byType(FormActionBar));
     tester
-        .widget<PrimaryGradientButton>(find.byType(PrimaryGradientButton))
+        .widget<FormActionBar>(find.byType(FormActionBar))
         .onPressed!();
     await tester.pumpAndSettle();
 
