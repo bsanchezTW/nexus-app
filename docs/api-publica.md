@@ -10,7 +10,7 @@ Ninguna respuesta incluye UUID. Un código de taller es `subeventos.codigo` (6 c
 
 Entrada: `{"p_desde":"2026-01-01","p_hasta":"2026-12-31"}`. Si se omiten, el rango es un año atrás y un año adelante. Más de 800 días responde `RPE_DATOS_INVALIDOS`.
 
-Salida: arreglo ordenado por `fecha_inicio` y `slug`.
+Salida: arreglo ordenado por `fecha_inicio` y `slug`. Una ficha de tipo taller que ya es subevento de un evento no sale aquí: se publica como taller de ese evento.
 
 ```json
 [{
@@ -65,7 +65,7 @@ Salida: los campos del calendario más estos.
 }
 ```
 
-Solo entran talleres visibles y con día de hoy en adelante, ordenados por día, hora y orden. `disponibles` es `null` si el cupo es ilimitado y nunca baja de 0. Si el slug no existe, PostgREST responde 400 con `message` `RPE_EVENTO_NO_ENCONTRADO`.
+Entran todos los talleres visibles, también los ya realizados (para mostrar el programa de eventos pasados), ordenados por día, hora y orden. Solo se pueden inscribir los de hoy en adelante. `disponibles` es `null` si el cupo es ilimitado y nunca baja de 0. Si el slug no existe, PostgREST responde 400 con `message` `RPE_EVENTO_NO_ENCONTRADO`.
 
 ## `rpe_publico_registrar`
 
@@ -93,13 +93,13 @@ Si se escribe:
 {
   "ok": true,
   "resultado": "inscrito",
-  "agregados": ["a7k2mq"],
-  "ya_inscrito_en": ["b8m3np"],
+  "agregados": ["a7k2mq", "b8m3np"],
+  "ya_inscrito_en": [],
   "envio": "programado"
 }
 ```
 
-`resultado` también puede ser `actualizado` o `sin_cambios`. `envio` puede ser `programado` o `limitado`.
+`envio` puede ser `programado` o `limitado`.
 
 Si no se escribe nada:
 
@@ -111,14 +111,13 @@ Si no se escribe nada:
 }
 ```
 
-`motivo` del rechazo general: `registro_cerrado`, `sin_cupo_evento` o `subeventos_rechazados`. Motivo de cada taller: `sin_cupo`, `superpuesto`, `superpuesto_con_inscripcion`, `no_disponible` o `no_existe`.
+`motivo` del rechazo general: `registro_cerrado`, `ya_inscrito`, `sin_cupo_evento` o `subeventos_rechazados`. Motivo de cada taller: `sin_cupo`, `superpuesto`, `superpuesto_con_inscripcion`, `no_disponible` o `no_existe`.
 
 Reglas:
 
-1. El mismo email en el mismo evento suma talleres. No pisa nombre, empresa ni teléfono.
+1. Si el email ya está inscrito en el evento responde `ya_inscrito` sin escribir ni reenviar nada. Modificar una inscripción será un flujo aparte (enlace por correo).
 2. El público no puede forzar cupo ni saltar un horario que se solapa.
 3. Como máximo 20 códigos de taller. Los repetidos se ignoran.
-4. `resultado` dice si ese email ya estaba inscrito.
 
 Errores que se lanzan (no van en `ok: false`): `RPE_EVENTO_NO_ENCONTRADO` y `RPE_DATOS_INVALIDOS`. El detalle de datos inválidos es JSON `{campo, regla}`. Cualquier otro error se muestra como fallo genérico.
 

@@ -5175,6 +5175,8 @@ BEGIN
     FROM public.eventos e
     WHERE e.fecha <= v_hasta
       AND public.rpe_fecha_termino_evento(e.fecha, e.duracion_dias) >= v_desde
+      -- Ficha de taller agrupada en un evento: se publica como taller de ese evento.
+      AND NOT EXISTS (SELECT 1 FROM public.subeventos s WHERE s.evento_origen_id = e.id)
   ) q;
   RETURN v_out;
 END;
@@ -5261,8 +5263,7 @@ BEGIN
   INTO v_subs
   FROM public.subeventos s
   WHERE s.evento_id = v_evento.id
-    AND s.visible_publico
-    AND s.dia >= v_hoy;
+    AND s.visible_publico;
 
   RETURN v_base || jsonb_build_object('subeventos', v_subs);
 END;
@@ -5310,6 +5311,15 @@ BEGIN
 
   PERFORM set_config('rpe.pais_evento', v_evento.pais, true);
   v_datos := public.rpe_validar_datos_asistente(p_datos, false);
+
+  -- Correo ya inscrito en el evento: no se escribe ni se reenvía nada. La web avisa y ofrece
+  -- modificar la inscripción con un enlace por correo (flujo aparte).
+  IF EXISTS (
+    SELECT 1 FROM public.registrados r
+    WHERE r.evento_id = v_evento.id AND r.email = v_datos->>'email'
+  ) THEN
+    RETURN jsonb_build_object('ok', false, 'motivo', 'ya_inscrito', 'rechazados', '[]'::jsonb);
+  END IF;
 
   SELECT COALESCE(array_agg(DISTINCT c), '{}'::text[])
   INTO v_codigos
@@ -6318,6 +6328,8 @@ BEGIN
     FROM public.eventos e
     WHERE e.fecha <= v_hasta
       AND public.rpe_fecha_termino_evento(e.fecha, e.duracion_dias) >= v_desde
+      -- Ficha de taller agrupada en un evento: se publica como taller de ese evento.
+      AND NOT EXISTS (SELECT 1 FROM public.subeventos s WHERE s.evento_origen_id = e.id)
   ) q;
   RETURN v_out;
 END;
@@ -6404,8 +6416,7 @@ BEGIN
   INTO v_subs
   FROM public.subeventos s
   WHERE s.evento_id = v_evento.id
-    AND s.visible_publico
-    AND s.dia >= v_hoy;
+    AND s.visible_publico;
 
   RETURN v_base || jsonb_build_object('subeventos', v_subs);
 END;
@@ -6453,6 +6464,15 @@ BEGIN
 
   PERFORM set_config('rpe.pais_evento', v_evento.pais, true);
   v_datos := public.rpe_validar_datos_asistente(p_datos, false);
+
+  -- Correo ya inscrito en el evento: no se escribe ni se reenvía nada. La web avisa y ofrece
+  -- modificar la inscripción con un enlace por correo (flujo aparte).
+  IF EXISTS (
+    SELECT 1 FROM public.registrados r
+    WHERE r.evento_id = v_evento.id AND r.email = v_datos->>'email'
+  ) THEN
+    RETURN jsonb_build_object('ok', false, 'motivo', 'ya_inscrito', 'rechazados', '[]'::jsonb);
+  END IF;
 
   SELECT COALESCE(array_agg(DISTINCT c), '{}'::text[])
   INTO v_codigos
@@ -6588,3 +6608,50 @@ $$;
 
 REVOKE ALL ON FUNCTION public.rpe_validar_datos_asistente(jsonb, boolean, boolean) FROM PUBLIC, anon, authenticated;
 
+CREATE OR REPLACE FUNCTION public.rpe_eventos_tipo_con_talleres()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF NEW.tipo = 'taller' AND OLD.tipo IS DISTINCT FROM 'taller'
+     AND EXISTS (SELECT 1 FROM public.subeventos s WHERE s.evento_id = NEW.id) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'RPE_EVENTO_CON_TALLERES',
+      HINT = 'Este evento tiene talleres: quítalos antes de convertirlo en taller.';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_eventos_tipo_con_talleres ON public.eventos;
+CREATE TRIGGER trg_eventos_tipo_con_talleres
+  BEFORE UPDATE OF tipo ON public.eventos
+  FOR EACH ROW EXECUTE FUNCTION public.rpe_eventos_tipo_con_talleres();
+
+CREATE OR REPLACE FUNCTION public.rpe_subeventos_en_evento_principal()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.eventos e WHERE e.id = NEW.evento_id AND e.tipo = 'taller') THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'RPE_TALLER_SIN_TALLERES',
+      HINT = 'Un taller no puede tener talleres propios: agrégalo a un evento.';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_subeventos_en_evento_principal ON public.subeventos;
+CREATE TRIGGER trg_subeventos_en_evento_principal
+  BEFORE INSERT OR UPDATE OF evento_id ON public.subeventos
+  FOR EACH ROW EXECUTE FUNCTION public.rpe_subeventos_en_evento_principal();
+
+REVOKE ALL ON FUNCTION public.rpe_eventos_tipo_con_talleres() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rpe_subeventos_en_evento_principal() FROM PUBLIC, anon, authenticated;

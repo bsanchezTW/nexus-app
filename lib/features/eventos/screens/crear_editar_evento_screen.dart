@@ -27,6 +27,7 @@ import '../../../data/offline/offline_cache_tables.dart';
 import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/eventos_repository.dart';
 import '../../../data/repositories/storage_repository.dart';
+import '../../../data/repositories/subeventos_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../providers/eventos_providers.dart';
 import '../../subeventos/providers/subeventos_providers.dart';
@@ -243,14 +244,15 @@ class _CrearEditarEventoFormState
     if (tipo == _tipo) return;
     if (tipo.esTaller && widget.eventoId != null) {
       try {
-        final talleres = await ref.read(
-          subeventosPorEventoProvider(widget.eventoId!).future,
-        );
+        // Del servidor, no de la caché: una copia vieja sin talleres dejaba pasar el cambio.
+        final talleres = await ref
+            .read(subeventosRepositoryProvider)
+            .listarPorEvento(widget.eventoId!);
         if (!mounted) return;
         if (talleres.isNotEmpty) {
           showAppSnackBar(
             context,
-            'Quita los subeventos antes de marcarlo como taller.',
+            'Este evento tiene talleres: quítalos antes de convertirlo en taller.',
             isError: true,
           );
           return;
@@ -490,6 +492,14 @@ class _CrearEditarEventoFormState
   }
 
   Widget _seccionTipo(bool editable) {
+    // Un evento con talleres no puede pasar a taller (la base también lo impide).
+    final talleres = widget.eventoId == null || _tipo.esTaller
+        ? 0
+        : ref
+                  .watch(subeventosPorEventoProvider(widget.eventoId!))
+                  .valueOrNull
+                  ?.length ??
+              0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -497,8 +507,8 @@ class _CrearEditarEventoFormState
         FormChoiceCards<TipoEvento>(
           value: _tipo,
           onChanged: editable ? _cambiarTipo : null,
-          choices: const [
-            FormChoice(
+          choices: [
+            const FormChoice(
               value: TipoEvento.evento,
               icon: Symbols.event_rounded,
               title: 'Evento',
@@ -508,7 +518,10 @@ class _CrearEditarEventoFormState
               value: TipoEvento.taller,
               icon: Symbols.co_present_rounded,
               title: 'Taller',
-              description: 'Actividad que luego se suma a un evento.',
+              enabled: talleres == 0,
+              description: talleres == 0
+                  ? 'Actividad que luego se suma a un evento.'
+                  : 'No disponible: este evento tiene ${talleres == 1 ? '1 taller' : '$talleres talleres'}.',
             ),
           ],
         ),

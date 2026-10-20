@@ -200,7 +200,11 @@ class FormFieldRow extends StatelessWidget {
         if (constraints.maxWidth < minWidth) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [left, const SizedBox(height: FormSection.fieldGap), right],
+            children: [
+              left,
+              const SizedBox(height: FormSection.fieldGap),
+              right,
+            ],
           );
         }
         return Row(
@@ -223,12 +227,16 @@ class FormChoice<T> {
     required this.icon,
     required this.title,
     required this.description,
+    this.enabled = true,
   });
 
   final T value;
   final IconData icon;
   final String title;
   final String description;
+
+  /// `false` la muestra atenuada y sin tocar; la descripción explica por qué.
+  final bool enabled;
 }
 
 /// Elección entre pocas opciones que necesitan explicarse (p. ej. evento
@@ -264,9 +272,10 @@ class FormChoiceCards<T> extends StatelessWidget {
 
   Widget _tarjeta(FormChoice<T> opcion) {
     final elegida = opcion.value == value;
-    final habilitada = onChanged != null;
+    final habilitada = onChanged != null && opcion.enabled;
     return Semantics(
       button: true,
+      enabled: habilitada,
       selected: elegida,
       label: opcion.title,
       child: TwPressable(
