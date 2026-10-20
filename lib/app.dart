@@ -21,6 +21,7 @@ import 'features/auth/providers/auth_providers.dart';
 import 'features/auth/screens/splash_screen.dart';
 import 'features/notificaciones/providers/notificaciones_providers.dart';
 import 'features/notificaciones/services/push_notification_service.dart';
+import 'features/sincronizacion/providers/sincronizacion_en_vivo_provider.dart';
 import 'features/updates/widgets/windows_update_gate.dart';
 
 /// Router mínimo del splash de bootstrap.
@@ -108,6 +109,7 @@ class _ReadyApp extends ConsumerWidget {
     ref.watch(syncCoordinatorInitializerProvider);
     ref.watch(snapshotAutoStartProvider);
     ref.watch(notificacionesRealtimeSubscriptionProvider);
+    ref.watch(sincronizacionEnVivoProvider);
     ref.watch(pushNotificationsBootstrapProvider);
 
     final router = ref.watch(appRouterProvider);

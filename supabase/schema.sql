@@ -3012,6 +3012,31 @@ BEGIN
 END;
 $$;
 
+-- Sincronización en vivo de la app (sincronizacionEnVivoProvider): eventos,
+-- actividades de captura, asignaciones y leads. RLS de SELECT acota qué
+-- cambios recibe cada suscriptor.
+DO $$
+DECLARE
+  v_tabla text;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    RETURN;
+  END IF;
+
+  FOREACH v_tabla IN ARRAY ARRAY['eventos', 'eventos_leads', 'usuarios_eventos', 'leads']
+  LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = v_tabla
+    ) THEN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', v_tabla);
+    END IF;
+  END LOOP;
+END;
+$$;
+
 -- ----------------------------------------------------------------
 -- 6. Storage buckets (ejecutar una vez; el dashboard de Supabase también
 --    permite crearlos manualmente). Se listan acá para que quede

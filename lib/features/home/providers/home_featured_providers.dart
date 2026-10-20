@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../data/models/evento.dart';
+import '../../../data/models/evento_lead.dart';
 import '../../../data/offline/offline_cache_tables.dart';
 import '../../../data/offline/offline_read_cache.dart';
 
@@ -20,27 +22,47 @@ import 'home_dashboard_providers.dart';
 /// consultas encadenadas y sin red no hay forma de rehacerlas, así que el
 /// slider se serviría vacío justo en la pantalla de entrada.
 ///
-/// Con copia en disco el carrusel se pinta al instante y el ensamblado va por
-/// detrás. Antes ese ensamblado tenía 20 s de presupuesto **antes** de pintar:
-/// abrir el home costaba la cadena completa de consultas incluso con la caché
-/// llena, y sin red se esperaba el timeout entero para acabar mostrando
-/// exactamente lo que ya estaba guardado.
+/// Las dependencias (fijados, catálogo, actividades) se resuelven aquí, en el
+/// build, y la consulta al servidor solo recibe valores y repositorios. Antes
+/// la consulta hacía `ref.watch` por su cuenta: si el provider se reconstruía
+/// mientras corría —lo normal al abrir la app, cuando el catálogo cambia— usaba
+/// un `ref` ya destruido, fallaba en silencio y el carrusel quedaba congelado
+/// en la copia del disco ("Todo tranquilo por aquí" con eventos en curso).
 final homeFeaturedItemsProvider =
     FutureProvider.autoDispose<List<HomeFeaturedItem>>((ref) async {
+      ref.watch(authStateChangesProvider);
+      final perfil = await ref.watch(currentPerfilProvider.future);
+      if (perfil == null) return const [];
+
+      // Dependencias para refrescar al fijar/desfijar.
+      await ref.watch(eventosFijadosProvider.future);
+      await ref.watch(campanasFijadasProvider.future);
+      final dashboard = await ref.watch(homeDashboardProvider.future);
+      final campanas = await ref.watch(eventosLeadsListProvider.future);
+      final repos = _ReposDestacados(
+        fijados: ref.watch(fijadosRepositoryProvider),
+        eventos: ref.watch(eventosRepositoryProvider),
+        campanas: ref.watch(eventosLeadsRepositoryProvider),
+        registrados: ref.watch(registradosRepositoryProvider),
+        leads: ref.watch(leadsRepositoryProvider),
+      );
+
       final items = await leerCacheFirstConRef(
         ref: ref,
         tabla: OfflineCacheTables.homeDestacados,
-        desdeServidor: () => _construirDestacados(ref),
+        desdeServidor: () => _construirDestacados(
+          repos: repos,
+          proximoEvento: dashboard.proximoEvento,
+          campanas: campanas,
+        ),
         aFila: (item) => item.toCacheMap(),
         desdeFila: HomeFeaturedItem.fromCacheMap,
       );
-      final perfil = await ref.watch(currentPerfilProvider.future);
-      if (perfil == null) return const [];
       if (!perfil.requiresEventAssignment) return items;
 
-      final campanasAutorizadas = (await ref.watch(
-        eventosLeadsListProvider.future,
-      )).map((actividad) => actividad.id).toSet();
+      final campanasAutorizadas = campanas
+          .map((actividad) => actividad.id)
+          .toSet();
       final visibles = items
           .where(
             (item) =>
@@ -59,59 +81,64 @@ final homeFeaturedItemsProvider =
       return visibles;
     });
 
-Future<List<HomeFeaturedItem>> _construirDestacados(Ref ref) async {
-  ref.watch(authStateChangesProvider);
-  // Dependencias para refrescar al fijar/desfijar.
-  await ref.watch(eventosFijadosProvider.future);
-  await ref.watch(campanasFijadasProvider.future);
+class _ReposDestacados {
+  const _ReposDestacados({
+    required this.fijados,
+    required this.eventos,
+    required this.campanas,
+    required this.registrados,
+    required this.leads,
+  });
 
-  final fijadosRepo = ref.watch(fijadosRepositoryProvider);
-  final eventoIds = await fijadosRepo.listarEventosFijadosOrdenados();
-  final campanaIds = await fijadosRepo.listarCampanasFijadasOrdenadas();
-  final dashboard = await ref.watch(homeDashboardProvider.future);
-  final campanas = await ref.watch(eventosLeadsListProvider.future);
+  final FijadosRepository fijados;
+  final EventosRepository eventos;
+  final EventosLeadsRepository campanas;
+  final RegistradosRepository registrados;
+  final LeadsRepository leads;
+}
+
+/// Ensamblado contra el servidor. No toca `ref`: corre también por detrás,
+/// cuando el provider que la lanzó puede ya no existir.
+Future<List<HomeFeaturedItem>> _construirDestacados({
+  required _ReposDestacados repos,
+  required Evento? proximoEvento,
+  required List<EventoLead> campanas,
+}) async {
+  final (eventoIds, campanaIds) = await (
+    repos.fijados.listarEventosFijadosOrdenados(),
+    repos.fijados.listarCampanasFijadasOrdenadas(),
+  ).wait;
   final proximo = elegirProximoDestacado(
-    evento: dashboard.proximoEvento,
+    evento: proximoEvento,
     actividad: proximaActividadVigente(campanas),
   );
-  final fijados = <HomeFeaturedItem>[];
 
-  if (eventoIds.isNotEmpty || campanaIds.isNotEmpty) {
-    final eventosRepo = ref.watch(eventosRepositoryProvider);
-    final campanasRepo = ref.watch(eventosLeadsRepositoryProvider);
-
-    for (final id in eventoIds) {
-      try {
-        final evento = await eventosRepo.obtenerPorId(id);
-        fijados.add(HomeFeaturedItem.eventoFijado(evento));
-      } catch (_) {
-        // Evento borrado o inaccesible: omitir.
-      }
-    }
-    for (final id in campanaIds) {
-      try {
-        final campana = await campanasRepo.obtenerPorId(id);
-        fijados.add(HomeFeaturedItem.campanaFijada(campana));
-      } catch (_) {
-        // Evento de leads borrado o inaccesible: omitir.
-      }
-    }
-  }
+  // En paralelo y en orden: cada fijado inaccesible (borrado o sin permiso)
+  // se omite sin frenar a los demás.
+  final fijados = (await Future.wait([
+    for (final id in eventoIds)
+      repos.eventos
+          .obtenerPorId(id)
+          .then<HomeFeaturedItem?>(HomeFeaturedItem.eventoFijado)
+          .catchError((Object _) => null),
+    for (final id in campanaIds)
+      repos.campanas
+          .obtenerPorId(id)
+          .then<HomeFeaturedItem?>(HomeFeaturedItem.campanaFijada)
+          .catchError((Object _) => null),
+  ])).whereType<HomeFeaturedItem>().toList();
 
   final items = ensamblarHomeFeaturedItems(fijados: fijados, proximo: proximo);
 
   if (items.isEmpty) return items;
 
-  final registradosRepo = ref.watch(registradosRepositoryProvider);
-  final campanasRepo = ref.watch(eventosLeadsRepositoryProvider);
-  final leadsRepo = ref.watch(leadsRepositoryProvider);
   return Future.wait(
     items.map(
       (item) => _conMetricas(
         item: item,
-        registradosRepo: registradosRepo,
-        campanasRepo: campanasRepo,
-        leadsRepo: leadsRepo,
+        registradosRepo: repos.registrados,
+        campanasRepo: repos.campanas,
+        leadsRepo: repos.leads,
       ),
     ),
   );
@@ -126,7 +153,10 @@ Future<HomeFeaturedItem> _conMetricas({
   try {
     if (item.esActividadCaptura) {
       final resumen = await leadsRepo.obtenerResumenCampana(item.id);
-      return item.copyWith(leads: resumen.total);
+      return item.copyWith(
+        leads: resumen.total,
+        empresas: resumen.empresas,
+      );
     }
 
     final resumen = await registradosRepo.obtenerResumenPorEvento(item.id);

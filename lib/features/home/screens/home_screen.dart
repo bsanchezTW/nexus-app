@@ -173,6 +173,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         displacement: 40,
         onRefresh: () => refrescarLecturas(
           ref,
+          context: context,
           invalidar: () {
             ref.invalidate(homeDashboardProvider);
             ref.invalidate(homeFeaturedItemsProvider);

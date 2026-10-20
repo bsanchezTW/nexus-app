@@ -16,6 +16,7 @@ import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
 import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/require_admin.dart';
+import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../providers/usuarios_providers.dart';
@@ -135,6 +136,7 @@ class _NuevoUsuarioFormState extends ConsumerState<_NuevoUsuarioForm> {
 
       if (mounted) {
         ref.invalidate(usuariosListProvider);
+        exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
         showAppSnackBar(
           context,
           'Usuario creado. Credenciales enviadas por correo.',

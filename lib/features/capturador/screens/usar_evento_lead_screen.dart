@@ -98,6 +98,7 @@ class _UsarEventoLeadScreenState extends ConsumerState<UsarEventoLeadScreen>
               onBack: () => volverAtras(context),
               onRefresh: () => refrescarLecturas(
                 ref,
+                context: context,
                 invalidar: () {
                   ref.invalidate(eventoLeadByIdProvider(widget.eventoId));
                   ref.invalidate(leadsResumenRemotoProvider(widget.eventoId));

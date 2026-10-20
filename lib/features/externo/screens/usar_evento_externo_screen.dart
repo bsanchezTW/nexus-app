@@ -297,6 +297,7 @@ class _UsarEventoExternoScreenState
                   displacement: 40,
                   onRefresh: () => refrescarLecturas(
                     ref,
+                    context: context,
                     invalidar: () {
                       ref.invalidate(eventoByIdProvider(widget.eventoId));
                       ref.invalidate(externoDashboardProvider);

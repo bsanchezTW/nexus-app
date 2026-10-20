@@ -143,6 +143,7 @@ class _GestionarUsuariosBodyState extends ConsumerState<_GestionarUsuariosBody>
       title: 'Usuarios',
       onRefresh: () => refrescarLecturas(
         ref,
+        context: context,
         invalidar: () => ref.invalidate(usuariosListProvider),
         pendientes: () => [ref.read(usuariosListProvider.future)],
       ),

@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/network/connectivity_service.dart';
+import '../../core/network/offline_guard.dart';
+import '../../core/widgets/app_widgets.dart';
 import 'sync_queue_service.dart';
 
 /// `eventoId` reservado para las tablas que no se particionan por evento
@@ -21,6 +24,26 @@ const String cacheAmbitoGlobal = '__global__';
 /// petición no falla, simplemente nunca responde. `connectivity_plus` informa
 /// que hay interfaz, así que tampoco hay una señal de "offline" que corte.
 const Duration esperaMaximaServidorPorDefecto = Duration(seconds: 5);
+
+/// Presupuesto de una revalidación en segundo plano. No bloquea la UI, así que
+/// puede esperar mucho más que [esperaMaximaServidorPorDefecto]: con 5 s una
+/// red lenta descartaba siempre la respuesta y la pantalla quedaba congelada
+/// en la copia del disco sin avisar.
+const Duration esperaMaximaRevalidacion = Duration(seconds: 30);
+
+/// Último lector vivo de una entrada (`tabla:evento`). Una revalidación puede
+/// terminar después de que el provider que la lanzó se reconstruyera; el aviso
+/// tiene que llegarle al lector actual, no al que ya no existe.
+class _Lector {
+  _Lector(this.revision, this.onActualizado);
+
+  final int revision;
+  final void Function()? onActualizado;
+
+  /// Está esperando en línea la respuesta del servidor y leerá el disco él
+  /// mismo al terminar: avisarle sería una reconstrucción de más.
+  bool esperando = false;
+}
 
 const String _prefijoV3 = 'offline_read_cache_v3';
 const String _prefijoV2 = 'offline_read_cache_v2';
@@ -58,6 +81,24 @@ class OfflineReadCache {
   /// llega con esa revisión ya está viendo el disco fresco y no vuelve a
   /// consultar (ver [leerCacheFirst]).
   final Map<String, int> _revisionAutoRefresco = <String, int>{};
+
+  final Map<String, _Lector> _lectores = <String, _Lector>{};
+
+  /// Época de servidor en la que cada entrada se confirmó contra Supabase.
+  /// Mientras no alcance la época vigente, la lectura espera al servidor
+  /// antes de servir el disco (ver [leerCacheFirst]).
+  final Map<String, int> _epocaConfirmada = <String, int>{};
+
+  /// Entradas cuyo disco cambió y cuyo lector todavía no se enteró.
+  final Set<String> _cambiosSinEntregar = <String>{};
+
+  /// Revalidaciones que fallaron por red desde la última consulta.
+  final Map<String, Object> _fallos = <String, Object>{};
+
+  /// Sube con cada parche local de una entrada. Una consulta lanzada antes del
+  /// parche descarta su respuesta en vez de pisar la mutación.
+  final Map<String, int> _generaciones = <String, int>{};
+  final Map<String, int> _generacionEnVuelo = <String, int>{};
 
   String? get _owner {
     final owner = ownerId?.trim();
@@ -125,23 +166,28 @@ class OfflineReadCache {
     return _respaldo(tabla, cacheAmbitoGlobal, desdeFila);
   }
 
-  /// Sirve la copia local **sin esperar al servidor** y revalida por detrás.
+  /// Lectura de la UI: copia local con el servidor como autoridad.
   ///
-  /// Es el camino de lectura de la UI: con una copia en disco la pantalla se
-  /// pinta al instante —igual con red que sin ella— y el servidor solo decide
-  /// si después hay que cambiar algún dato. Esperar la respuesta antes de
-  /// pintar era lo que dejaba el home en blanco varios segundos y volvía
-  /// eterno el modo offline, porque un wifi cautivo consume el timeout
-  /// completo aunque el disco ya tuviera todo.
+  /// Con red, la primera lectura de cada entrada en la época vigente
+  /// ([epoca], ver `epocaServidorProvider`) **espera al servidor** hasta
+  /// [esperaMaximaServidor]: al abrir la app, volver a ella, recibir un cambio
+  /// en vivo o tras una mutación, lo que se pinta es lo que hay en Supabase.
+  /// Si el servidor no contesta a tiempo —wifi cautivo de feria— se sirve el
+  /// disco y la consulta sigue por detrás hasta [esperaMaximaRevalidacion];
+  /// cuando llega, el lector vivo se reconstruye con lo nuevo.
+  ///
+  /// Ya confirmada la época, las reconstrucciones sirven el disco al instante
+  /// y revalidan por detrás.
   ///
   /// Sin copia local no hay nada que mostrar y se cae al camino clásico
   /// ([leerConRespaldo]): ahí sí hay que esperar al servidor.
   ///
   /// [revision] y [onActualizado] son el vínculo con el provider que llama:
-  /// cuando la revalidación trae algo distinto se invoca [onActualizado] para
-  /// que se recomponga leyendo el disco ya fresco. Esa recomposición llega con
-  /// la revisión que dejó la propia revalidación, y entonces la consulta se
-  /// omite: si no, cada cambio dispararía la misma petición dos veces.
+  /// cuando la revalidación trae algo distinto se invoca [onActualizado] del
+  /// lector vivo para que se recomponga leyendo el disco ya fresco. Esa
+  /// recomposición llega con la revisión que dejó la propia revalidación, y
+  /// entonces la consulta se omite: si no, cada cambio dispararía la misma
+  /// petición dos veces.
   Future<List<T>> leerCacheFirst<T>({
     required String tabla,
     required String eventoId,
@@ -151,11 +197,16 @@ class OfflineReadCache {
     required bool isOnline,
     Duration esperaMaximaServidor = esperaMaximaServidorPorDefecto,
     int revision = 0,
+    int epoca = 0,
     void Function()? onActualizado,
   }) async {
+    final clave = '$tabla:$eventoId';
+    final lector = _Lector(revision, onActualizado);
+    _lectores[clave] = lector;
+
     final local = _respaldo(tabla, eventoId, desdeFila);
     if (local == null) {
-      return leerConRespaldo<T>(
+      final frescos = await leerConRespaldo<T>(
         tabla: tabla,
         eventoId: eventoId,
         desdeServidor: desdeServidor,
@@ -164,23 +215,43 @@ class OfflineReadCache {
         isOnline: isOnline,
         esperaMaximaServidor: esperaMaximaServidor,
       );
+      if (isOnline) _epocaConfirmada[clave] = epoca;
+      return frescos;
     }
 
-    final clave = '$tabla:$eventoId';
-    if (_revisionAutoRefresco.remove(clave) == revision) return local;
+    final omitir = _revisionAutoRefresco.remove(clave) == revision;
     if (!isOnline) return local;
 
-    _revalidarEnSegundoPlano<T>(
+    // Recomposición que ya trae el disco fresco (revalidación entregada o
+    // parche de una mutación propia): no hay nada que preguntar.
+    if (omitir) return local;
+
+    final confirmada = (_epocaConfirmada[clave] ?? -1) >= epoca;
+
+    final pendiente = _revalidar<T>(
       clave: clave,
       tabla: tabla,
       eventoId: eventoId,
       desdeServidor: desdeServidor,
       aFila: aFila,
-      esperaMaximaServidor: esperaMaximaServidor,
-      revision: revision,
-      onActualizado: onActualizado,
+      epoca: epoca,
     );
-    return local;
+    if (confirmada) return local;
+
+    lector.esperando = true;
+    try {
+      await pendiente.timeout(esperaMaximaServidor);
+    } on TimeoutException {
+      // Sigue en vuelo: al terminar avisa al lector vivo.
+    } finally {
+      lector.esperando = false;
+    }
+    if (identical(_lectores[clave], lector)) {
+      _cambiosSinEntregar.remove(clave);
+    } else {
+      _entregar(clave);
+    }
+    return _respaldo(tabla, eventoId, desdeFila) ?? const [];
   }
 
   /// Variante de [leerCacheFirst] para tablas sin partición por evento.
@@ -192,6 +263,7 @@ class OfflineReadCache {
     required bool isOnline,
     Duration esperaMaximaServidor = esperaMaximaServidorPorDefecto,
     int revision = 0,
+    int epoca = 0,
     void Function()? onActualizado,
   }) {
     return leerCacheFirst<T>(
@@ -203,61 +275,96 @@ class OfflineReadCache {
       isOnline: isOnline,
       esperaMaximaServidor: esperaMaximaServidor,
       revision: revision,
+      epoca: epoca,
       onActualizado: onActualizado,
     );
   }
 
-  void _revalidarEnSegundoPlano<T>({
+  /// Consulta compartida por todos los lectores de una entrada: si ya hay una
+  /// en vuelo, se reutiliza en vez de lanzar otra.
+  Future<void> _revalidar<T>({
     required String clave,
     required String tabla,
     required String eventoId,
     required Future<List<T>> Function() desdeServidor,
     required Map<String, dynamic> Function(T) aFila,
-    required Duration esperaMaximaServidor,
-    required int revision,
-    void Function()? onActualizado,
+    required int epoca,
   }) {
-    if (_revalidaciones.containsKey(clave)) return;
+    final generacion = _generaciones[clave] ?? 0;
+    final enVuelo = _revalidaciones[clave];
+    if (enVuelo != null && _generacionEnVuelo[clave] == generacion) {
+      return enVuelo;
+    }
 
     Future<void> revalidar() async {
       try {
-        final frescos = await desdeServidor().timeout(esperaMaximaServidor);
+        final frescos = await desdeServidor().timeout(
+          esperaMaximaRevalidacion,
+        );
+        // Un parche local llegó mientras la consulta viajaba: su respuesta
+        // puede ser anterior a la mutación y no debe pisarla.
+        if ((_generaciones[clave] ?? 0) != generacion) return;
         final cambio = await _guardarSiCambia(
           tabla,
           eventoId,
           frescos.map(aFila).toList(),
         );
-        if (cambio) _notificar(clave, revision, onActualizado);
+        _epocaConfirmada[clave] = epoca;
+        _fallos.remove(clave);
+        if (cambio) _cambiosSinEntregar.add(clave);
       } catch (error) {
         // Acceso revocado: la copia se va aunque nadie la esté mirando, y el
         // provider tiene que enterarse para dejar de servirla.
         if (_esRevocacionConfirmada(error) ||
             _esCredencialInvalidaConServidor(error, isOnline: true)) {
           await eliminarEvento(tabla, eventoId);
-          _notificar(clave, revision, onActualizado);
-          return;
+          _cambiosSinEntregar.add(clave);
+        } else {
+          _fallos[clave] = error;
+          developer.log(
+            'Revalidación de $tabla/$eventoId descartada: $error',
+            name: 'OfflineReadCache',
+          );
         }
-        developer.log(
-          'Revalidación de $tabla/$eventoId descartada: $error',
-          name: 'OfflineReadCache',
-        );
       } finally {
-        _revalidaciones.remove(clave);
+        // Solo la consulta vigente se retira: una de generación vieja ya fue
+        // reemplazada por otra que sigue en vuelo.
+        if (_generacionEnVuelo[clave] == generacion) {
+          _revalidaciones.remove(clave);
+          _generacionEnVuelo.remove(clave);
+        }
       }
+      _entregar(clave);
     }
 
-    _revalidaciones[clave] = revalidar();
+    final futuro = revalidar();
+    _revalidaciones[clave] = futuro;
+    _generacionEnVuelo[clave] = generacion;
+    return futuro;
+  }
+
+  /// Avisa al lector vivo de [clave] si el disco cambió y no está esperando
+  /// en línea (ese lee el disco por su cuenta al terminar).
+  void _entregar(String clave) {
+    if (!_cambiosSinEntregar.contains(clave)) return;
+    final lector = _lectores[clave];
+    if (lector == null || lector.esperando) return;
+    _cambiosSinEntregar.remove(clave);
+    _revisionAutoRefresco[clave] = lector.revision + 1;
+    lector.onActualizado?.call();
+  }
+
+  /// La próxima lectura de esta entrada vuelve a esperar al servidor, aunque
+  /// la época vigente ya se hubiera confirmado. Para cambios en vivo que solo
+  /// tocan un evento (p. ej. un lead nuevo de otro capturador).
+  void marcarPendienteDeServidor(String tabla, String eventoId) {
+    _epocaConfirmada.remove('$tabla:$eventoId');
   }
 
   /// Tras un write-through local, el rebuild inmediato debe leer disco y no
   /// disparar un GET que todavía puede traer el valor viejo.
   void omitirProximaRevalidacion(String tabla, String eventoId, int revision) {
     _revisionAutoRefresco['$tabla:$eventoId'] = revision;
-  }
-
-  void _notificar(String clave, int revision, void Function()? onActualizado) {
-    _revisionAutoRefresco[clave] = revision + 1;
-    onActualizado?.call();
   }
 
   /// Espera las revalidaciones en vuelo.
@@ -271,6 +378,13 @@ class OfflineReadCache {
       if (_revalidaciones.isEmpty) return;
       await Future.wait(_revalidaciones.values.toList());
     }
+  }
+
+  /// Revalidaciones que fallaron por red desde la última llamada. Las vacía.
+  int consumirFallos() {
+    final total = _fallos.length;
+    _fallos.clear();
+    return total;
   }
 
   /// Entrega lo del servidor y refresca la copia local. Si el servidor falla
@@ -418,6 +532,8 @@ class OfflineReadCache {
       }
     }
     if (!encontro) return false;
+    final clave = '$tabla:$eventoId';
+    _generaciones[clave] = (_generaciones[clave] ?? 0) + 1;
     return _guardarSiCambia(tabla, eventoId, actualizadas);
   }
 
@@ -600,26 +716,65 @@ final offlineReadCacheProvider = Provider<OfflineReadCache>((ref) {
   return cache;
 });
 
-/// Invalida lecturas, espera a que vuelvan a resolver y a que termine la
-/// revalidación en segundo plano. El [RefreshIndicator] tiene que esperar esto:
-/// si solo se hace `invalidate`, el spinner se cierra al instante y la UI no
-/// llega a mostrar datos nuevos.
+
+/// Época de servidor. Cada vez que sube, toda lectura viva vuelve a pedirle
+/// los datos a Supabase y espera su respuesta antes de servir el disco (ver
+/// [OfflineReadCache.leerCacheFirst]). Es lo que mantiene la app 1:1 con la
+/// base mientras hay red: sube al volver a la app, al recuperar conexión, con
+/// cada cambio en vivo y tras cada mutación propia.
+final epocaServidorProvider = StateProvider<int>((ref) => 0);
+
+/// Pide que las lecturas vivas se vuelvan a confirmar contra el servidor.
+void exigirLecturaDelServidor(StateController<int> epoca) => epoca.state++;
+
+/// Recarga del usuario (pull-to-refresh): exige el servidor, espera a que las
+/// lecturas vuelvan a resolver y a que terminen las consultas en vuelo. El
+/// [RefreshIndicator] tiene que esperar esto: si solo se hace `invalidate`, el
+/// spinner se cierra al instante y la UI no llega a mostrar datos nuevos.
+///
+/// Si alguna consulta no pudo llegar al servidor se avisa en [context]: antes
+/// el fallo era silencioso y la lista vieja parecía la verdadera.
 Future<void> refrescarLecturas(
   WidgetRef ref, {
+  BuildContext? context,
   required void Function() invalidar,
   required List<Future<Object?>> Function() pendientes,
 }) async {
+  final cache = ref.read(offlineReadCacheProvider);
+  cache.consumirFallos();
+  exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
   invalidar();
-  await Future.wait(pendientes());
-  await ref.read(offlineReadCacheProvider).esperarRevalidaciones();
+
+  var fallo = false;
+  try {
+    await Future.wait(pendientes());
+  } catch (_) {
+    // La pantalla ya muestra el error de su provider; aquí solo se avisa.
+    fallo = true;
+  }
+  try {
+    await cache.esperarRevalidaciones().timeout(esperaMaximaRevalidacion);
+  } on TimeoutException {
+    fallo = true;
+  }
+  if (cache.consumirFallos() > 0) fallo = true;
+
+  if (fallo && context != null && context.mounted) {
+    showAppSnackBar(
+      context,
+      ref.read(isOnlineProvider)
+          ? 'No se pudo actualizar desde el servidor. Revisa tu conexión.'
+          : kMensajeSinConexion,
+      isError: true,
+    );
+  }
 }
 
 /// Refleja una mutación confirmada en la copia que la lista pinta primero.
 ///
-/// Las lecturas son cache-first: limitarse a invalidar el provider puede
-/// volver a mostrar por un instante —o hasta la próxima revalidación— la fila
-/// anterior. El parche y la revisión hacen visible el cambio inmediatamente;
-/// la siguiente lectura del servidor sigue siendo la autoridad final.
+/// El parche y la revisión hacen visible el cambio inmediatamente; además se
+/// exige el servidor para que todas las lecturas vivas (listas, home,
+/// contadores) queden alineadas con la base sin esperar a otra recarga.
 Future<void> publicarCambioEnLecturaCacheada(
   WidgetRef ref, {
   required String tabla,
@@ -643,6 +798,7 @@ Future<void> publicarCambioEnLecturaCacheada(
     ref.read(cacheRevisionProvider(clave).notifier).state = siguiente;
   }
   invalidar();
+  exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
 }
 
 /// Revisión de una entrada de caché (`tabla:evento`).
@@ -654,14 +810,14 @@ final cacheRevisionProvider = StateProvider.family<int, String>(
   (ref, clave) => 0,
 );
 
-/// Lectura cache-first para providers: entrega el disco al instante y, si hay
-/// red, revalida por detrás. Cuando el servidor trae algo distinto sube la
-/// revisión y el provider se recompone con lo nuevo.
+/// Lectura para providers: con red y época sin confirmar espera al servidor
+/// (con tope); si no, entrega el disco al instante y revalida por detrás.
+/// Cuando el servidor trae algo distinto sube la revisión y el provider se
+/// recompone con lo nuevo.
 ///
 /// No observa [isOnlineProvider]: un emit de conectividad reiniciaría el
-/// [FutureProvider] y la UI pasaría por `loading`. Al recuperar la red el
-/// snapshot y el pull-to-refresh vuelven a leer; si esta lectura ya tiene
-/// red, revalida en segundo plano.
+/// [FutureProvider] y la UI pasaría por `loading`. Al recuperar la red sube la
+/// época (ver `sincronizacionEnVivoProvider`) y las lecturas vuelven a pedir.
 Future<List<T>> leerCacheFirstConRef<T>({
   required Ref ref,
   required String tabla,
@@ -675,6 +831,7 @@ Future<List<T>> leerCacheFirstConRef<T>({
   final isOnline = ref.read(isOnlineProvider);
   final clave = '$tabla:$eventoId';
   final revision = ref.watch(cacheRevisionProvider(clave));
+  final epoca = ref.watch(epocaServidorProvider);
 
   // La revalidación sobrevive al provider (escribe en disco de todos modos),
   // así que puede terminar cuando este ya no existe: notificar entonces sería
@@ -691,6 +848,7 @@ Future<List<T>> leerCacheFirstConRef<T>({
     isOnline: isOnline,
     esperaMaximaServidor: esperaMaximaServidor,
     revision: revision,
+    epoca: epoca,
     onActualizado: () {
       if (!vivo) return;
       ref.read(cacheRevisionProvider(clave).notifier).state++;

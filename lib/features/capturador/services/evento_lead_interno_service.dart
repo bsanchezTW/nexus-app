@@ -61,5 +61,6 @@ Future<EventoLead> obtenerOCrearEventoLeadInterno(
     ),
   );
   ref.invalidate(eventosLeadsListProvider);
+  exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
   return creado;
 }

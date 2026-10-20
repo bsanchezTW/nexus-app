@@ -476,10 +476,20 @@ class _FeaturedSlide extends StatelessWidget {
                   ),
                 ],
                 const Spacer(),
+                // Una actividad de captura no tiene registrados ni
+                // acreditación: sus métricas son las de leads.
                 _HomeStats(
-                  registrados: '${item.registrados}',
-                  acreditados: item.porcentajeAcreditados,
-                  leads: '${item.leads}',
+                  columnas: item.esActividadCaptura
+                      ? [
+                          ('${item.leads}', 'LEADS'),
+                          ('${item.empresas}', 'EMPRESAS'),
+                          ('${item.duracionDias}', 'DÍAS'),
+                        ]
+                      : [
+                          ('${item.registrados}', 'REGISTRADOS'),
+                          (item.porcentajeAcreditados, 'ACREDITADOS'),
+                          ('${item.leads}', 'LEADS'),
+                        ],
                 ),
                 _HeroCta(
                   label: item.ctaLabel,
@@ -517,24 +527,13 @@ class _FeaturedSlide extends StatelessWidget {
 /// Métricas del hero del home: tres columnas de igual ancho separadas por un
 /// hairline al 14 % de blanco.
 class _HomeStats extends StatelessWidget {
-  const _HomeStats({
-    required this.registrados,
-    required this.acreditados,
-    required this.leads,
-  });
+  const _HomeStats({required this.columnas});
 
-  final String registrados;
-  final String acreditados;
-  final String leads;
+  /// (valor, etiqueta) de cada columna.
+  final List<(String, String)> columnas;
 
   @override
   Widget build(BuildContext context) {
-    final columnas = <(String, String)>[
-      (registrados, 'REGISTRADOS'),
-      (acreditados, 'ACREDITADOS'),
-      (leads, 'LEADS'),
-    ];
-
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 16),
       child: IntrinsicHeight(

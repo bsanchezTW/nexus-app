@@ -65,6 +65,62 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('una actividad de captura muestra métricas de leads', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 320,
+              child: ProximoEventoCard(
+                items: [
+                  HomeFeaturedItem(
+                    kind: HomeFeaturedKind.proximaActividad,
+                    id: 'forede',
+                    nombre: 'FOREDE 2026',
+                    fecha: DateTime(2026, 10, 20),
+                    lugar: 'Chile',
+                    leads: 12,
+                    empresas: 7,
+                    duracionDias: 4,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('LEADS'), findsOneWidget);
+    expect(find.text('EMPRESAS'), findsOneWidget);
+    expect(find.text('DÍAS'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+    expect(find.text('7'), findsOneWidget);
+    expect(find.text('4'), findsOneWidget);
+    expect(find.text('REGISTRADOS'), findsNothing);
+    expect(find.text('ACREDITADOS'), findsNothing);
+    expect(find.text('Capturar lead'), findsOneWidget);
+  });
+
+  test('el ítem conserva empresas y duración en la caché', () {
+    final item = HomeFeaturedItem(
+      kind: HomeFeaturedKind.proximaActividad,
+      id: 'forede',
+      nombre: 'FOREDE 2026',
+      fecha: DateTime(2026, 10, 20),
+      empresas: 7,
+      duracionDias: 4,
+    );
+    final copia = HomeFeaturedItem.fromCacheMap(item.toCacheMap());
+    expect(copia.empresas, 7);
+    expect(copia.duracionDias, 4);
+    expect(copia.copyWith(leads: 3).empresas, 7);
+  });
+
   testWidgets(
     'métricas y CTA quedan anclados abajo aunque el título ocupe dos líneas',
     (tester) async {

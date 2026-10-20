@@ -149,6 +149,7 @@ class _ListarEventosLeadsScreenState
       await ref.read(storageCleanupServiceProvider).drenar();
       await ref.read(fijadosRepositoryProvider).desfijarCampana(evento.id);
       ref.invalidate(eventosLeadsListProvider);
+      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       ref.invalidate(campanasFijadasProvider);
       ref.invalidate(homeFeaturedItemsProvider);
       ref.invalidate(eventoLeadByIdProvider(evento.id));
@@ -295,6 +296,7 @@ class _ListarEventosLeadsScreenState
       title: 'Captura de Leads',
       onRefresh: () => refrescarLecturas(
         ref,
+        context: context,
         invalidar: () {
           ref.invalidate(eventosLeadsListProvider);
           ref.invalidate(campanasFijadasProvider);

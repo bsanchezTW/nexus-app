@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -409,6 +410,9 @@ void main() {
       required Future<List<Lead>> Function() desdeServidor,
       required bool isOnline,
       void Function()? onActualizado,
+      int revision = 0,
+      int epoca = 0,
+      Duration esperaMaximaServidor = const Duration(milliseconds: 50),
     }) {
       return cache.leerCacheFirst<Lead>(
         tabla: tabla,
@@ -417,12 +421,29 @@ void main() {
         aFila: (l) => l.toCacheMap(),
         desdeFila: Lead.fromMap,
         isOnline: isOnline,
+        esperaMaximaServidor: esperaMaximaServidor,
+        revision: revision,
+        epoca: epoca,
         onActualizado: onActualizado,
       );
     }
 
+    final renombrado = lead.conCambiosPendientes({
+      'nombre_completo': 'María González Pérez',
+    });
+
+    String? nombreEnDisco(OfflineReadCache cache) => cache
+        .leerLocal(tabla: tabla, eventoId: eventoId, desdeFila: Lead.fromMap)
+        ?.single
+        .nombreCompleto;
+
+    /// Deja la época 0 confirmada sin cambiar el disco.
+    Future<void> confirmarEpoca(OfflineReadCache cache) async {
+      await leerFirst(cache, isOnline: true, desdeServidor: () async => [lead]);
+    }
+
     test(
-      'con copia local y servidor lento resuelve al instante con disco',
+      'con copia local y servidor que no contesta cae al disco tras el tope',
       () async {
         final cache = await nuevaCache();
         await cache.guardar(tabla, eventoId, [lead.toCacheMap()]);
@@ -435,6 +456,162 @@ void main() {
         expect(servido.single.id, lead.id);
       },
     );
+
+    test(
+      'época sin confirmar: espera al servidor y entrega lo fresco sin avisar',
+      () async {
+        final cache = await nuevaCache();
+        await cache.guardar(tabla, eventoId, [lead.toCacheMap()]);
+
+        var avisos = 0;
+        final servido = await leerFirst(
+          cache,
+          isOnline: true,
+          onActualizado: () => avisos++,
+          desdeServidor: () async => [renombrado],
+        );
+
+        expect(servido.single.nombreCompleto, 'María González Pérez');
+        expect(nombreEnDisco(cache), 'María González Pérez');
+        await Future<void>.delayed(Duration.zero);
+        expect(avisos, 0);
+      },
+    );
+
+    test(
+      'época confirmada: sirve el disco y avisa cuando el servidor trae algo',
+      () async {
+        final cache = await nuevaCache();
+        await cache.guardar(tabla, eventoId, [lead.toCacheMap()]);
+        await confirmarEpoca(cache);
+
+        final actualizado = Completer<void>();
+        final servido = await leerFirst(
+          cache,
+          isOnline: true,
+          onActualizado: actualizado.complete,
+          desdeServidor: () async => [renombrado],
+        );
+        expect(servido.single.nombreCompleto, 'María González');
+
+        await actualizado.future.timeout(const Duration(seconds: 2));
+        expect(nombreEnDisco(cache), 'María González Pérez');
+      },
+    );
+
+    test('una época nueva vuelve a exigir el servidor', () async {
+      final cache = await nuevaCache();
+      await cache.guardar(tabla, eventoId, [lead.toCacheMap()]);
+      await confirmarEpoca(cache);
+
+      final servido = await leerFirst(
+        cache,
+        isOnline: true,
+        epoca: 1,
+        desdeServidor: () async => [renombrado],
+      );
+      expect(servido.single.nombreCompleto, 'María González Pérez');
+    });
+
+    test(
+      'servidor lento: tras el tope sirve disco y avisa al llegar la respuesta',
+      () async {
+        final cache = await nuevaCache();
+        await cache.guardar(tabla, eventoId, [lead.toCacheMap()]);
+
+        final respuesta = Completer<List<Lead>>();
+        final actualizado = Completer<void>();
+        final servido = await leerFirst(
+          cache,
+          isOnline: true,
+          onActualizado: actualizado.complete,
+          desdeServidor: () => respuesta.future,
+        );
+        expect(servido.single.nombreCompleto, 'María González');
+
+        respuesta.complete([renombrado]);
+        await actualizado.future.timeout(const Duration(seconds: 2));
+        expect(nombreEnDisco(cache), 'María González Pérez');
+      },
+    );
+
+    test(
+      'si el provider se reconstruye con la consulta en vuelo, el aviso le '
+      'llega al lector nuevo y no al destruido',
+      () async {
+        final cache = await nuevaCache();
+        await cache.guardar(tabla, eventoId, [lead.toCacheMap()]);
+        await confirmarEpoca(cache);
+
+        final respuesta = Completer<List<Lead>>();
+        var consultas = 0;
+        Future<List<Lead>> servidor() {
+          consultas++;
+          return respuesta.future;
+        }
+
+        var avisosViejo = 0;
+        final avisoNuevo = Completer<void>();
+        await leerFirst(
+          cache,
+          isOnline: true,
+          onActualizado: () => avisosViejo++,
+          desdeServidor: servidor,
+        );
+        // Reconstrucción mientras la primera consulta sigue en el aire.
+        await leerFirst(
+          cache,
+          isOnline: true,
+          onActualizado: avisoNuevo.complete,
+          desdeServidor: servidor,
+        );
+
+        respuesta.complete([renombrado]);
+        await avisoNuevo.future.timeout(const Duration(seconds: 2));
+        expect(avisosViejo, 0);
+        expect(consultas, 1, reason: 'la consulta en vuelo se comparte');
+      },
+    );
+
+    test('un parche durante la consulta en vuelo no se pisa', () async {
+      final cache = await nuevaCache();
+      await cache.guardar(tabla, eventoId, [lead.toCacheMap()]);
+      await confirmarEpoca(cache);
+
+      final respuestaVieja = Completer<List<Lead>>();
+      await leerFirst(
+        cache,
+        isOnline: true,
+        desdeServidor: () => respuestaVieja.future,
+      );
+
+      await cache.parchearFila(
+        tabla: tabla,
+        eventoId: eventoId,
+        id: lead.id,
+        cambios: {'nombre_completo': 'Editado en este teléfono'},
+      );
+      respuestaVieja.complete([lead]);
+      await cache.esperarRevalidaciones();
+
+      expect(nombreEnDisco(cache), 'Editado en este teléfono');
+    });
+
+    test('los fallos de red quedan registrados para avisar', () async {
+      final cache = await nuevaCache();
+      await cache.guardar(tabla, eventoId, [lead.toCacheMap()]);
+      await confirmarEpoca(cache);
+
+      await leerFirst(
+        cache,
+        isOnline: true,
+        desdeServidor: () async => throw const SocketException('sin red'),
+      );
+      await cache.esperarRevalidaciones();
+
+      expect(cache.consumirFallos(), 1);
+      expect(cache.consumirFallos(), 0);
+    });
 
     test('offline con copia no llama al servidor', () async {
       final cache = await nuevaCache();
@@ -453,39 +630,6 @@ void main() {
       expect(llamado, isFalse);
     });
 
-    test(
-      'online con copia revalida y notifica cuando hay datos nuevos',
-      () async {
-        final cache = await nuevaCache();
-        await cache.guardar(tabla, eventoId, [lead.toCacheMap()]);
-
-        final actualizado = Completer<void>();
-        final renombrado = lead.conCambiosPendientes({
-          'nombre_completo': 'María González Pérez',
-        });
-
-        final servido = await leerFirst(
-          cache,
-          isOnline: true,
-          onActualizado: actualizado.complete,
-          desdeServidor: () async => [renombrado],
-        );
-        expect(servido.single.nombreCompleto, 'María González');
-
-        await actualizado.future.timeout(const Duration(seconds: 2));
-        expect(
-          cache
-              .leerLocal(
-                tabla: tabla,
-                eventoId: eventoId,
-                desdeFila: Lead.fromMap,
-              )
-              ?.single
-              .nombreCompleto,
-          'María González Pérez',
-        );
-      },
-    );
   });
 
   group('OfflineReadCache.parchearFila', () {

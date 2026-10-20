@@ -324,6 +324,7 @@ class _CrearEditarEventoFormState
       } else {
         await conErroresRpe(() => repo.crear(evento));
         ref.invalidate(eventosListProvider);
+        exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       }
       // Reemplazar la portada sube un UUID nuevo; quitarla también deja el
       // objeto anterior sin referencia. El trigger lo encola y aquí esperamos
@@ -391,6 +392,7 @@ class _CrearEditarEventoFormState
       await ref.read(eventosRepositoryProvider).eliminar(widget.eventoId!);
       await ref.read(storageCleanupServiceProvider).drenar();
       ref.invalidate(eventosListProvider);
+      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       ref.invalidate(eventoByIdProvider(widget.eventoId!));
       if (mounted) context.go(RoutePaths.eventos);
     } on EventoConEventoLeadException catch (e) {

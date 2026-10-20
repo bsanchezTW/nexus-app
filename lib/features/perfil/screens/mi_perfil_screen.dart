@@ -190,6 +190,7 @@ class _MiPerfilBodyState extends ConsumerState<_MiPerfilBody> {
             color: AppColors.primary,
             onRefresh: () => refrescarLecturas(
               ref,
+              context: context,
               invalidar: () {
                 ref.invalidate(currentPerfilProvider);
                 ref.invalidate(miPerfilStatsProvider);

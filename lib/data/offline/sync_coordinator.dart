@@ -9,6 +9,7 @@ import '../repositories/leads_repository.dart';
 import '../repositories/registrados_repository.dart';
 import '../repositories/storage_cleanup_service.dart';
 import '../supabase/supabase_client_provider.dart';
+import 'offline_read_cache.dart';
 import 'sync_queue_service.dart';
 
 /// Punto único donde se registran los [SyncExecutor] de cada dominio y se
@@ -80,6 +81,9 @@ class SyncCoordinator {
             queue.ownerId,
       );
       if (synced > 0) {
+        // Lo subido ya es del servidor: las listas tienen que mostrarlo desde
+        // ahí y no desde la cola, que acaba de vaciarse.
+        exigirLecturaDelServidor(_ref.read(epocaServidorProvider.notifier));
         // Una edición offline puede haber quitado o reemplazado la foto de un
         // lead. El trigger recién la encola cuando el UPDATE llega al servidor.
         await _ref.read(storageCleanupServiceProvider).drenar();

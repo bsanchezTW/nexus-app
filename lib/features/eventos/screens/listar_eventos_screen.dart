@@ -170,6 +170,7 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
       // encolada, acá solo se pide el vaciado.
       await ref.read(storageCleanupServiceProvider).drenar();
       ref.invalidate(eventosListProvider);
+      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       ref.invalidate(eventosFijadosProvider);
       ref.invalidate(homeFeaturedItemsProvider);
       ref.invalidate(eventoByIdProvider(evento.id));
@@ -322,6 +323,7 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
       title: 'Eventos',
       onRefresh: () => refrescarLecturas(
         ref,
+        context: context,
         invalidar: () {
           ref.invalidate(usuarioEventosAutorizadosProvider);
           ref.invalidate(eventosListProvider);

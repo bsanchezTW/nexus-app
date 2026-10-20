@@ -25,6 +25,7 @@ import '../../../data/models/lead_write_result.dart';
 import '../../../data/models/lead_prefill.dart';
 import '../../../data/offline/pending_photo_store.dart';
 import '../../../data/offline/sync_queue_service.dart';
+import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/leads_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../externo/providers/externo_dashboard_provider.dart';
@@ -498,6 +499,7 @@ class _CrearLeadScreenState extends ConsumerState<CrearLeadScreen> {
       }
 
       ref.invalidate(leadsPorEventoProvider(widget.eventoId));
+      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       if (perfil?.isExterno == true) {
         ref.invalidate(externoDashboardProvider);
       }
@@ -563,6 +565,7 @@ class _CrearLeadScreenState extends ConsumerState<CrearLeadScreen> {
                 },
               );
           ref.invalidate(leadsPorEventoProvider(widget.eventoId));
+          exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
           if (mounted) {
             showAppSnackBar(
               context,

@@ -172,6 +172,7 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
               onBack: () => volverAtras(context),
               onRefresh: () => refrescarLecturas(
                 ref,
+                context: context,
                 invalidar: () {
                   ref.invalidate(eventoByIdProvider(widget.eventoId));
                   ref.invalidate(registradosPorEventoProvider(widget.eventoId));

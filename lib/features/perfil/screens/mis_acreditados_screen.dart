@@ -49,6 +49,7 @@ class MisAcreditadosScreen extends ConsumerWidget {
             color: AppColors.primary,
             onRefresh: () => refrescarLecturas(
               ref,
+              context: context,
               invalidar: () => ref.invalidate(misAcreditadosProvider),
               pendientes: () => [ref.read(misAcreditadosProvider.future)],
             ),

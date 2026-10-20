@@ -163,9 +163,19 @@ class _ListaLeadsScreenState extends ConsumerState<ListaLeadsScreen>
     }).toList();
   }
 
-  void _actualizarLeads() {
-    ref.invalidate(leadsPorEventoProvider(widget.eventoId));
-  }
+  /// Recarga real desde el servidor: lista y conteos de la actividad. Antes
+  /// solo invalidaba y el spinner se cerraba sin haber pedido nada.
+  Future<void> _actualizarLeads() => refrescarLecturas(
+    ref,
+    context: context,
+    invalidar: () {
+      ref.invalidate(leadsPorEventoProvider(widget.eventoId));
+      ref.invalidate(leadsResumenRemotoProvider(widget.eventoId));
+    },
+    pendientes: () => [
+      ref.read(leadsPorEventoProvider(widget.eventoId).future),
+    ],
+  );
 
   Widget _buildPinnedControls({required bool canViewAllLeads}) {
     return Column(
@@ -247,7 +257,7 @@ class _ListaLeadsScreenState extends ConsumerState<ListaLeadsScreen>
       pinnedContentHeight: canViewAllLeads ? 112 : 60,
       scrollResetToken: '$_busqueda|$_filtro',
       lockScroll: listaVacia,
-      onRefresh: () async => _actualizarLeads(),
+      onRefresh: _actualizarLeads,
       slivers: [
         SliverToBoxAdapter(
           child: Padding(
@@ -861,6 +871,7 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
       // Las fotos del lead ya no tienen fila que las referencie.
       await ref.read(storageCleanupServiceProvider).drenar();
       ref.invalidate(leadsPorEventoProvider(widget.eventoId));
+      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       if (mounted) {
         volverALista(
           context,

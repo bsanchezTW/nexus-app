@@ -19,6 +19,7 @@ import '../../../core/widgets/tw_components.dart';
 import '../../../data/models/evento.dart';
 import '../../../data/models/ocupacion_evento.dart';
 import '../../../data/models/subevento.dart';
+import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/subeventos_repository.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../providers/subeventos_providers.dart';
@@ -43,6 +44,7 @@ class SubeventosEventoScreen extends StatelessWidget {
 /// ocupación y la lista general (que agrupa talleres bajo su evento).
 void _invalidarTalleres(WidgetRef ref, String eventoId) {
   ref.invalidate(subeventosPorEventoProvider(eventoId));
+  exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
   ref.invalidate(ocupacionEventoProvider(eventoId));
   ref.invalidate(subeventosTodosProvider);
 }

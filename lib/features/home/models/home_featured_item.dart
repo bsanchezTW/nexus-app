@@ -20,6 +20,8 @@ class HomeFeaturedItem {
     this.registrados = 0,
     this.acreditados = 0,
     this.leads = 0,
+    this.empresas = 0,
+    this.duracionDias = 1,
     this.imagenUrl,
   });
 
@@ -31,6 +33,12 @@ class HomeFeaturedItem {
   final int registrados;
   final int acreditados;
   final int leads;
+
+  /// Empresas distintas entre los leads. Solo actividades de captura.
+  final int empresas;
+
+  /// Días que dura la actividad. Solo actividades de captura.
+  final int duracionDias;
   final String? imagenUrl;
 
   bool get tieneImagen => imagenUrl != null && imagenUrl!.isNotEmpty;
@@ -95,6 +103,8 @@ class HomeFeaturedItem {
     'registrados': registrados,
     'acreditados': acreditados,
     'leads': leads,
+    'empresas': empresas,
+    'duracion_dias': duracionDias,
     'imagen_url': imagenUrl,
   };
 
@@ -111,11 +121,18 @@ class HomeFeaturedItem {
       registrados: (map['registrados'] as num?)?.toInt() ?? 0,
       acreditados: (map['acreditados'] as num?)?.toInt() ?? 0,
       leads: (map['leads'] as num?)?.toInt() ?? 0,
+      empresas: (map['empresas'] as num?)?.toInt() ?? 0,
+      duracionDias: (map['duracion_dias'] as num?)?.toInt() ?? 1,
       imagenUrl: map['imagen_url'] as String?,
     );
   }
 
-  HomeFeaturedItem copyWith({int? registrados, int? acreditados, int? leads}) {
+  HomeFeaturedItem copyWith({
+    int? registrados,
+    int? acreditados,
+    int? leads,
+    int? empresas,
+  }) {
     return HomeFeaturedItem(
       kind: kind,
       id: id,
@@ -125,6 +142,8 @@ class HomeFeaturedItem {
       registrados: registrados ?? this.registrados,
       acreditados: acreditados ?? this.acreditados,
       leads: leads ?? this.leads,
+      empresas: empresas ?? this.empresas,
+      duracionDias: duracionDias,
       imagenUrl: imagenUrl,
     );
   }
@@ -158,6 +177,7 @@ class HomeFeaturedItem {
       nombre: campana.nombre,
       fecha: campana.fecha,
       lugar: campana.pais ?? '',
+      duracionDias: campana.duracionDias,
       imagenUrl: campana.imagenUrl,
     );
   }
@@ -169,6 +189,7 @@ class HomeFeaturedItem {
       nombre: campana.nombre,
       fecha: campana.fecha,
       lugar: campana.pais ?? '',
+      duracionDias: campana.duracionDias,
       imagenUrl: campana.imagenUrl,
     );
   }

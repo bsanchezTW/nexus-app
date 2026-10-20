@@ -17,6 +17,7 @@ import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/require_admin.dart';
 import '../../../core/widgets/selector_imagen.dart';
+import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/storage_repository.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -275,6 +276,7 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
 
       if (mounted) {
         ref.invalidate(usuariosListProvider);
+        exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
         ref.invalidate(usuarioPorIdProvider(widget.usuarioId));
         if (esCuentaPropia) {
           ref.invalidate(currentPerfilProvider);
@@ -328,6 +330,7 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
       await ref.read(storageCleanupServiceProvider).drenar();
       if (mounted) {
         ref.invalidate(usuariosListProvider);
+        exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
         showAppSnackBar(
           context,
           eliminado

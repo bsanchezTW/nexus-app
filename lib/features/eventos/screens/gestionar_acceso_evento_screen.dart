@@ -10,6 +10,7 @@ import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/event_back_navigation_guard.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/require_admin.dart';
+import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../usuarios/providers/usuarios_providers.dart';
 import '../providers/acceso_evento_providers.dart';
@@ -66,6 +67,7 @@ class _GestionarAccesoEventoBodyState
           );
       ref.invalidate(usuariosAutorizadosEventoProvider(widget.eventoId));
       ref.invalidate(usuariosListProvider);
+      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       if (!mounted) return;
       showAppSnackBar(context, 'Acceso al evento actualizado.');
       volverAtras(context);

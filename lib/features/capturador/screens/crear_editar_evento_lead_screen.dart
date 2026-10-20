@@ -20,6 +20,7 @@ import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/require_permission.dart';
 import '../../../core/widgets/selector_imagen.dart';
 import '../../../data/models/evento_lead.dart';
+import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/eventos_leads_repository.dart';
 import '../../../data/repositories/storage_cleanup_service.dart';
 import '../../../data/repositories/storage_repository.dart';
@@ -173,6 +174,7 @@ class _CrearEditarEventoLeadFormState
       }
 
       ref.invalidate(eventosLeadsListProvider);
+      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       if (widget.eventoId != null) {
         ref.invalidate(eventoLeadByIdProvider(widget.eventoId!));
       }
@@ -218,6 +220,7 @@ class _CrearEditarEventoLeadFormState
       await ref.read(eventosLeadsRepositoryProvider).eliminar(widget.eventoId!);
       await ref.read(storageCleanupServiceProvider).drenar();
       ref.invalidate(eventosLeadsListProvider);
+      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       ref.invalidate(eventoLeadByIdProvider(widget.eventoId!));
       if (mounted) context.go(RoutePaths.capturador);
     } catch (e) {
