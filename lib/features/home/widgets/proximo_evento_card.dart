@@ -262,8 +262,12 @@ class _ProximoEventoCardState extends State<ProximoEventoCard> {
               ),
             ),
             if (widget.items.length > 1) ...[
-              const SizedBox(height: 8),
-              Padding(
+              const SizedBox(height: 2),
+              // Fila de viñetas de alto fijo: el botón Ordenar no puede
+              // agrandarla, o el aire bajo el carrusel queda mayor que el del
+              // resto del inicio.
+              Container(
+                height: _altoFilaVinetas,
                 padding: EdgeInsets.symmetric(horizontal: settledInset),
                 child: Stack(
                   alignment: Alignment.center,
@@ -297,6 +301,9 @@ class _ProximoEventoCardState extends State<ProximoEventoCard> {
   }
 }
 
+/// Alto de la fila de viñetas (y del botón Ordenar que vive en ella).
+const double _altoFilaVinetas = 24;
+
 /// Acceso a la hoja "Ordenar", discreto junto a las viñetas.
 class _BotonOrdenar extends StatelessWidget {
   const _BotonOrdenar({required this.onTap});
@@ -312,8 +319,8 @@ class _BotonOrdenar extends StatelessWidget {
         onTap: onTap,
         scale: 0.92,
         child: const SizedBox(
-          width: 32,
-          height: 32,
+          width: 40,
+          height: _altoFilaVinetas,
           child: Icon(
             Symbols.swap_vert_rounded,
             size: 18,

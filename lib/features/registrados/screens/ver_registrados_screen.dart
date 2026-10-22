@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -11,12 +12,15 @@ import '../../../core/network/offline_guard.dart';
 import '../../../core/router/refresh_on_visible.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/tw_tokens.dart';
 import '../../../core/utils/mascara_contacto.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/app_modals.dart';
 import '../../../core/widgets/collapsing_nav.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
+import '../../../core/widgets/tw_components.dart';
+import '../../../data/models/envio_qr.dart';
 import '../../../data/models/inscripcion_subevento.dart';
 import '../../../data/models/registrado.dart';
 import '../../../data/models/resultado_envio_qr.dart';
@@ -434,42 +438,20 @@ class _RegistradoTile extends ConsumerWidget {
                           label: 'Sin sync',
                           variant: StatusChipVariant.danger,
                         ),
+                      // Antes eran íconos sueltos pegados a los botones de la
+                      // derecha; ahora son parte de la fila de estado.
+                      if (registrado.emailConfirmacionEnviado ||
+                          registrado.smsConfirmacionEnviado)
+                        _ChipQrEnviado(
+                          email: registrado.emailConfirmacionEnviado,
+                          sms: registrado.smsConfirmacionEnviado,
+                        ),
                     ],
                   ),
                 ],
               ),
             ),
-            if (registrado.emailConfirmacionEnviado ||
-                registrado.smsConfirmacionEnviado)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (registrado.emailConfirmacionEnviado)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 2),
-                      child: Tooltip(
-                        message: 'QR enviado por email',
-                        child: Icon(
-                          Symbols.mark_email_read_rounded,
-                          size: 18,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  if (registrado.smsConfirmacionEnviado)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 2),
-                      child: Tooltip(
-                        message: 'QR enviado por SMS',
-                        child: Icon(
-                          Symbols.sms_rounded,
-                          size: 18,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+            const SizedBox(width: 12),
             // Mismo chip que el botón de acreditar de al lado: antes era un
             // IconButton pelado, con ripple y 48 de alto, y desalineaba la fila.
             Tooltip(
@@ -611,6 +593,56 @@ class _RegistradoTile extends ConsumerWidget {
 /// QR de acreditación de un registrado (codifica `registrados.id`, lo que
 /// lee `AcreditarQrScreen`). Permite enviarlo por email y SMS vía
 /// la Edge Function `enviar-qr`.
+/// "QR enviado" con el canal por el que salió (correo, SMS o ambos).
+class _ChipQrEnviado extends StatelessWidget {
+  const _ChipQrEnviado({required this.email, required this.sms});
+
+  final bool email;
+  final bool sms;
+
+  @override
+  Widget build(BuildContext context) {
+    final canales = [if (email) 'email', if (sms) 'SMS'].join(' y ');
+    return Tooltip(
+      message: 'QR enviado por $canales',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.tintNavy,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (email)
+              const Icon(
+                Symbols.mark_email_read_rounded,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
+            if (email && sms) const SizedBox(width: 3),
+            if (sms)
+              const Icon(
+                Symbols.sms_rounded,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
+            const SizedBox(width: 4),
+            const Text(
+              'QR enviado',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _QrSheet extends ConsumerStatefulWidget {
   const _QrSheet({required this.registrado, required this.eventoId});
 
@@ -902,28 +934,12 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
                 ),
               ],
               const SizedBox(height: 8),
-              const Text('Envíos'),
               FutureBuilder(
                 future: ref
                     .read(enviosQrRepositoryProvider)
                     .listarPorRegistrado(r.id),
-                builder: (context, snapshot) {
-                  final envios = snapshot.data ?? const [];
-                  if (envios.isEmpty) {
-                    return const Text('Sin envíos todavía.');
-                  }
-                  return Column(
-                    children: [
-                      for (final envio in envios)
-                        Text(
-                          '${envio.createdAt ?? ''} · ${envio.canales.join(', ')} · ${envio.estado}',
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                    ],
-                  );
-                },
+                builder: (context, snapshot) =>
+                    _HistorialEnvios(envios: snapshot.data ?? const []),
               ),
               const SizedBox(height: 20),
               PrimaryGradientButton(
@@ -984,6 +1000,155 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Últimos envíos del QR de un asistente, legibles: por qué se envió, cuándo
+/// (hora local) y cómo le fue a cada canal. Antes se mostraba la fila cruda
+/// (`2026-10-22 16:20:05.898704Z · email, sms · completado`).
+class _HistorialEnvios extends StatelessWidget {
+  const _HistorialEnvios({required this.envios});
+
+  final List<EnvioQr> envios;
+
+  static String _fecha(DateTime fecha) {
+    final local = fecha.toLocal();
+    final hora = DateFormat('HH:mm').format(local);
+    return '${local.day} ${mesCortoMayus(local).toLowerCase()} '
+        '${local.year} · $hora';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const TwSectionLabel('Historial de envíos', top: 8),
+        if (envios.isEmpty)
+          const Text(
+            'Todavía no se ha enviado el QR.',
+            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          )
+        else
+          for (final envio in envios)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            envio.etiquetaMotivo,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                          if (envio.createdAt != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              _fecha(envio.createdAt!),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      alignment: WrapAlignment.end,
+                      children: [
+                        for (final canal in envio.canales)
+                          _ChipCanal(
+                            canal: canal,
+                            estado: envio.estadoDe(canal),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+class _ChipCanal extends StatelessWidget {
+  const _ChipCanal({required this.canal, required this.estado});
+
+  final String canal;
+  final EstadoCanalEnvio estado;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icono, fondo, tinta, detalle) = switch (estado) {
+      EstadoCanalEnvio.enviado => (
+        Symbols.check_rounded,
+        AppColors.successTint,
+        AppColors.success,
+        'enviado',
+      ),
+      EstadoCanalEnvio.fallido => (
+        Symbols.close_rounded,
+        AppColors.dangerTint,
+        AppColors.danger,
+        'no se pudo enviar',
+      ),
+      EstadoCanalEnvio.omitido => (
+        Symbols.remove_rounded,
+        AppColors.tintNavy,
+        AppColors.textSecondary,
+        'no se envió',
+      ),
+      EstadoCanalEnvio.enCola => (
+        Symbols.schedule_rounded,
+        AppColors.warningTint,
+        AppColors.warning,
+        'en cola',
+      ),
+    };
+    final nombre = EnvioQr.etiquetaCanal(canal);
+    return Tooltip(
+      message: '$nombre: $detalle',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: fondo,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icono, size: 14, color: tinta),
+            const SizedBox(width: 3),
+            Text(
+              nombre,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: tinta,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

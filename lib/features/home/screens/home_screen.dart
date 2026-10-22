@@ -232,8 +232,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               onOrdenar: () =>
                   showOrdenarCarruselSheet(context, items: featuredItems),
             ),
-            // Con varias tarjetas, las viñetas ya separan del resto.
-            SizedBox(height: featuredItems.length > 1 ? 12 : 24),
+            // Con varias tarjetas, la fila de viñetas (24) es parte del aire:
+            // 2 + 24 + 2 deja ~28 hasta Resumen, como entre las secciones.
+            SizedBox(height: featuredItems.length > 1 ? 2 : 24),
             _HomeColumn(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
