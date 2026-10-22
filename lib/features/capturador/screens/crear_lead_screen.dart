@@ -32,6 +32,7 @@ import '../../externo/providers/externo_dashboard_provider.dart';
 import '../lead_comentario_flujo.dart';
 import '../providers/capturador_providers.dart';
 import '../widgets/foto_lead_identidad.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 enum _CampoVoz { nombre, empresa, cargo, email, descripcion }
 
@@ -396,202 +397,207 @@ class _CrearLeadScreenState extends ConsumerState<CrearLeadScreen> {
     Lead? leadPreparado;
     List<String> fotosPreparadas = const [];
 
-    try {
-      final pendienteFotoId = _leadGuardadoPendienteFotoId;
-      final bytesPendientes = _fotoBytes;
-      if (pendienteFotoId != null && bytesPendientes != null) {
-        try {
-          await ref
-              .read(leadsRepositoryProvider)
-              .adjuntarFotoBytes(pendienteFotoId, bytesPendientes);
-          _leadGuardadoPendienteFotoId = null;
-          if (mounted) {
-            showAppSnackBar(context, 'Lead y foto guardados.');
-            await _finalizarFlujoGuardado();
-          }
-        } catch (_) {
-          if (mounted) {
-            showAppSnackBar(
-              context,
-              'Lead guardado; foto pendiente, reintenta',
-              isError: true,
-            );
-          }
-        }
-        return;
-      }
-
-      if (userId == null || userId.isEmpty) {
-        throw Exception(
-          'No se pudo identificar al usuario capturador. Intenta de nuevo.',
-        );
-      }
-      if (perfil?.isExterno == true) {
-        final eventoReg = widget.eventoRegistroId;
-        final permitidos = _idsPermitidosExterno();
-        if (permitidos == null) {
-          throw Exception(
-            'Aún se están cargando tus eventos autorizados. Intenta de nuevo.',
-          );
-        }
-        if (eventoReg == null || !permitidos.contains(eventoReg)) {
-          throw Exception(
-            'No estás autorizado para capturar leads en este evento.',
-          );
-        }
-      }
-
-      // En web no hay dónde dejar la foto esperando a que vuelva la red, así
-      // que el lead se guarda sin ella y hay que decirlo.
-      final fotoDescartada =
-          _fotoBytes != null &&
-          !isOnline &&
-          !ref.read(pendingPhotoStoreProvider).disponible;
-      final fotos = await _resolverFotos(isOnline: isOnline);
-      fotosPreparadas = fotos;
-
-      final lead = Lead(
-        id: '',
-        eventoId: widget.eventoId,
-        nombreCompleto: _nombreController.text.trim(),
-        empresa: _empresaController.text.trim(),
-        cargo: _cargoController.text.trim().isEmpty
-            ? null
-            : _cargoController.text.trim(),
-        // Un campo bloqueado muestra la máscara: el valor que se guarda es el
-        // que trajo el QR.
-        telefono: _telefonoAGuardar(puedeVerContacto: puedeVerContacto),
-        email: _emailAGuardar(puedeVerContacto: puedeVerContacto),
-        descripcion: _descripcionController.text.trim().isEmpty
-            ? null
-            : _descripcionController.text.trim(),
-        fotosUrls: fotos,
-        perfilId: userId,
-      );
-      leadPreparado = lead;
-
-      LeadWriteResult? result;
-      var fotoPendienteDeSync = false;
-      if (isOnline) {
-        try {
-          result = await ref.read(leadsRepositoryProvider).crear(lead);
-        } on LeadPhotoPendingException catch (error) {
-          result = error.result;
-          await ref
-              .read(syncQueueServiceProvider.notifier)
-              .enqueueUpdate(
-                table: SupabaseTables.leads,
-                entityId: error.result.leadId,
-                changes: {'fotos_urls': error.fotosPendientes},
-              );
-          fotoPendienteDeSync = true;
-        }
-      } else {
-        await ref
-            .read(syncQueueServiceProvider.notifier)
-            .enqueueInsert(
-              table: SupabaseTables.leads,
-              payload: {
-                ...lead.toInsertMap(),
-                '_requested_lead_id': _uuid.v4(),
-              },
-            );
-      }
-
-      ref.invalidate(leadsPorEventoProvider(widget.eventoId));
-      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
-      if (perfil?.isExterno == true) {
-        ref.invalidate(externoDashboardProvider);
-      }
-
-      if (mounted) {
-        if (result?.esDuplicado == true) {
-          final store = ref.read(pendingPhotoStoreProvider);
-          for (final foto in fotos.where(esFotoLocal)) {
-            await store.borrar(foto);
-          }
-          if (!mounted) return;
-          await ofrecerComentarLeadDuplicado(
-            context,
-            ref,
-            eventoId: widget.eventoId,
-            leadId: result!.leadId,
-            mensajeDuplicado: result.mensajeDuplicado,
-            desdeEvento: widget.eventoRegistroId,
-          );
-          return;
-        }
-        if (result?.guardado == true &&
-            _fotoBytes != null &&
-            fotos.isEmpty &&
-            isOnline) {
+    if (!mounted) return;
+    await conEspera(context, () async {
+      try {
+        final pendienteFotoId = _leadGuardadoPendienteFotoId;
+        final bytesPendientes = _fotoBytes;
+        if (pendienteFotoId != null && bytesPendientes != null) {
           try {
             await ref
                 .read(leadsRepositoryProvider)
-                .adjuntarFotoBytes(result!.leadId, _fotoBytes!);
+                .adjuntarFotoBytes(pendienteFotoId, bytesPendientes);
+            _leadGuardadoPendienteFotoId = null;
+            if (mounted) {
+              showAppSnackBar(context, 'Lead y foto guardados.');
+              await _finalizarFlujoGuardado();
+            }
           } catch (_) {
-            if (!mounted) return;
-            _leadGuardadoPendienteFotoId = result!.leadId;
-            showAppSnackBar(
-              context,
-              'Lead guardado; foto pendiente, reintenta',
-              isError: true,
+            if (mounted) {
+              showAppSnackBar(
+                context,
+                'Lead guardado; foto pendiente, reintenta',
+                isError: true,
+              );
+            }
+          }
+          return;
+        }
+
+        if (userId == null || userId.isEmpty) {
+          throw Exception(
+            'No se pudo identificar al usuario capturador. Intenta de nuevo.',
+          );
+        }
+        if (perfil?.isExterno == true) {
+          final eventoReg = widget.eventoRegistroId;
+          final permitidos = _idsPermitidosExterno();
+          if (permitidos == null) {
+            throw Exception(
+              'Aún se están cargando tus eventos autorizados. Intenta de nuevo.',
             );
-            return;
+          }
+          if (eventoReg == null || !permitidos.contains(eventoReg)) {
+            throw Exception(
+              'No estás autorizado para capturar leads en este evento.',
+            );
           }
         }
-        if (!mounted) return;
-        showAppSnackBar(context, switch ((isOnline, fotoDescartada)) {
-          (true, _) when fotoPendienteDeSync =>
-            'Lead guardado. La foto se sincronizará automáticamente.',
-          (true, _) => 'Lead guardado.',
-          (false, true) =>
-            'Guardado en modo local, pero sin la foto: se necesita '
-                'conexión para adjuntarla.',
-          (false, false) => 'Guardado, se sincronizará cuando estés conectado.',
-        }, isError: fotoDescartada);
-        await _finalizarFlujoGuardado();
-      }
-    } catch (e) {
-      if (isOnline && leadPreparado != null && isNetworkTransportError(e)) {
-        try {
+
+        // En web no hay dónde dejar la foto esperando a que vuelva la red, así
+        // que el lead se guarda sin ella y hay que decirlo.
+        final fotoDescartada =
+            _fotoBytes != null &&
+            !isOnline &&
+            !ref.read(pendingPhotoStoreProvider).disponible;
+        final fotos = await _resolverFotos(isOnline: isOnline);
+        fotosPreparadas = fotos;
+
+        final lead = Lead(
+          id: '',
+          eventoId: widget.eventoId,
+          nombreCompleto: _nombreController.text.trim(),
+          empresa: _empresaController.text.trim(),
+          cargo: _cargoController.text.trim().isEmpty
+              ? null
+              : _cargoController.text.trim(),
+          // Un campo bloqueado muestra la máscara: el valor que se guarda es el
+          // que trajo el QR.
+          telefono: _telefonoAGuardar(puedeVerContacto: puedeVerContacto),
+          email: _emailAGuardar(puedeVerContacto: puedeVerContacto),
+          descripcion: _descripcionController.text.trim().isEmpty
+              ? null
+              : _descripcionController.text.trim(),
+          fotosUrls: fotos,
+          perfilId: userId,
+        );
+        leadPreparado = lead;
+
+        LeadWriteResult? result;
+        var fotoPendienteDeSync = false;
+        if (isOnline) {
+          try {
+            result = await ref.read(leadsRepositoryProvider).crear(lead);
+          } on LeadPhotoPendingException catch (error) {
+            result = error.result;
+            await ref
+                .read(syncQueueServiceProvider.notifier)
+                .enqueueUpdate(
+                  table: SupabaseTables.leads,
+                  entityId: error.result.leadId,
+                  changes: {'fotos_urls': error.fotosPendientes},
+                );
+            fotoPendienteDeSync = true;
+          }
+        } else {
           await ref
               .read(syncQueueServiceProvider.notifier)
               .enqueueInsert(
                 table: SupabaseTables.leads,
                 payload: {
-                  ...leadPreparado.toInsertMap(),
+                  ...lead.toInsertMap(),
                   '_requested_lead_id': _uuid.v4(),
                 },
               );
-          ref.invalidate(leadsPorEventoProvider(widget.eventoId));
-          exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
-          if (mounted) {
-            showAppSnackBar(
-              context,
-              'Sin conexión real. El lead quedó guardado localmente.',
-            );
-            await _finalizarFlujoGuardado();
-          }
-          return;
-        } catch (_) {
-          // Continúa al error original y limpia marcadores sin referencia.
         }
+
+        ref.invalidate(leadsPorEventoProvider(widget.eventoId));
+        exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
+        if (perfil?.isExterno == true) {
+          ref.invalidate(externoDashboardProvider);
+        }
+
+        if (mounted) {
+          if (result?.esDuplicado == true) {
+            final store = ref.read(pendingPhotoStoreProvider);
+            for (final foto in fotos.where(esFotoLocal)) {
+              await store.borrar(foto);
+            }
+            if (!mounted) return;
+            await ofrecerComentarLeadDuplicado(
+              context,
+              ref,
+              eventoId: widget.eventoId,
+              leadId: result!.leadId,
+              mensajeDuplicado: result.mensajeDuplicado,
+              desdeEvento: widget.eventoRegistroId,
+            );
+            return;
+          }
+          if (result?.guardado == true &&
+              _fotoBytes != null &&
+              fotos.isEmpty &&
+              isOnline) {
+            try {
+              await ref
+                  .read(leadsRepositoryProvider)
+                  .adjuntarFotoBytes(result!.leadId, _fotoBytes!);
+            } catch (_) {
+              if (!mounted) return;
+              _leadGuardadoPendienteFotoId = result!.leadId;
+              showAppSnackBar(
+                context,
+                'Lead guardado; foto pendiente, reintenta',
+                isError: true,
+              );
+              return;
+            }
+          }
+          if (!mounted) return;
+          showAppSnackBar(context, switch ((isOnline, fotoDescartada)) {
+            (true, _) when fotoPendienteDeSync =>
+              'Lead guardado. La foto se sincronizará automáticamente.',
+            (true, _) => 'Lead guardado.',
+            (false, true) =>
+              'Guardado en modo local, pero sin la foto: se necesita '
+                  'conexión para adjuntarla.',
+            (false, false) =>
+              'Guardado, se sincronizará cuando estés conectado.',
+          }, isError: fotoDescartada);
+          await _finalizarFlujoGuardado();
+        }
+      } catch (e) {
+        final preparado = leadPreparado;
+        if (isOnline && preparado != null && isNetworkTransportError(e)) {
+          try {
+            await ref
+                .read(syncQueueServiceProvider.notifier)
+                .enqueueInsert(
+                  table: SupabaseTables.leads,
+                  payload: {
+                    ...preparado.toInsertMap(),
+                    '_requested_lead_id': _uuid.v4(),
+                  },
+                );
+            ref.invalidate(leadsPorEventoProvider(widget.eventoId));
+            exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
+            if (mounted) {
+              showAppSnackBar(
+                context,
+                'Sin conexión real. El lead quedó guardado localmente.',
+              );
+              await _finalizarFlujoGuardado();
+            }
+            return;
+          } catch (_) {
+            // Continúa al error original y limpia marcadores sin referencia.
+          }
+        }
+        final store = ref.read(pendingPhotoStoreProvider);
+        for (final foto in fotosPreparadas.where(esFotoLocal)) {
+          await store.borrar(foto);
+        }
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            e.toString().replaceFirst('Exception: ', ''),
+            isError: true,
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _guardando = false);
       }
-      final store = ref.read(pendingPhotoStoreProvider);
-      for (final foto in fotosPreparadas.where(esFotoLocal)) {
-        await store.borrar(foto);
-      }
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          e.toString().replaceFirst('Exception: ', ''),
-          isError: true,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
+    });
   }
 
   /// Micrófono de dictado. Sobre la card navy el rojo de "grabando" no se

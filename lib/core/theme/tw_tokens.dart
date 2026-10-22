@@ -105,6 +105,16 @@ class TwColors {
   static const statusEndedBg = Color(0x1FF3B4B4); // 12%
   static const statusEndedBd = Color(0x42F3B4B4); // 26%
 
+  // Origen del evento de leads: lima de marca (interno) y naranjo (externo).
+  // Las tintas son las versiones oscuras de ambas familias porque este pill
+  // vive sobre tarjeta blanca, no sobre el hero como los de estado.
+  static const originInternal = Color(0xFF6B9E14); // lima legible
+  static const originInternalBg = Color(0x1F6B9E14); // 12%
+  static const originInternalBd = Color(0x476B9E14); // 28%
+  static const originExternal = Color(0xFFB4691F); // naranjo
+  static const originExternalBg = Color(0x1FB4691F); // 12%
+  static const originExternalBd = Color(0x47B4691F); // 28%
+
   // ---------- Blancos translúcidos (solo sobre hero) ----------
   static const whiteA14 = Color(0x24FFFFFF); // divisores de stats
   static const whiteA16 = Color(0x29FFFFFF); // fondo de pill / botón fantasma

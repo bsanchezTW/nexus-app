@@ -26,6 +26,7 @@ import '../providers/usuarios_providers.dart';
 import '../widgets/selector_eventos_multiples.dart';
 import '../widgets/selector_rol_usuario.dart';
 import '../../../data/repositories/storage_cleanup_service.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 /// Edición de usuario: nombre, rol, activo, regenerar contraseña y eliminar.
 class EditarUsuarioScreen extends StatelessWidget {
@@ -63,7 +64,6 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
   bool _eventosCargados = false;
   bool _eventosCargaError = false;
   bool _guardando = false;
-  bool _eliminando = false;
   bool _regenerando = false;
   bool _intentoGuardar = false;
   String? _passwordGenerada;
@@ -248,55 +248,57 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
 
     final router = GoRouter.of(context);
     setState(() => _guardando = true);
-    try {
-      final repo = ref.read(authRepositoryProvider);
-      await repo.actualizarNombre(
-        widget.usuarioId,
-        _nombreController.text.trim(),
-      );
-      if (!esCuentaPropia) {
-        await repo.configurarAccesoUsuario(
-          usuarioId: widget.usuarioId,
-          nuevoRol: _rol.value,
-          eventoIds: _asignaEventos ? _eventoIds.toList() : const [],
+    await conEspera(context, () async {
+      try {
+        final repo = ref.read(authRepositoryProvider);
+        await repo.actualizarNombre(
+          widget.usuarioId,
+          _nombreController.text.trim(),
         );
-        await repo.establecerActivo(widget.usuarioId, _activo);
-      }
-      if (_fotoBytes != null) {
-        final fotoUrl = await ref
-            .read(storageRepositoryProvider)
-            .subirFotoPerfil(_fotoBytes!, widget.usuarioId);
-        await repo.actualizarFotoUsuario(widget.usuarioId, fotoUrl);
-      } else if (_quitarFoto) {
-        await repo.actualizarFotoUsuario(widget.usuarioId, null);
-      }
-      if (_fotoBytes != null || _quitarFoto) {
-        await ref.read(storageCleanupServiceProvider).drenar();
-      }
-
-      if (mounted) {
-        ref.invalidate(usuariosListProvider);
-        exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
-        ref.invalidate(usuarioPorIdProvider(widget.usuarioId));
-        if (esCuentaPropia) {
-          ref.invalidate(currentPerfilProvider);
+        if (!esCuentaPropia) {
+          await repo.configurarAccesoUsuario(
+            usuarioId: widget.usuarioId,
+            nuevoRol: _rol.value,
+            eventoIds: _asignaEventos ? _eventoIds.toList() : const [],
+          );
+          await repo.establecerActivo(widget.usuarioId, _activo);
         }
-        showAppSnackBar(context, 'Usuario actualizado.');
+        if (_fotoBytes != null) {
+          final fotoUrl = await ref
+              .read(storageRepositoryProvider)
+              .subirFotoPerfil(_fotoBytes!, widget.usuarioId);
+          await repo.actualizarFotoUsuario(widget.usuarioId, fotoUrl);
+        } else if (_quitarFoto) {
+          await repo.actualizarFotoUsuario(widget.usuarioId, null);
+        }
+        if (_fotoBytes != null || _quitarFoto) {
+          await ref.read(storageCleanupServiceProvider).drenar();
+        }
+
+        if (mounted) {
+          ref.invalidate(usuariosListProvider);
+          exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
+          ref.invalidate(usuarioPorIdProvider(widget.usuarioId));
+          if (esCuentaPropia) {
+            ref.invalidate(currentPerfilProvider);
+          }
+          showAppSnackBar(context, 'Usuario actualizado.');
+        }
+        router.go(RoutePaths.usuarios);
+      } on PostgrestException catch (e) {
+        if (mounted) showAppSnackBar(context, e.message, isError: true);
+      } catch (e) {
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            e.toString().replaceFirst('Exception: ', ''),
+            isError: true,
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _guardando = false);
       }
-      router.go(RoutePaths.usuarios);
-    } on PostgrestException catch (e) {
-      if (mounted) showAppSnackBar(context, e.message, isError: true);
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          e.toString().replaceFirst('Exception: ', ''),
-          isError: true,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
+    });
   }
 
   Future<void> _eliminar(String nombre) async {
@@ -308,29 +310,30 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
       return;
     }
 
-    final confirmado = await confirmDialog(
-      context,
-      title: 'Eliminar usuario',
-      message:
-          'Se eliminará la cuenta de "$nombre" y su acceso a la app. '
-          'Todos sus registros quedarán como "Usuario eliminado". '
-          'Esta acción no se puede deshacer.',
-      confirmLabel: 'Eliminar',
-      destructive: true,
-    );
-    if (!confirmado || !mounted) return;
-
     final router = GoRouter.of(context);
-    setState(() => _eliminando = true);
+    var eliminado = false;
     try {
-      final eliminado = await ref
-          .read(authRepositoryProvider)
-          .eliminarUsuario(widget.usuarioId);
-      // La foto de perfil se quedó sin dueño.
-      await ref.read(storageCleanupServiceProvider).drenar();
+      final hecho = await confirmarYEjecutar(
+        context,
+        title: 'Eliminar usuario',
+        message:
+            'Se eliminará la cuenta de "$nombre" y su acceso a la app. '
+            'Todos sus registros quedarán como "Usuario eliminado". '
+            'Esta acción no se puede deshacer.',
+        confirmLabel: 'Eliminar',
+        destructive: true,
+        accion: () async {
+          eliminado = await ref
+              .read(authRepositoryProvider)
+              .eliminarUsuario(widget.usuarioId);
+          // La foto de perfil se quedó sin dueño.
+          await ref.read(storageCleanupServiceProvider).drenar();
+        },
+      );
+      if (!hecho) return;
+      ref.invalidate(usuariosListProvider);
+      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       if (mounted) {
-        ref.invalidate(usuariosListProvider);
-        exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
         showAppSnackBar(
           context,
           eliminado
@@ -348,8 +351,6 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
           isError: true,
         );
       }
-    } finally {
-      if (mounted) setState(() => _eliminando = false);
     }
   }
 
@@ -376,7 +377,7 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
         ref.watch(currentPerfilProvider).valueOrNull?.id == widget.usuarioId ||
         sesionId == widget.usuarioId;
     // Regenerar solo bloquea el campo de contraseña; el resto del form sigue usable.
-    final ocupado = _guardando || _eliminando;
+    final ocupado = _guardando;
 
     return AppScaffold(
       title: 'Editar usuario',
@@ -399,7 +400,6 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
             icon: Symbols.delete_outline_rounded,
             tooltip: 'Eliminar usuario',
             danger: true,
-            loading: _eliminando,
             onTap: ocupado
                 ? null
                 : () {

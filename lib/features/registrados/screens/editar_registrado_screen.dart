@@ -29,6 +29,7 @@ import '../../subeventos/providers/inscripciones_providers.dart';
 import '../../subeventos/providers/subeventos_providers.dart';
 import '../../subeventos/widgets/selector_subeventos.dart';
 import '../providers/registrados_providers.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 class EditarRegistradoScreen extends ConsumerStatefulWidget {
   const EditarRegistradoScreen({
@@ -188,118 +189,123 @@ class _EditarRegistradoScreenState
       return;
     }
 
-    try {
-      // Una revalidación iniciada antes del UPDATE todavía puede traer la fila
-      // antigua. Se deja terminar antes de escribir y parchear la caché.
-      await cache.esperarRevalidaciones();
-      if (!_esPendiente) {
-        await ref
-            .read(registradosRepositoryProvider)
-            .actualizar(widget.registradoId, cambios);
-      } else {
-        // La fila solo existe en la cola local: el cambio se fusiona con su
-        // insert pendiente, no crea una operación nueva.
-        await ref
-            .read(syncQueueServiceProvider.notifier)
-            .enqueueUpdate(
-              table: SupabaseTables.registrados,
-              entityId: widget.registradoId,
-              changes: cambios,
-            );
-      }
-      final fallos = <String>[];
-      final inscripcionesAsync = ref.read(
-        inscripcionesPorEventoProvider(widget.eventoId),
-      );
-      // El build ya observa las inscripciones: solo se tocan talleres con datos.
-      final tocarTalleres = _talleresCargados && !inscripcionesAsync.hasError;
-      if (tocarTalleres &&
-          ref.read(isOnlineProvider) &&
-          !esIdSoloLocal(widget.registradoId)) {
-        final agregar = _talleresSeleccionados.difference(_talleresIniciales);
-        final quitar = _talleresIniciales.difference(_talleresSeleccionados);
-        if (agregar.isNotEmpty || quitar.isNotEmpty) {
-          final repo = ref.read(inscripcionesSubeventoRepositoryProvider);
-          // El build ya observa los talleres.
-          final talleres =
-              ref.read(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
-              const [];
-          String nombreDe(String id) {
-            return talleres
-                    .where((taller) => taller.id == id)
-                    .map((taller) => taller.nombre)
-                    .firstOrNull ??
-                'un taller';
-          }
-
-          for (final id in agregar) {
-            try {
-              final resultado = await repo.inscribir(
-                registradoId: widget.registradoId,
-                subeventoId: id,
+    await conEspera(context, () async {
+      try {
+        // Una revalidación iniciada antes del UPDATE todavía puede traer la fila
+        // antigua. Se deja terminar antes de escribir y parchear la caché.
+        await cache.esperarRevalidaciones();
+        if (!_esPendiente) {
+          await ref
+              .read(registradosRepositoryProvider)
+              .actualizar(widget.registradoId, cambios);
+        } else {
+          // La fila solo existe en la cola local: el cambio se fusiona con su
+          // insert pendiente, no crea una operación nueva.
+          await ref
+              .read(syncQueueServiceProvider.notifier)
+              .enqueueUpdate(
+                table: SupabaseTables.registrados,
+                entityId: widget.registradoId,
+                changes: cambios,
               );
-              if (resultado['ok'] == false) fallos.add(nombreDe(id));
-            } catch (_) {
-              fallos.add(nombreDe(id));
-            }
-          }
-          for (final id in quitar) {
-            try {
-              await repo.quitar(
-                registradoId: widget.registradoId,
-                subeventoId: id,
-              );
-            } catch (_) {
-              fallos.add(nombreDe(id));
-            }
-          }
-          ref.invalidate(inscripcionesPorEventoProvider(widget.eventoId));
         }
-      }
-      await publicarCambioEnLecturaCacheada(
-        ref,
-        tabla: SupabaseTables.registrados,
-        eventoId: widget.eventoId,
-        id: widget.registradoId,
-        cambios: cambios,
-        invalidar: () =>
-            ref.invalidate(registradosPorEventoProvider(widget.eventoId)),
-      );
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          fallos.isEmpty
-              ? 'Cambios guardados.'
-              : 'Cambios guardados. No se actualizaron: ${fallos.join(', ')}.',
-          isError: fallos.isNotEmpty,
+        final fallos = <String>[];
+        final inscripcionesAsync = ref.read(
+          inscripcionesPorEventoProvider(widget.eventoId),
         );
-        volverALista(context, RoutePaths.verRegistrados(widget.eventoId));
+        // El build ya observa las inscripciones: solo se tocan talleres con datos.
+        final tocarTalleres = _talleresCargados && !inscripcionesAsync.hasError;
+        if (tocarTalleres &&
+            ref.read(isOnlineProvider) &&
+            !esIdSoloLocal(widget.registradoId)) {
+          final agregar = _talleresSeleccionados.difference(_talleresIniciales);
+          final quitar = _talleresIniciales.difference(_talleresSeleccionados);
+          if (agregar.isNotEmpty || quitar.isNotEmpty) {
+            final repo = ref.read(inscripcionesSubeventoRepositoryProvider);
+            // El build ya observa los talleres.
+            final talleres =
+                ref
+                    .read(subeventosPorEventoProvider(widget.eventoId))
+                    .valueOrNull ??
+                const [];
+            String nombreDe(String id) {
+              return talleres
+                      .where((taller) => taller.id == id)
+                      .map((taller) => taller.nombre)
+                      .firstOrNull ??
+                  'un taller';
+            }
+
+            for (final id in agregar) {
+              try {
+                final resultado = await repo.inscribir(
+                  registradoId: widget.registradoId,
+                  subeventoId: id,
+                );
+                if (resultado['ok'] == false) fallos.add(nombreDe(id));
+              } catch (_) {
+                fallos.add(nombreDe(id));
+              }
+            }
+            for (final id in quitar) {
+              try {
+                await repo.quitar(
+                  registradoId: widget.registradoId,
+                  subeventoId: id,
+                );
+              } catch (_) {
+                fallos.add(nombreDe(id));
+              }
+            }
+            ref.invalidate(inscripcionesPorEventoProvider(widget.eventoId));
+          }
+        }
+        await publicarCambioEnLecturaCacheada(
+          ref,
+          tabla: SupabaseTables.registrados,
+          eventoId: widget.eventoId,
+          id: widget.registradoId,
+          cambios: cambios,
+          invalidar: () =>
+              ref.invalidate(registradosPorEventoProvider(widget.eventoId)),
+        );
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            fallos.isEmpty
+                ? 'Cambios guardados.'
+                : 'Cambios guardados. No se actualizaron: ${fallos.join(', ')}.',
+            isError: fallos.isNotEmpty,
+          );
+          volverALista(context, RoutePaths.verRegistrados(widget.eventoId));
+        }
+      } catch (e) {
+        if (mounted) {
+          showAppSnackBar(context, 'No se pudo guardar.', isError: true);
+        }
+      } finally {
+        if (mounted) setState(() => _guardando = false);
       }
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(context, 'No se pudo guardar.', isError: true);
-      }
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
+    });
   }
 
   Future<void> _eliminar() async {
     if (!requireOnline(context, ref)) return;
-    final confirmado = await confirmDialog(
-      context,
-      title: 'Eliminar registrado',
-      message: '¿Eliminar este registro? Esta acción no se puede deshacer.',
-      confirmLabel: 'Eliminar',
-      destructive: true,
-    );
-    if (!confirmado) return;
     try {
-      await ref
-          .read(registradosRepositoryProvider)
-          .eliminar(widget.registradoId);
+      final eliminado = await confirmarYEjecutar(
+        context,
+        title: 'Eliminar registrado',
+        message: '¿Eliminar este registro? Esta acción no se puede deshacer.',
+        confirmLabel: 'Eliminar',
+        destructive: true,
+        accion: () => ref
+            .read(registradosRepositoryProvider)
+            .eliminar(widget.registradoId),
+      );
+      if (!eliminado) return;
       ref.invalidate(registradosPorEventoProvider(widget.eventoId));
       if (mounted) {
+        showAppSnackBar(context, 'Registrado eliminado.');
         volverALista(context, RoutePaths.verRegistrados(widget.eventoId));
       }
     } catch (e) {
@@ -408,8 +414,7 @@ class _EditarRegistradoScreenState
                 TwSpacing.screenH,
                 28,
               ),
-              keyboardDismissBehavior:
-                  ScrollViewKeyboardDismissBehavior.onDrag,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               child: Form(
                 key: _formKey,
                 child: Column(

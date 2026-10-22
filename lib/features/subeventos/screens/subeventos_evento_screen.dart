@@ -24,6 +24,7 @@ import '../../../data/repositories/subeventos_repository.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../providers/subeventos_providers.dart';
 import '../subevento_desde_evento.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 class SubeventosEventoScreen extends StatelessWidget {
   const SubeventosEventoScreen({super.key, required this.eventoId});
@@ -113,9 +114,8 @@ class _ListaSubeventos extends ConsumerWidget {
                   if (i > 0) const SizedBox(height: 8),
                   _TallerTile(
                     taller: entrada.value[i],
-                    ocupacion: ocupacion.valueOrNull?.subeventos[entrada
-                        .value[i]
-                        .id],
+                    ocupacion:
+                        ocupacion.valueOrNull?.subeventos[entrada.value[i].id],
                     onTap: () => context.push(
                       RoutePaths.editarSubevento(eventoId, entrada.value[i].id),
                     ),
@@ -174,33 +174,34 @@ class _ListaSubeventos extends ConsumerWidget {
           _SelectorTalleres(eventoId: eventoId, yaVinculados: yaVinculados),
     );
     if (elegidos == null || elegidos.isEmpty || !context.mounted) return;
-    final confirmar = await confirmDialog(
+    final talleresRepo = ref.read(subeventosRepositoryProvider);
+    final noAgregados = <String>[];
+    final agregados = await confirmarYEjecutar(
       context,
       title: 'Agregar talleres',
       message:
           'Se agregan ${elegidos.length} talleres a ${principal.nombre}. '
           'Siguen existiendo como talleres y sus inscripciones no se copian.',
       confirmLabel: 'Agregar',
+      accion: () async {
+        var orden = actuales.length;
+        for (final origen in elegidos) {
+          try {
+            await talleresRepo.crear(
+              subeventoDesdeEvento(
+                principal: principal,
+                origen: origen,
+                orden: orden,
+              ),
+            );
+            orden++;
+          } catch (_) {
+            noAgregados.add(origen.nombre);
+          }
+        }
+      },
     );
-    if (!confirmar || !context.mounted) return;
-
-    final talleresRepo = ref.read(subeventosRepositoryProvider);
-    final noAgregados = <String>[];
-    var orden = actuales.length;
-    for (final origen in elegidos) {
-      try {
-        await talleresRepo.crear(
-          subeventoDesdeEvento(
-            principal: principal,
-            origen: origen,
-            orden: orden,
-          ),
-        );
-        orden++;
-      } catch (_) {
-        noAgregados.add(origen.nombre);
-      }
-    }
+    if (!agregados) return;
     _invalidarTalleres(ref, eventoId);
     if (!context.mounted) return;
     if (noAgregados.isEmpty) {
@@ -500,10 +501,7 @@ class _TallerTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 3),
-                  Text(
-                    fin,
-                    style: TwText.tileSubtitle.copyWith(fontSize: 12),
-                  ),
+                  Text(fin, style: TwText.tileSubtitle.copyWith(fontSize: 12)),
                 ],
               ),
             ),
@@ -707,24 +705,26 @@ class _FormularioSubeventoState extends ConsumerState<_FormularioSubevento> {
       orden: int.tryParse(_orden.text.trim()) ?? 0,
       visiblePublico: _visible,
     );
-    try {
-      final repo = ref.read(subeventosRepositoryProvider);
-      final mapa = taller.toInsertMap()..remove('evento_id');
-      if ((mapa['codigo'] as String?)?.isEmpty ?? true) mapa.remove('codigo');
-      if (_edicion) {
-        await repo.actualizar(widget.subeventoId!, mapa);
-      } else {
-        await repo.crear(taller);
+    await conEspera(context, () async {
+      try {
+        final repo = ref.read(subeventosRepositoryProvider);
+        final mapa = taller.toInsertMap()..remove('evento_id');
+        if ((mapa['codigo'] as String?)?.isEmpty ?? true) mapa.remove('codigo');
+        if (_edicion) {
+          await repo.actualizar(widget.subeventoId!, mapa);
+        } else {
+          await repo.crear(taller);
+        }
+        _invalidarTalleres(ref, widget.eventoId);
+        if (mounted) context.pop();
+      } on RpeException catch (error) {
+        if (mounted) showAppSnackBar(context, error.mensaje, isError: true);
+      } catch (error) {
+        if (mounted) showAppSnackBar(context, error.toString(), isError: true);
+      } finally {
+        if (mounted) setState(() => _guardando = false);
       }
-      _invalidarTalleres(ref, widget.eventoId);
-      if (mounted) context.pop();
-    } on RpeException catch (error) {
-      if (mounted) showAppSnackBar(context, error.mensaje, isError: true);
-    } catch (error) {
-      if (mounted) showAppSnackBar(context, error.toString(), isError: true);
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
+    });
   }
 
   @override
@@ -994,21 +994,24 @@ class _FormularioSubeventoState extends ConsumerState<_FormularioSubevento> {
         .read(ocupacionEventoProvider(widget.eventoId))
         .valueOrNull;
     final item = ocupacion?.subeventos[widget.subeventoId];
-    final ok = await confirmDialog(
-      context,
-      title: 'Eliminar taller',
-      message:
-          'Tiene ${item?.inscritos ?? 0} inscritos y ${item?.asistentes ?? 0} asistentes. Se borran sus inscripciones.',
-      confirmLabel: 'Eliminar',
-      destructive: true,
-    );
-    if (!ok || !mounted) return;
     try {
-      await ref
-          .read(subeventosRepositoryProvider)
-          .eliminar(widget.subeventoId!);
+      final eliminado = await confirmarYEjecutar(
+        context,
+        title: 'Eliminar taller',
+        message:
+            'Tiene ${item?.inscritos ?? 0} inscritos y ${item?.asistentes ?? 0} asistentes. Se borran sus inscripciones.',
+        confirmLabel: 'Eliminar',
+        destructive: true,
+        accion: () => ref
+            .read(subeventosRepositoryProvider)
+            .eliminar(widget.subeventoId!),
+      );
+      if (!eliminado) return;
       _invalidarTalleres(ref, widget.eventoId);
-      if (mounted) context.pop();
+      if (mounted) {
+        showAppSnackBar(context, 'Taller eliminado.');
+        context.pop();
+      }
     } on RpeException catch (error) {
       if (mounted) showAppSnackBar(context, error.mensaje, isError: true);
     }

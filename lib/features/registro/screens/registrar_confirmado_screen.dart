@@ -19,6 +19,7 @@ import '../../eventos/providers/eventos_providers.dart';
 import '../../subeventos/providers/subeventos_providers.dart';
 import '../../subeventos/widgets/selector_subeventos.dart';
 import '../../registrados/providers/registrados_providers.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 /// Registro manual de un asistente. **Requiere conexión**, a diferencia de
 /// acreditar o capturar un lead, que sí se encolan.
@@ -80,7 +81,10 @@ class _RegistrarConfirmadoScreenState
     super.dispose();
   }
 
-  Map<String, dynamic> _datosRegistro(bool requiereCertificacion, String email) {
+  Map<String, dynamic> _datosRegistro(
+    bool requiereCertificacion,
+    String email,
+  ) {
     return {
       'nombre_completo': formatearNombreCompleto(_nombreController.text),
       'email': email,
@@ -88,7 +92,8 @@ class _RegistrarConfirmadoScreenState
       'cargo': formatearCargo(_cargoController.text),
       'telefono': telefonoInternacional(_telefonoController.text, _pais),
       if (requiereCertificacion) 'rut': formatearRut(_rutController.text),
-      if (requiereCertificacion) 'patente': formatearPatente(_patenteController.text),
+      if (requiereCertificacion)
+        'patente': formatearPatente(_patenteController.text),
     };
   }
 
@@ -140,102 +145,106 @@ class _RegistrarConfirmadoScreenState
       return;
     }
 
-    try {
-      final repo = ref.read(registradosRepositoryProvider);
-      final resultado = await repo.registrar(
-        eventoId: widget.eventoId,
-        acreditar: _acreditarAhora,
-        subeventoIds: _talleres.toList(),
-        datos: _datosRegistro(requiereCertificacion, email),
-      );
+    await conEspera(context, () async {
+      try {
+        final repo = ref.read(registradosRepositoryProvider);
+        final resultado = await repo.registrar(
+          eventoId: widget.eventoId,
+          acreditar: _acreditarAhora,
+          subeventoIds: _talleres.toList(),
+          datos: _datosRegistro(requiereCertificacion, email),
+        );
 
-      if (resultado is RegistroRechazado) {
-        if (resultado.motivo == 'email_duplicado' &&
-            resultado.registradoIdExistente != null &&
-            mounted) {
-          final abrir = await confirmDialog(
-            context,
-            title: 'Correo ya registrado',
-            message: 'Esa persona ya está en el evento.',
-            confirmLabel: 'Abrir registro existente',
-          );
-          if (abrir && mounted) {
-            context.push(
-              RoutePaths.editarRegistrado(
-                widget.eventoId,
-                resultado.registradoIdExistente!,
-              ),
+        if (resultado is RegistroRechazado) {
+          if (resultado.motivo == 'email_duplicado' &&
+              resultado.registradoIdExistente != null &&
+              mounted) {
+            final abrir = await confirmDialog(
+              context,
+              title: 'Correo ya registrado',
+              message: 'Esa persona ya está en el evento.',
+              confirmLabel: 'Abrir registro existente',
             );
+            if (abrir && mounted) {
+              context.push(
+                RoutePaths.editarRegistrado(
+                  widget.eventoId,
+                  resultado.registradoIdExistente!,
+                ),
+              );
+            }
+            return;
           }
-          return;
-        }
-        if (resultado.motivo == 'subeventos_rechazados' && mounted) {
-          if (!resultado.puedeForzar) {
+          if (resultado.motivo == 'subeventos_rechazados' && mounted) {
+            if (!resultado.puedeForzar) {
+              throw Exception('Hay talleres que no se pudieron inscribir.');
+            }
+            final forzar = await confirmDialog(
+              context,
+              title: 'Talleres sin cupo',
+              message:
+                  'Algunos talleres están llenos. ¿Registrar en sobrecupo?',
+              confirmLabel: 'Registrar',
+            );
+            if (!forzar || !mounted) return;
+            final forzado = await repo.registrar(
+              eventoId: widget.eventoId,
+              acreditar: _acreditarAhora,
+              forzarSobrecupo: true,
+              subeventoIds: _talleres.toList(),
+              datos: _datosRegistro(requiereCertificacion, email),
+            );
+            if (forzado is RegistroOk) {
+              _avisarRegistro();
+              return;
+            }
             throw Exception('Hay talleres que no se pudieron inscribir.');
           }
-          final forzar = await confirmDialog(
-            context,
-            title: 'Talleres sin cupo',
-            message: 'Algunos talleres están llenos. ¿Registrar en sobrecupo?',
-            confirmLabel: 'Registrar',
-          );
-          if (!forzar || !mounted) return;
-          final forzado = await repo.registrar(
-            eventoId: widget.eventoId,
-            acreditar: _acreditarAhora,
-            forzarSobrecupo: true,
-            subeventoIds: _talleres.toList(),
-            datos: _datosRegistro(requiereCertificacion, email),
-          );
-          if (forzado is RegistroOk) {
-            _avisarRegistro();
-            return;
+          if (resultado.motivo == 'sin_cupo_evento' &&
+              resultado.puedeForzar &&
+              mounted) {
+            final forzar = await confirmDialog(
+              context,
+              title: 'Cupo completo',
+              message:
+                  'El evento no tiene cupo. ¿Registrar igual en sobrecupo?',
+              confirmLabel: 'Registrar',
+            );
+            if (!forzar || !mounted) return;
+            final forzado = await repo.registrar(
+              eventoId: widget.eventoId,
+              acreditar: _acreditarAhora,
+              forzarSobrecupo: true,
+              subeventoIds: _talleres.toList(),
+              datos: _datosRegistro(requiereCertificacion, email),
+            );
+            if (forzado is RegistroOk) {
+              _avisarRegistro();
+              return;
+            }
           }
-          throw Exception('Hay talleres que no se pudieron inscribir.');
-        }
-        if (resultado.motivo == 'sin_cupo_evento' &&
-            resultado.puedeForzar &&
-            mounted) {
-          final forzar = await confirmDialog(
-            context,
-            title: 'Cupo completo',
-            message: 'El evento no tiene cupo. ¿Registrar igual en sobrecupo?',
-            confirmLabel: 'Registrar',
+          throw Exception(
+            resultado.motivo == 'email_duplicado'
+                ? kMensajeEmailDuplicado
+                : resultado.motivo == 'sin_cupo_evento'
+                ? 'No queda cupo en este evento.'
+                : 'No se pudo registrar.',
           );
-          if (!forzar || !mounted) return;
-          final forzado = await repo.registrar(
-            eventoId: widget.eventoId,
-            acreditar: _acreditarAhora,
-            forzarSobrecupo: true,
-            subeventoIds: _talleres.toList(),
-            datos: _datosRegistro(requiereCertificacion, email),
-          );
-          if (forzado is RegistroOk) {
-            _avisarRegistro();
-            return;
-          }
         }
-        throw Exception(
-          resultado.motivo == 'email_duplicado'
-              ? kMensajeEmailDuplicado
-              : resultado.motivo == 'sin_cupo_evento'
-              ? 'No queda cupo en este evento.'
-              : 'No se pudo registrar.',
-        );
-      }
 
-      _avisarRegistro();
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          e.toString().replaceFirst('Exception: ', ''),
-          isError: true,
-        );
+        _avisarRegistro();
+      } catch (e) {
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            e.toString().replaceFirst('Exception: ', ''),
+            isError: true,
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _guardando = false);
       }
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
+    });
   }
 
   void _avisarRegistro() {

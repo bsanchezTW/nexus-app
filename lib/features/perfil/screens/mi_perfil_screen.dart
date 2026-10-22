@@ -23,6 +23,7 @@ import '../../../data/repositories/storage_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../providers/perfil_providers.dart';
 import '../widgets/perfil_expandable_section.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 class MiPerfilScreen extends StatelessWidget {
   const MiPerfilScreen({super.key});
@@ -75,41 +76,43 @@ class _MiPerfilBodyState extends ConsumerState<_MiPerfilBody> {
     final nuevaPassword = _passwordController.text;
 
     setState(() => _guardando = true);
-    try {
-      final auth = ref.read(authRepositoryProvider);
-      // Primero la contraseña: es el paso que más suele fallar (Supabase
-      // rechaza repetir la actual), así un error no deja el nombre a medias.
-      if (nuevaPassword.isNotEmpty) {
-        // `forzarNuevaContrasena` además limpia `cambiar_pass`, para que el
-        // router no vuelva a exigir /recrear-pass a quien acaba de elegirla.
-        await auth.forzarNuevaContrasena(nuevaPassword);
-        _passwordController.clear();
+    await conEspera(context, () async {
+      try {
+        final auth = ref.read(authRepositoryProvider);
+        // Primero la contraseña: es el paso que más suele fallar (Supabase
+        // rechaza repetir la actual), así un error no deja el nombre a medias.
+        if (nuevaPassword.isNotEmpty) {
+          // `forzarNuevaContrasena` además limpia `cambiar_pass`, para que el
+          // router no vuelva a exigir /recrear-pass a quien acaba de elegirla.
+          await auth.forzarNuevaContrasena(nuevaPassword);
+          _passwordController.clear();
+        }
+        await auth.actualizarNombrePropio(_nombreController.text.trim());
+        ref.invalidate(currentPerfilProvider);
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            nuevaPassword.isEmpty
+                ? 'Nombre actualizado.'
+                : 'Datos y contraseña actualizados.',
+          );
+        }
+      } on AuthException catch (e) {
+        if (mounted) showAppSnackBar(context, e.message, isError: true);
+      } on PostgrestException catch (e) {
+        if (mounted) showAppSnackBar(context, e.message, isError: true);
+      } catch (e) {
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            e.toString().replaceFirst('Exception: ', ''),
+            isError: true,
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _guardando = false);
       }
-      await auth.actualizarNombrePropio(_nombreController.text.trim());
-      ref.invalidate(currentPerfilProvider);
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          nuevaPassword.isEmpty
-              ? 'Nombre actualizado.'
-              : 'Datos y contraseña actualizados.',
-        );
-      }
-    } on AuthException catch (e) {
-      if (mounted) showAppSnackBar(context, e.message, isError: true);
-    } on PostgrestException catch (e) {
-      if (mounted) showAppSnackBar(context, e.message, isError: true);
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          e.toString().replaceFirst('Exception: ', ''),
-          isError: true,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
+    });
   }
 
   Future<void> _cambiarFoto() async {

@@ -161,16 +161,10 @@ void showAppSnackBar(
   String message, {
   bool isError = false,
 }) {
-  final bottomOffset =
-      ShellNavScope.visibleOf(context) &&
-          !GlassNavTokens.usesSideRailOf(context)
-      ? GlassNavTokens.shellToastLift()
-      : TwToast.kBottom;
-
   if (isError) {
-    TwToast.error(context, message, bottomOffset: bottomOffset);
+    TwToast.error(context, message);
   } else {
-    TwToast.success(context, message, bottomOffset: bottomOffset);
+    TwToast.success(context, message);
   }
 }
 

@@ -22,6 +22,7 @@ import '../../eventos/providers/eventos_providers.dart';
 import '../providers/usuarios_providers.dart';
 import '../widgets/selector_eventos_multiples.dart';
 import '../widgets/selector_rol_usuario.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 /// Crea un usuario (cualquier rol) desde gestión de administradores.
 class NuevoUsuarioScreen extends StatelessWidget {
@@ -111,49 +112,51 @@ class _NuevoUsuarioFormState extends ConsumerState<_NuevoUsuarioForm> {
 
     final router = GoRouter.of(context);
     setState(() => _guardando = true);
-    try {
-      final repo = ref.read(authRepositoryProvider);
-      final email = formatearEmail(_emailController.text);
-      _emailController.text = email;
-      if (await repo.verificarEmailRegistrado(email)) {
+    await conEspera(context, () async {
+      try {
+        final repo = ref.read(authRepositoryProvider);
+        final email = formatearEmail(_emailController.text);
+        _emailController.text = email;
+        if (await repo.verificarEmailRegistrado(email)) {
+          if (mounted) {
+            showAppSnackBar(
+              context,
+              'El email ya está registrado.',
+              isError: true,
+            );
+          }
+          return;
+        }
+
+        await repo.crearUsuario(
+          nombreCompleto: _nombreController.text.trim(),
+          email: email,
+          password: _passwordController.text,
+          rol: _rol!.value,
+          eventoIds: _asignaEventos ? _eventoIds.toList() : null,
+        );
+
+        if (mounted) {
+          ref.invalidate(usuariosListProvider);
+          exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
+          showAppSnackBar(
+            context,
+            'Usuario creado. Credenciales enviadas por correo.',
+          );
+        }
+        router.go(RoutePaths.usuarios);
+      } catch (e) {
         if (mounted) {
           showAppSnackBar(
             context,
-            'El email ya está registrado.',
+            e.toString().replaceFirst('Exception: ', ''),
             isError: true,
           );
         }
-        return;
+      } finally {
+        if (mounted) setState(() => _guardando = false);
       }
-
-      await repo.crearUsuario(
-        nombreCompleto: _nombreController.text.trim(),
-        email: email,
-        password: _passwordController.text,
-        rol: _rol!.value,
-        eventoIds: _asignaEventos ? _eventoIds.toList() : null,
-      );
-
-      if (mounted) {
-        ref.invalidate(usuariosListProvider);
-        exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
-        showAppSnackBar(
-          context,
-          'Usuario creado. Credenciales enviadas por correo.',
-        );
-      }
-      router.go(RoutePaths.usuarios);
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          e.toString().replaceFirst('Exception: ', ''),
-          isError: true,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
+    });
   }
 
   bool get _hayDatos =>

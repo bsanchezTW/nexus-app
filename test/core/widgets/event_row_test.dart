@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:transworld_nexus/core/theme/tw_tokens.dart';
 import 'package:transworld_nexus/core/widgets/nexus_components.dart';
+import 'package:transworld_nexus/core/widgets/tw_components.dart';
 
 Future<void> _montar(WidgetTester tester, Widget fila, {double ancho = 360}) {
   tester.view.physicalSize = Size(ancho, 800);
@@ -78,7 +78,9 @@ void main() {
   });
 
   group('EventRow', () {
-    testWidgets('el bloque muestra el rango y no hay píldoras', (tester) async {
+    testWidgets('el rango va en el bloque y no hay píldora de duración', (
+      tester,
+    ) async {
       await _montar(
         tester,
         EventRow(
@@ -86,7 +88,7 @@ void main() {
           endDate: DateTime(2026, 10, 24),
           title: 'Feria Transworld',
           place: 'Santiago',
-          meta: const ['Interna'],
+          chip: const TwOriginPill(interno: true),
           onTap: () {},
         ),
       );
@@ -94,8 +96,7 @@ void main() {
       expect(find.text('20–24'), findsOneWidget);
       expect(find.text('OCT'), findsOneWidget);
       expect(find.text('Santiago'), findsOneWidget);
-      expect(find.text(' · Interna'), findsOneWidget);
-      expect(find.byType(StatusChip), findsNothing);
+      expect(find.text('INTERNO'), findsOneWidget);
       expect(find.textContaining('días'), findsNothing);
     });
 
@@ -140,7 +141,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('finalizado se dice en texto y el bloque queda gris', (
+    testWidgets('finalizado lleva píldora y el bloque queda gris', (
       tester,
     ) async {
       await _montar(
@@ -149,76 +150,86 @@ void main() {
           date: DateTime(2020, 8, 10),
           title: 'Transworld Connect',
           place: 'Santiago',
-          meta: const ['Taller'],
+          chip: const TwOriginPill(interno: false),
           finalizado: true,
           onTap: () {},
         ),
       );
 
-      expect(find.text(' · Taller · Finalizado'), findsOneWidget);
-      expect(find.text('Evento finalizado'), findsNothing);
+      expect(find.text('EXTERNO'), findsOneWidget);
+      expect(find.text('FINALIZADO'), findsOneWidget);
       expect(_fondoDelBloque(tester), TwColors.surfaceTint);
     });
 
-    testWidgets('sin lugar los detalles ocupan la línea sin pin', (
+    testWidgets('una actividad de hoy dice en curso; una próxima no lleva', (
       tester,
     ) async {
+      final hoy = DateTime.now();
+      await _montar(
+        tester,
+        Column(
+          children: [
+            EventRow(
+              date: hoy.subtract(const Duration(days: 1)),
+              endDate: hoy.add(const Duration(days: 1)),
+              title: 'En curso',
+              place: 'Santiago',
+              onTap: () {},
+            ),
+            EventRow(
+              date: hoy.add(const Duration(days: 10)),
+              title: 'Próxima',
+              place: 'Santiago',
+              onTap: () {},
+            ),
+          ],
+        ),
+      );
+
+      expect(find.text('EN CURSO'), findsOneWidget);
+      expect(find.text('FINALIZADO'), findsNothing);
+    });
+
+    testWidgets('sin conexión reemplaza al estado', (tester) async {
       await _montar(
         tester,
         EventRow(
-          date: DateTime(2026, 8, 10),
+          date: DateTime(2020, 8, 10),
           title: 'Actividad sin país',
           place: '',
-          meta: const ['Externa'],
+          chip: const TwOriginPill(interno: false),
+          finalizado: true,
           sinCache: true,
           onTap: () {},
         ),
       );
 
-      expect(find.text('Externa · Sin conexión'), findsOneWidget);
-      expect(_fondoDelBloque(tester), TwColors.blueTint);
+      expect(find.text('SIN CONEXIÓN'), findsOneWidget);
+      expect(find.text('FINALIZADO'), findsNothing);
     });
 
-    testWidgets('un lugar largo se corta antes que los detalles', (
+    testWidgets('las píldoras nunca se apilan, aunque el texto sea grande', (
       tester,
     ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       await _montar(
         tester,
         EventRow(
-          date: DateTime(2026, 8, 10),
+          date: DateTime(2020, 8, 10),
           title: 'Congreso',
           place:
               'Centro de Convenciones Espacio Riesco, Avenida El Salto 5000, Huechuraba',
-          meta: const ['Interna'],
+          chip: const TwOriginPill(interno: true),
           finalizado: true,
           onTap: () {},
         ),
-        // La fuente de los tests mide cada carácter como un cuadrado.
-        ancho: 560,
+        ancho: 320,
       );
 
-      bool cortado(String texto) => tester
-          .renderObject<RenderParagraph>(find.text(texto))
-          .didExceedMaxLines;
-      expect(
-        cortado(
-          'Centro de Convenciones Espacio Riesco, Avenida El Salto 5000, Huechuraba',
-        ),
-        isTrue,
-      );
-      expect(cortado(' · Interna · Finalizado'), isFalse);
-      // Cortado con "…", el lugar mide lo que dibuja: sin esto ocupaba todo su
-      // espacio y dejaba un hueco antes de " · Finalizado".
-      expect(
-        tester
-            .renderObject<RenderParagraph>(
-              find.text(
-                'Centro de Convenciones Espacio Riesco, Avenida El Salto 5000, Huechuraba',
-              ),
-            )
-            .textWidthBasis,
-        TextWidthBasis.longestLine,
-      );
+      final origen = tester.getTopLeft(find.text('INTERNO'));
+      final estado = tester.getTopLeft(find.text('FINALIZADO'));
+      expect(origen.dy, closeTo(estado.dy, 1));
       expect(tester.takeException(), isNull);
     });
   });

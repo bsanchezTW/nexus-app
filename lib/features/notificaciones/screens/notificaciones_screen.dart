@@ -14,6 +14,7 @@ import '../../../data/models/notificacion.dart';
 import '../../../data/repositories/notificaciones_repository.dart';
 import '../notificacion_destino.dart';
 import '../providers/notificaciones_providers.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 class NotificacionesScreen extends ConsumerStatefulWidget {
   const NotificacionesScreen({super.key});
@@ -25,12 +26,11 @@ class NotificacionesScreen extends ConsumerStatefulWidget {
 
 class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
   bool _marcandoTodas = false;
-  bool _eliminando = false;
   final Set<String> _seleccionados = {};
   final Set<String> _descartadas = {};
 
   bool get _modoSeleccion => _seleccionados.isNotEmpty;
-  bool get _ocupado => _marcandoTodas || _eliminando;
+  bool get _ocupado => _marcandoTodas;
 
   @override
   void initState() {
@@ -112,25 +112,25 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
     final esSeleccion = _seleccionados.isNotEmpty;
     final cantidad = esSeleccion ? _seleccionados.length : lista.length;
 
-    final confirmado = await confirmDialog(
-      context,
-      title: esSeleccion ? 'Eliminar seleccionadas' : 'Eliminar todas',
-      message: esSeleccion
-          ? '¿Deseas eliminar $cantidad notificación(es) seleccionada(s)?'
-          : '¿Deseas eliminar todas las notificaciones?',
-      confirmLabel: 'Eliminar',
-      destructive: true,
-    );
-    if (!confirmado || !mounted) return;
-
-    setState(() => _eliminando = true);
     try {
-      final repo = ref.read(notificacionesRepositoryProvider);
-      if (esSeleccion) {
-        await repo.ocultarNotificaciones(_seleccionados.toList());
-      } else {
-        await repo.ocultarTodasNotificaciones();
-      }
+      final eliminadas = await confirmarYEjecutar(
+        context,
+        title: esSeleccion ? 'Eliminar seleccionadas' : 'Eliminar todas',
+        message: esSeleccion
+            ? '¿Deseas eliminar $cantidad notificación(es) seleccionada(s)?'
+            : '¿Deseas eliminar todas las notificaciones?',
+        confirmLabel: 'Eliminar',
+        destructive: true,
+        accion: () async {
+          final repo = ref.read(notificacionesRepositoryProvider);
+          if (esSeleccion) {
+            await repo.ocultarNotificaciones(_seleccionados.toList());
+          } else {
+            await repo.ocultarTodasNotificaciones();
+          }
+        },
+      );
+      if (!eliminadas) return;
       ref.invalidate(notificacionesInboxProvider);
       if (mounted) {
         setState(() {
@@ -146,8 +146,6 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
           isError: true,
         );
       }
-    } finally {
-      if (mounted) setState(() => _eliminando = false);
     }
   }
 
@@ -182,7 +180,6 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
         icon: Symbols.delete_outline_rounded,
         tooltip: _modoSeleccion ? 'Eliminar seleccionadas' : 'Eliminar todas',
         danger: true,
-        loading: _eliminando,
         onTap: _ocupado ? null : () => _eliminar(lista),
       ),
     ];

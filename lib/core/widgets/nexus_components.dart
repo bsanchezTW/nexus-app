@@ -372,7 +372,7 @@ class EventRow extends StatelessWidget {
     this.fijado = false,
     this.trailing,
     this.actions,
-    this.meta = const [],
+    this.chip,
     this.sinCache = false,
     this.footer,
   });
@@ -398,18 +398,46 @@ class EventRow extends StatelessWidget {
   /// tocarla avisa en vez de abrir una pantalla que no tiene datos que mostrar.
   final bool sinCache;
 
-  /// Datos cortos que siguen al lugar en la segunda línea, separados por
-  /// ` · ` (p. ej. `Interna` o `Taller`). La fila agrega por su cuenta
-  /// `Finalizado` y `Sin conexión`.
-  final List<String> meta;
+  /// Píldora de tipo (origen de la actividad o `Taller`). La de estado la pone
+  /// la fila: a lo más dos píldoras, siempre en una sola línea.
+  final Widget? chip;
+
+  /// Estado que merece píldora: en curso, finalizado o sin conexión. Los
+  /// próximos no llevan: la fecha ya lo dice.
+  Widget? _pildoraEstado() {
+    if (sinCache) {
+      return const TwPuntoPill(
+        texto: 'SIN CONEXIÓN',
+        color: TwColors.muted,
+        fondo: TwColors.surfaceTint,
+        borde: TwColors.border07,
+      );
+    }
+    if (finalizado) {
+      return const TwPuntoPill(
+        texto: 'FINALIZADO',
+        color: TwColors.danger,
+        fondo: TwColors.dangerTint,
+        borde: TwColors.dangerTint,
+      );
+    }
+    final hoy = DateUtils.dateOnly(DateTime.now());
+    final enCurso =
+        !hoy.isBefore(DateUtils.dateOnly(date)) &&
+        !hoy.isAfter(DateUtils.dateOnly(endDate ?? date));
+    if (!enCurso) return null;
+    return const TwPuntoPill(
+      texto: 'EN CURSO',
+      color: TwColors.greenInk,
+      fondo: TwColors.greenTint,
+      borde: TwColors.greenTint,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final detalles = [
-      ...meta,
-      if (finalizado) 'Finalizado',
-      if (sinCache) 'Sin conexión',
-    ].join(' · ');
+    final estado = _pildoraEstado();
+    final pildoras = [?chip, ?estado];
     final estiloSegundaLinea = TwText.tileSubtitle.copyWith(fontSize: 12);
 
     final chevron = sinCache
@@ -465,52 +493,42 @@ class EventRow extends StatelessWidget {
                             ),
                           ],
                         ),
-                        if (place.isNotEmpty || detalles.isNotEmpty) ...[
+                        if (place.isNotEmpty) ...[
                           const SizedBox(height: 4),
-                          // Un lugar largo se corta antes que los detalles,
-                          // aunque siempre deja ver el pin y el comienzo.
-                          LayoutBuilder(
-                            builder: (context, constraints) => Row(
+                          Row(
+                            children: [
+                              const Icon(
+                                Symbols.location_on_rounded,
+                                size: 14,
+                                color: TwColors.muted,
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  place,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: estiloSegundaLinea,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        if (pildoras.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          // Una sola línea: si no caben (letra grande), se
+                          // achican en vez de apilarse.
+                          FittedBox(
+                            key: const Key('event_row_pildoras'),
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (place.isNotEmpty) ...[
-                                  const Icon(
-                                    Symbols.location_on_rounded,
-                                    size: 14,
-                                    color: TwColors.muted,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Flexible(
-                                    child: Text(
-                                      place,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      // Mide lo que dibuja: cortado con "…",
-                                      // no deja hueco antes de los detalles.
-                                      textWidthBasis:
-                                          TextWidthBasis.longestLine,
-                                      style: estiloSegundaLinea,
-                                    ),
-                                  ),
+                                for (var i = 0; i < pildoras.length; i++) ...[
+                                  if (i > 0) const SizedBox(width: 6),
+                                  pildoras[i],
                                 ],
-                                if (detalles.isNotEmpty)
-                                  ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      maxWidth: place.isEmpty
-                                          ? constraints.maxWidth
-                                          : (constraints.maxWidth - 64).clamp(
-                                              0,
-                                              constraints.maxWidth,
-                                            ),
-                                    ),
-                                    child: Text(
-                                      place.isNotEmpty
-                                          ? ' · $detalles'
-                                          : detalles,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: estiloSegundaLinea,
-                                    ),
-                                  ),
                               ],
                             ),
                           ),

@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transworld_nexus/core/theme/app_theme.dart';
 import 'package:transworld_nexus/core/widgets/app_widgets.dart';
 import 'package:transworld_nexus/core/widgets/tw_toast.dart';
 
@@ -56,56 +55,20 @@ void main() {
     expect(resultado, isFalse);
   });
 
-  testWidgets('el toast sin navbar se ancla al pie de la pantalla', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => TextButton(
-              onPressed: () =>
-                  showAppSnackBar(context, 'Ya tienes la última versión.'),
-              child: const Text('Mostrar'),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Mostrar'));
-    await tester.pump();
-
-    final toast = find.text('Ya tienes la última versión.');
-    expect(toast, findsOneWidget);
-    final positioned = tester.widget<Positioned>(
-      find.ancestor(of: toast, matching: find.byType(Positioned)).first,
-    );
-    final safe = MediaQuery.paddingOf(tester.element(toast)).bottom;
-    expect(positioned.bottom, TwToast.kBottom + safe);
-  });
-
-  testWidgets('el toast con navbar deja holgura sobre la barra flotante', (
-    tester,
-  ) async {
-    final previous = debugDefaultTargetPlatformOverride;
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    try {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ShellNavScope(
-            child: Scaffold(
-              body: Builder(
-                builder: (context) => TextButton(
-                  onPressed: () =>
-                      showAppSnackBar(context, 'Evento creado correctamente'),
-                  child: const Text('Mostrar'),
-                ),
-              ),
-            ),
+  for (final conBarra in [false, true]) {
+    testWidgets('el toast aparece arriba, bajo la barra de estado '
+        '(${conBarra ? 'con' : 'sin'} barra inferior)', (tester) async {
+      Widget pantalla = Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () =>
+                showAppSnackBar(context, 'Evento creado correctamente'),
+            child: const Text('Mostrar'),
           ),
         ),
       );
+      if (conBarra) pantalla = ShellNavScope(child: pantalla);
+      await tester.pumpWidget(MaterialApp(home: pantalla));
 
       await tester.tap(find.text('Mostrar'));
       await tester.pump();
@@ -115,95 +78,11 @@ void main() {
       final positioned = tester.widget<Positioned>(
         find.ancestor(of: toast, matching: find.byType(Positioned)).first,
       );
-      final safe = MediaQuery.paddingOf(tester.element(toast)).bottom;
-      expect(
-        positioned.bottom,
-        GlassNavTokens.occupiedHeightOf() +
-            GlassNavTokens.deadZone +
-            AppSpacing.sm +
-            safe,
-      );
-    } finally {
-      debugDefaultTargetPlatformOverride = previous;
-    }
-  });
-
-  testWidgets('el toast en Windows no reserva la barra inferior', (
-    tester,
-  ) async {
-    final previous = debugDefaultTargetPlatformOverride;
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-    try {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ShellNavScope(
-            child: Scaffold(
-              body: Builder(
-                builder: (context) => TextButton(
-                  onPressed: () =>
-                      showAppSnackBar(context, 'Evento creado correctamente'),
-                  child: const Text('Mostrar'),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Mostrar'));
-      await tester.pump();
-
-      final toast = find.text('Evento creado correctamente');
-      expect(toast, findsOneWidget);
-      final positioned = tester.widget<Positioned>(
-        find.ancestor(of: toast, matching: find.byType(Positioned)).first,
-      );
-      final safe = MediaQuery.paddingOf(tester.element(toast)).bottom;
-      expect(positioned.bottom, TwToast.kBottom + safe);
-    } finally {
-      debugDefaultTargetPlatformOverride = previous;
-    }
-  });
-
-  testWidgets('el toast en iOS deja holgura sobre el UITabBar nativo', (
-    tester,
-  ) async {
-    final previous = debugDefaultTargetPlatformOverride;
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    try {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ShellNavScope(
-            child: Scaffold(
-              body: Builder(
-                builder: (context) => TextButton(
-                  onPressed: () =>
-                      showAppSnackBar(context, 'Evento creado correctamente'),
-                  child: const Text('Mostrar'),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Mostrar'));
-      await tester.pump();
-
-      final toast = find.text('Evento creado correctamente');
-      expect(toast, findsOneWidget);
-      final positioned = tester.widget<Positioned>(
-        find.ancestor(of: toast, matching: find.byType(Positioned)).first,
-      );
-      final safe = MediaQuery.paddingOf(tester.element(toast)).bottom;
-      expect(
-        positioned.bottom,
-        GlassNavTokens.nativeIosHeight + AppSpacing.sm + safe,
-      );
-    } finally {
-      debugDefaultTargetPlatformOverride = previous;
-    }
-  });
+      final safe = MediaQuery.paddingOf(tester.element(toast)).top;
+      expect(positioned.top, safe + 10);
+      expect(positioned.bottom, isNull);
+    });
+  }
 
   testWidgets('descartar creación: Cancelar se queda, Descartar confirma', (
     tester,

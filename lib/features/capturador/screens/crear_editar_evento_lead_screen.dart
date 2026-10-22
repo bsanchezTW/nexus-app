@@ -26,6 +26,7 @@ import '../../../data/repositories/storage_cleanup_service.dart';
 import '../../../data/repositories/storage_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../providers/capturador_providers.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 class CrearEditarEventoLeadScreen extends StatelessWidget {
   const CrearEditarEventoLeadScreen({super.key, this.eventoId});
@@ -143,86 +144,94 @@ class _CrearEditarEventoLeadFormState
     if (!_formKey.currentState!.validate()) return;
     setState(() => _guardando = true);
 
-    try {
-      var imagenUrl = _imagenUrlExistente;
-      if (!_fichaSoloLectura && _imagenBytes != null) {
-        imagenUrl = await ref
-            .read(storageRepositoryProvider)
-            .subirImagenEvento(_imagenBytes!, 'jpg');
-      }
-      final cambioImagen =
-          !_fichaSoloLectura && _esEdicion && imagenUrl != _imagenUrl0;
+    await conEspera(context, () async {
+      try {
+        var imagenUrl = _imagenUrlExistente;
+        if (!_fichaSoloLectura && _imagenBytes != null) {
+          imagenUrl = await ref
+              .read(storageRepositoryProvider)
+              .subirImagenEvento(_imagenBytes!, 'jpg');
+        }
+        final cambioImagen =
+            !_fichaSoloLectura && _esEdicion && imagenUrl != _imagenUrl0;
 
-      final evento = EventoLead(
-        id: widget.eventoId ?? '',
-        nombre: _nombreController.text.trim(),
-        fecha: _fecha,
-        duracionDias: _duracionDias,
-        pais: _pais,
-        tematica: _tematicaController.text.trim().isEmpty
-            ? null
-            : _tematicaController.text.trim(),
-        imagenUrl: imagenUrl,
-        tipo: _heredada ? TipoEventoLead.interno : TipoEventoLead.externo,
-      );
-
-      final repo = ref.read(eventosLeadsRepositoryProvider);
-      if (_esEdicion) {
-        await repo.actualizar(widget.eventoId!, evento.toUpdateMap());
-      } else {
-        await repo.crear(evento);
-      }
-
-      ref.invalidate(eventosLeadsListProvider);
-      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
-      if (widget.eventoId != null) {
-        ref.invalidate(eventoLeadByIdProvider(widget.eventoId!));
-      }
-      // Tanto reemplazar como quitar la portada deja el objeto anterior sin
-      // referencia. El trigger lo encola y la función lo borra de Storage.
-      if (cambioImagen) {
-        await ref.read(storageCleanupServiceProvider).drenar();
-      }
-
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          _esEdicion ? 'Actividad actualizada.' : 'Actividad creada.',
+        final evento = EventoLead(
+          id: widget.eventoId ?? '',
+          nombre: _nombreController.text.trim(),
+          fecha: _fecha,
+          duracionDias: _duracionDias,
+          pais: _pais,
+          tematica: _tematicaController.text.trim().isEmpty
+              ? null
+              : _tematicaController.text.trim(),
+          imagenUrl: imagenUrl,
+          tipo: _heredada ? TipoEventoLead.interno : TipoEventoLead.externo,
         );
-        volverAtras(context);
+
+        final repo = ref.read(eventosLeadsRepositoryProvider);
+        if (_esEdicion) {
+          await repo.actualizar(widget.eventoId!, evento.toUpdateMap());
+        } else {
+          await repo.crear(evento);
+        }
+
+        ref.invalidate(eventosLeadsListProvider);
+        exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
+        if (widget.eventoId != null) {
+          ref.invalidate(eventoLeadByIdProvider(widget.eventoId!));
+        }
+        // Tanto reemplazar como quitar la portada deja el objeto anterior sin
+        // referencia. El trigger lo encola y la función lo borra de Storage.
+        if (cambioImagen) {
+          await ref.read(storageCleanupServiceProvider).drenar();
+        }
+
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            _esEdicion ? 'Actividad actualizada.' : 'Actividad creada.',
+          );
+          volverAtras(context);
+        }
+      } catch (e) {
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            e.toString().replaceFirst('Exception: ', ''),
+            isError: true,
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _guardando = false);
       }
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          e.toString().replaceFirst('Exception: ', ''),
-          isError: true,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
+    });
   }
 
   Future<void> _eliminar() async {
     if (!requireOnline(context, ref)) return;
-    final confirmado = await confirmDialog(
-      context,
-      title: 'Eliminar actividad',
-      message:
-          'Esta acción no se puede deshacer. ¿Eliminar la actividad de captura?',
-      confirmLabel: 'Eliminar',
-      destructive: true,
-    );
-    if (!confirmado) return;
-
     try {
-      await ref.read(eventosLeadsRepositoryProvider).eliminar(widget.eventoId!);
-      await ref.read(storageCleanupServiceProvider).drenar();
+      final eliminada = await confirmarYEjecutar(
+        context,
+        title: 'Eliminar actividad',
+        message:
+            'Esta acción no se puede deshacer. ¿Eliminar la actividad de captura?',
+        confirmLabel: 'Eliminar',
+        destructive: true,
+        accion: () async {
+          await ref
+              .read(eventosLeadsRepositoryProvider)
+              .eliminar(widget.eventoId!);
+          await ref.read(storageCleanupServiceProvider).drenar();
+        },
+      );
+      if (!eliminada) return;
       ref.invalidate(eventosLeadsListProvider);
       exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       ref.invalidate(eventoLeadByIdProvider(widget.eventoId!));
-      if (mounted) context.go(RoutePaths.capturador);
+      if (mounted) {
+        showAppSnackBar(context, 'Actividad eliminada.');
+        context.go(RoutePaths.capturador);
+      }
     } catch (e) {
       if (mounted) {
         showAppSnackBar(

@@ -30,6 +30,9 @@ import '../eventos_agrupados.dart';
 import '../providers/eventos_providers.dart';
 import '../widgets/evento_acceso_button.dart';
 import '../widgets/talleres_anidados.dart';
+import '../../../core/theme/tw_tokens.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
+import '../../../core/widgets/tw_components.dart';
 
 class ListarEventosScreen extends ConsumerStatefulWidget {
   const ListarEventosScreen({super.key});
@@ -153,22 +156,24 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
   }
 
   Future<void> _eliminarEvento(Evento evento) async {
-    final confirmado = await confirmDialog(
-      context,
-      title: 'Eliminar evento',
-      message:
-          'Esta acción no se puede deshacer. ¿Eliminar el evento y sus registrados?',
-      confirmLabel: 'Eliminar',
-      destructive: true,
-    );
-    if (!confirmado || !mounted) return;
-
     try {
-      await ref.read(eventosRepositoryProvider).eliminar(evento.id);
-      await ref.read(fijadosRepositoryProvider).desfijarEvento(evento.id);
-      // La portada del evento se quedó sin dueño: el servidor ya la tiene
-      // encolada, acá solo se pide el vaciado.
-      await ref.read(storageCleanupServiceProvider).drenar();
+      final eliminado = await confirmarYEjecutar(
+        context,
+        title: 'Eliminar evento',
+        message:
+            'Esta acción no se puede deshacer. ¿Eliminar el evento y sus registrados?',
+        confirmLabel: 'Eliminar',
+        destructive: true,
+        accion: () async {
+          await ref.read(eventosRepositoryProvider).eliminar(evento.id);
+          await ref.read(fijadosRepositoryProvider).desfijarEvento(evento.id);
+          // La portada del evento se quedó sin dueño: el servidor ya la tiene
+          // encolada, acá solo se pide el vaciado.
+          await ref.read(storageCleanupServiceProvider).drenar();
+        },
+      );
+      if (!eliminado || !mounted) return;
+      showAppSnackBar(context, 'Evento eliminado.');
       ref.invalidate(eventosListProvider);
       exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       ref.invalidate(eventosFijadosProvider);
@@ -451,7 +456,14 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
                       finalizado: evento.yaOcurrio,
                       fijado: fijado,
                       sinCache: sinCache,
-                      meta: [if (evento.esTaller) 'Taller'],
+                      chip: evento.esTaller
+                          ? const TwPuntoPill(
+                              texto: 'TALLER',
+                              color: TwColors.blueInk,
+                              fondo: TwColors.blueTint,
+                              borde: TwColors.blueTint,
+                            )
+                          : null,
                       onTap: () {
                         if (sinCache) {
                           showOfflineUnavailableToast(context);

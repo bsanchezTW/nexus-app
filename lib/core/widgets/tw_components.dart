@@ -311,6 +311,67 @@ class TwStatusPill extends StatelessWidget {
   }
 }
 
+/// Origen de un evento de leads, con el mismo patrón que [TwStatusPill].
+///
+/// Interno: nació de un evento organizado por Transworld. Externo: alta manual
+/// en la lista de leads, sin evento de registro detrás.
+class TwOriginPill extends StatelessWidget {
+  const TwOriginPill({super.key, required this.interno});
+
+  final bool interno;
+
+  @override
+  Widget build(BuildContext context) {
+    return TwPuntoPill(
+      texto: interno ? 'INTERNO' : 'EXTERNO',
+      color: interno ? TwColors.originInternal : TwColors.originExternal,
+      fondo: interno ? TwColors.originInternalBg : TwColors.originExternalBg,
+      borde: interno ? TwColors.originInternalBd : TwColors.originExternalBd,
+    );
+  }
+}
+
+/// Píldora con punto sobre tarjeta blanca: la base de [TwOriginPill] y de las
+/// píldoras de estado de las listas (`EventRow`).
+class TwPuntoPill extends StatelessWidget {
+  const TwPuntoPill({
+    super.key,
+    required this.texto,
+    required this.color,
+    required this.fondo,
+    required this.borde,
+  });
+
+  final String texto;
+  final Color color;
+  final Color fondo;
+  final Color borde;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: fondo,
+        borderRadius: TwRadii.pill,
+        border: Border.all(color: borde),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(texto, style: TwText.statusPill.copyWith(color: color)),
+        ],
+      ),
+    );
+  }
+}
+
 /// Píldora de fecha del hero: `martes 25 · agosto 2026`.
 class TwDatePill extends StatelessWidget {
   const TwDatePill(this.text, {super.key});

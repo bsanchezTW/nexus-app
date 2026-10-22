@@ -37,6 +37,7 @@ import '../providers/capturador_providers.dart';
 import '../widgets/avatar_lead.dart';
 import '../widgets/foto_lead_identidad.dart';
 import '../../../data/repositories/storage_cleanup_service.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 enum _FiltroLead { todos, mios, deOtros }
 
@@ -685,222 +686,217 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
     var fotosPreparadas = const <String>[];
     Map<String, dynamic>? cambiosPreparados;
 
-    try {
-      // Evita que una consulta iniciada antes de guardar termine después y
-      // vuelva a escribir la versión anterior sobre la caché de la lista.
-      await cache.esperarRevalidaciones();
-      final fotoDescartada =
-          _fotoNueva != null &&
-          !isOnline &&
-          !ref.read(pendingPhotoStoreProvider).disponible;
-      final fotos = await _resolverFotos(isOnline: isOnline);
-      fotosPreparadas = fotos;
+    await conEspera(context, () async {
+      try {
+        // Evita que una consulta iniciada antes de guardar termine después y
+        // vuelva a escribir la versión anterior sobre la caché de la lista.
+        await cache.esperarRevalidaciones();
+        final fotoDescartada =
+            _fotoNueva != null &&
+            !isOnline &&
+            !ref.read(pendingPhotoStoreProvider).disponible;
+        final fotos = await _resolverFotos(isOnline: isOnline);
+        fotosPreparadas = fotos;
 
-      final cambios = <String, dynamic>{
-        'nombre_completo': _nombreController.text.trim(),
-        'empresa': valorOpcional(_empresaController),
-        'cargo': valorOpcional(_cargoController),
-        'telefono': telefono,
-        'email': email?.toLowerCase(),
-        'descripcion': valorOpcional(_descripcionController),
-        if (_fotoNueva != null &&
-            ref.read(pendingPhotoStoreProvider).disponible)
-          'fotos_urls': fotos,
-        if (_fotoNueva == null && _fotos.isEmpty)
-          'fotos_urls': const <String>[],
-      };
-      cambiosPreparados = cambios;
+        final cambios = <String, dynamic>{
+          'nombre_completo': _nombreController.text.trim(),
+          'empresa': valorOpcional(_empresaController),
+          'cargo': valorOpcional(_cargoController),
+          'telefono': telefono,
+          'email': email?.toLowerCase(),
+          'descripcion': valorOpcional(_descripcionController),
+          if (_fotoNueva != null &&
+              ref.read(pendingPhotoStoreProvider).disponible)
+            'fotos_urls': fotos,
+          if (_fotoNueva == null && _fotos.isEmpty)
+            'fotos_urls': const <String>[],
+        };
+        cambiosPreparados = cambios;
 
-      // Un lead que solo existe en la cola todavía no tiene fila en el
-      // servidor: su edición se fusiona en el insert pendiente (lo resuelve
-      // `enqueueUpdate`) en vez de intentar un UPDATE que fallaría.
-      LeadWriteResult? result;
-      var fotoPendienteDeSync = false;
-      if (isOnline && !esIdSoloLocal(widget.leadId)) {
-        try {
-          result = await ref
-              .read(leadsRepositoryProvider)
-              .actualizar(widget.leadId, cambios);
-        } on LeadPhotoPendingException catch (error) {
-          result = error.result;
+        // Un lead que solo existe en la cola todavía no tiene fila en el
+        // servidor: su edición se fusiona en el insert pendiente (lo resuelve
+        // `enqueueUpdate`) en vez de intentar un UPDATE que fallaría.
+        LeadWriteResult? result;
+        var fotoPendienteDeSync = false;
+        if (isOnline && !esIdSoloLocal(widget.leadId)) {
+          try {
+            result = await ref
+                .read(leadsRepositoryProvider)
+                .actualizar(widget.leadId, cambios);
+          } on LeadPhotoPendingException catch (error) {
+            result = error.result;
+            await ref
+                .read(syncQueueServiceProvider.notifier)
+                .enqueueUpdate(
+                  table: SupabaseTables.leads,
+                  entityId: widget.leadId,
+                  changes: {'fotos_urls': error.fotosPendientes},
+                );
+            fotoPendienteDeSync = true;
+          }
+        } else {
           await ref
               .read(syncQueueServiceProvider.notifier)
               .enqueueUpdate(
                 table: SupabaseTables.leads,
                 entityId: widget.leadId,
-                changes: {'fotos_urls': error.fotosPendientes},
+                changes: cambios,
               );
-          fotoPendienteDeSync = true;
         }
-      } else {
-        await ref
-            .read(syncQueueServiceProvider.notifier)
-            .enqueueUpdate(
-              table: SupabaseTables.leads,
-              entityId: widget.leadId,
-              changes: cambios,
+        if (result?.esDuplicado == true) {
+          final store = ref.read(pendingPhotoStoreProvider);
+          for (final foto in fotos.where(esFotoLocal)) {
+            if (!_fotos.contains(foto)) await store.borrar(foto);
+          }
+          if (mounted) {
+            await ofrecerComentarLeadDuplicado(
+              context,
+              ref,
+              eventoId: widget.eventoId,
+              leadId: result!.leadId,
+              mensajeDuplicado: result.mensajeDuplicado,
+              desdeEvento: widget.desdeEvento,
             );
-      }
-      if (result?.esDuplicado == true) {
+          }
+          return;
+        }
+
+        if (result?.guardado == true &&
+            _fotoNueva != null &&
+            !ref.read(pendingPhotoStoreProvider).disponible &&
+            isOnline) {
+          try {
+            await ref
+                .read(leadsRepositoryProvider)
+                .adjuntarFotoBytes(result!.leadId, _fotoNueva!);
+          } catch (_) {
+            if (mounted) {
+              showAppSnackBar(
+                context,
+                'Cambios guardados; foto pendiente, reintenta',
+                isError: true,
+              );
+            }
+            return;
+          }
+        }
+        final cambioFoto =
+            _fotoNueva != null ||
+            !const ListEquality<String>().equals(_fotos, _fotos0);
+        await _borrarFotosLocalesHuerfanas(fotos);
+        if (isOnline &&
+            result?.guardado == true &&
+            !fotoPendienteDeSync &&
+            cambioFoto) {
+          await ref.read(storageCleanupServiceProvider).drenar();
+        }
+        final cambiosCache = Map<String, dynamic>.from(cambios);
+        // Al subir una foto, el repositorio reemplaza el marcador local por la
+        // URL definitiva. Esa URL la incorpora la revalidación; el resto de los
+        // campos sí puede publicarse inmediatamente.
+        if (isOnline && _fotoNueva != null) {
+          cambiosCache.remove('fotos_urls');
+        }
+        final perfil = await ref.read(currentPerfilProvider.future);
+        await publicarCambioEnLecturaCacheada(
+          ref,
+          tabla: leadsCacheTabla(perfil?.canViewAllLeads ?? false),
+          eventoId: widget.eventoId,
+          id: widget.leadId,
+          cambios: cambiosCache,
+          invalidar: () =>
+              ref.invalidate(leadsPorEventoProvider(widget.eventoId)),
+        );
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            fotoPendienteDeSync
+                ? 'Cambios guardados. La foto se sincronizará automáticamente.'
+                : fotoDescartada
+                ? 'Cambios guardados, pero sin la foto: se necesita conexión '
+                      'para adjuntarla.'
+                : 'Cambios guardados.',
+            isError: fotoDescartada,
+          );
+          volverALista(
+            context,
+            RoutePaths.verLeads(
+              widget.eventoId,
+              desdeEvento: widget.desdeEvento,
+            ),
+          );
+        }
+      } catch (e) {
+        final encolables = cambiosPreparados;
+        if (isOnline &&
+            encolables != null &&
+            !esIdSoloLocal(widget.leadId) &&
+            isNetworkTransportError(e)) {
+          try {
+            await ref
+                .read(syncQueueServiceProvider.notifier)
+                .enqueueUpdate(
+                  table: SupabaseTables.leads,
+                  entityId: widget.leadId,
+                  changes: encolables,
+                );
+            final perfil = await ref.read(currentPerfilProvider.future);
+            await publicarCambioEnLecturaCacheada(
+              ref,
+              tabla: leadsCacheTabla(perfil?.canViewAllLeads ?? false),
+              eventoId: widget.eventoId,
+              id: widget.leadId,
+              cambios: encolables,
+              invalidar: () =>
+                  ref.invalidate(leadsPorEventoProvider(widget.eventoId)),
+            );
+            if (mounted) {
+              final fotoNoPersistible =
+                  _fotoNueva != null &&
+                  !ref.read(pendingPhotoStoreProvider).disponible;
+              showAppSnackBar(
+                context,
+                fotoNoPersistible
+                    ? 'Sin conexión real. Los cambios quedaron guardados '
+                          'localmente, pero la foto requiere conexión.'
+                    : 'Sin conexión real. Los cambios quedaron guardados '
+                          'localmente.',
+                isError: fotoNoPersistible,
+              );
+              volverALista(
+                context,
+                RoutePaths.verLeads(
+                  widget.eventoId,
+                  desdeEvento: widget.desdeEvento,
+                ),
+              );
+            }
+            return;
+          } catch (_) {
+            // Conserva el error de transporte original y limpia la foto nueva.
+          }
+        }
         final store = ref.read(pendingPhotoStoreProvider);
-        for (final foto in fotos.where(esFotoLocal)) {
+        for (final foto in fotosPreparadas.where(esFotoLocal)) {
           if (!_fotos.contains(foto)) await store.borrar(foto);
         }
         if (mounted) {
-          await ofrecerComentarLeadDuplicado(
+          showAppSnackBar(
             context,
-            ref,
-            eventoId: widget.eventoId,
-            leadId: result!.leadId,
-            mensajeDuplicado: result.mensajeDuplicado,
-            desdeEvento: widget.desdeEvento,
+            e.toString().replaceFirst('Exception: ', ''),
+            isError: true,
           );
         }
-        return;
+      } finally {
+        if (mounted) setState(() => _guardando = false);
       }
-
-      if (result?.guardado == true &&
-          _fotoNueva != null &&
-          !ref.read(pendingPhotoStoreProvider).disponible &&
-          isOnline) {
-        try {
-          await ref
-              .read(leadsRepositoryProvider)
-              .adjuntarFotoBytes(result!.leadId, _fotoNueva!);
-        } catch (_) {
-          if (mounted) {
-            showAppSnackBar(
-              context,
-              'Cambios guardados; foto pendiente, reintenta',
-              isError: true,
-            );
-          }
-          return;
-        }
-      }
-      final cambioFoto =
-          _fotoNueva != null ||
-          !const ListEquality<String>().equals(_fotos, _fotos0);
-      await _borrarFotosLocalesHuerfanas(fotos);
-      if (isOnline &&
-          result?.guardado == true &&
-          !fotoPendienteDeSync &&
-          cambioFoto) {
-        await ref.read(storageCleanupServiceProvider).drenar();
-      }
-      final cambiosCache = Map<String, dynamic>.from(cambios);
-      // Al subir una foto, el repositorio reemplaza el marcador local por la
-      // URL definitiva. Esa URL la incorpora la revalidación; el resto de los
-      // campos sí puede publicarse inmediatamente.
-      if (isOnline && _fotoNueva != null) {
-        cambiosCache.remove('fotos_urls');
-      }
-      final perfil = await ref.read(currentPerfilProvider.future);
-      await publicarCambioEnLecturaCacheada(
-        ref,
-        tabla: leadsCacheTabla(perfil?.canViewAllLeads ?? false),
-        eventoId: widget.eventoId,
-        id: widget.leadId,
-        cambios: cambiosCache,
-        invalidar: () =>
-            ref.invalidate(leadsPorEventoProvider(widget.eventoId)),
-      );
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          fotoPendienteDeSync
-              ? 'Cambios guardados. La foto se sincronizará automáticamente.'
-              : fotoDescartada
-              ? 'Cambios guardados, pero sin la foto: se necesita conexión '
-                    'para adjuntarla.'
-              : 'Cambios guardados.',
-          isError: fotoDescartada,
-        );
-        volverALista(
-          context,
-          RoutePaths.verLeads(widget.eventoId, desdeEvento: widget.desdeEvento),
-        );
-      }
-    } catch (e) {
-      if (isOnline &&
-          cambiosPreparados != null &&
-          !esIdSoloLocal(widget.leadId) &&
-          isNetworkTransportError(e)) {
-        try {
-          await ref
-              .read(syncQueueServiceProvider.notifier)
-              .enqueueUpdate(
-                table: SupabaseTables.leads,
-                entityId: widget.leadId,
-                changes: cambiosPreparados,
-              );
-          final perfil = await ref.read(currentPerfilProvider.future);
-          await publicarCambioEnLecturaCacheada(
-            ref,
-            tabla: leadsCacheTabla(perfil?.canViewAllLeads ?? false),
-            eventoId: widget.eventoId,
-            id: widget.leadId,
-            cambios: cambiosPreparados,
-            invalidar: () =>
-                ref.invalidate(leadsPorEventoProvider(widget.eventoId)),
-          );
-          if (mounted) {
-            final fotoNoPersistible =
-                _fotoNueva != null &&
-                !ref.read(pendingPhotoStoreProvider).disponible;
-            showAppSnackBar(
-              context,
-              fotoNoPersistible
-                  ? 'Sin conexión real. Los cambios quedaron guardados '
-                        'localmente, pero la foto requiere conexión.'
-                  : 'Sin conexión real. Los cambios quedaron guardados '
-                        'localmente.',
-              isError: fotoNoPersistible,
-            );
-            volverALista(
-              context,
-              RoutePaths.verLeads(
-                widget.eventoId,
-                desdeEvento: widget.desdeEvento,
-              ),
-            );
-          }
-          return;
-        } catch (_) {
-          // Conserva el error de transporte original y limpia la foto nueva.
-        }
-      }
-      final store = ref.read(pendingPhotoStoreProvider);
-      for (final foto in fotosPreparadas.where(esFotoLocal)) {
-        if (!_fotos.contains(foto)) await store.borrar(foto);
-      }
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          e.toString().replaceFirst('Exception: ', ''),
-          isError: true,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
+    });
   }
 
   /// Borrado lógico. Sin red se encola como un cambio y el lead desaparece de
   /// la lista al instante (ver `fusionarLeadsConCola`); al volver la conexión
   /// la cola lo envía a `cl_eliminar_lead`.
   Future<void> _eliminar() async {
-    final ok = await confirmDialog(
-      context,
-      title: 'Eliminar lead',
-      message:
-          'El lead dejará de aparecer en la lista, los conteos y el Excel. '
-          'Si fue un error, un administrador puede recuperarlo.',
-      confirmLabel: 'Eliminar',
-      destructive: true,
-    );
-    if (!ok) return;
-
     Future<void> encolar() => ref
         .read(syncQueueServiceProvider.notifier)
         .enqueueUpdate(
@@ -912,16 +908,25 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
         );
 
     try {
-      if (ref.read(isOnlineProvider)) {
-        try {
-          await ref.read(leadsRepositoryProvider).eliminar(widget.leadId);
-        } catch (error) {
-          if (!isNetworkTransportError(error)) rethrow;
-          await encolar();
-        }
-      } else {
-        await encolar();
-      }
+      final eliminado = await confirmarYEjecutar(
+        context,
+        title: 'Eliminar lead',
+        message:
+            'El lead dejará de aparecer en la lista, los conteos y el Excel. '
+            'Si fue un error, un administrador puede recuperarlo.',
+        confirmLabel: 'Eliminar',
+        destructive: true,
+        accion: () async {
+          if (!ref.read(isOnlineProvider)) return encolar();
+          try {
+            await ref.read(leadsRepositoryProvider).eliminar(widget.leadId);
+          } catch (error) {
+            if (!isNetworkTransportError(error)) rethrow;
+            await encolar();
+          }
+        },
+      );
+      if (!eliminado) return;
       ref.invalidate(leadsPorEventoProvider(widget.eventoId));
       ref.invalidate(leadsResumenRemotoProvider(widget.eventoId));
       exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));

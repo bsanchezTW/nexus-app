@@ -9,6 +9,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'app.dart';
 import 'core/desktop/desktop_window.dart';
+import 'core/widgets/espera_bloqueante.dart';
 import 'firebase_options.dart';
 
 @pragma('vm:entry-point')
@@ -19,6 +20,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Antes que el router: así el "atrás" se ignora mientras se guarda.
+  EsperaBloqueante.instalar();
   if (kIsWeb) usePathUrlStrategy();
   await bootstrapDesktopWindow();
 

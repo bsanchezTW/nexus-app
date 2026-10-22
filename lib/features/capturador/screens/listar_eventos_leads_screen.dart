@@ -25,6 +25,8 @@ import '../../auth/providers/auth_providers.dart';
 import '../../fijados/providers/fijados_providers.dart';
 import '../../home/providers/home_featured_providers.dart';
 import '../providers/capturador_providers.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
+import '../../../core/widgets/tw_components.dart';
 
 class ListarEventosLeadsScreen extends ConsumerStatefulWidget {
   const ListarEventosLeadsScreen({super.key});
@@ -133,20 +135,22 @@ class _ListarEventosLeadsScreenState
   }
 
   Future<void> _eliminarEventoLead(EventoLead evento) async {
-    final confirmado = await confirmDialog(
-      context,
-      title: 'Eliminar actividad',
-      message:
-          'Esta acción no se puede deshacer. ¿Eliminar la actividad de captura?',
-      confirmLabel: 'Eliminar',
-      destructive: true,
-    );
-    if (!confirmado || !mounted) return;
-
     try {
-      await ref.read(eventosLeadsRepositoryProvider).eliminar(evento.id);
-      await ref.read(storageCleanupServiceProvider).drenar();
-      await ref.read(fijadosRepositoryProvider).desfijarCampana(evento.id);
+      final eliminada = await confirmarYEjecutar(
+        context,
+        title: 'Eliminar actividad',
+        message:
+            'Esta acción no se puede deshacer. ¿Eliminar la actividad de captura?',
+        confirmLabel: 'Eliminar',
+        destructive: true,
+        accion: () async {
+          await ref.read(eventosLeadsRepositoryProvider).eliminar(evento.id);
+          await ref.read(storageCleanupServiceProvider).drenar();
+          await ref.read(fijadosRepositoryProvider).desfijarCampana(evento.id);
+        },
+      );
+      if (!eliminada || !mounted) return;
+      showAppSnackBar(context, 'Actividad eliminada.');
       ref.invalidate(eventosLeadsListProvider);
       exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       ref.invalidate(campanasFijadasProvider);
@@ -391,7 +395,7 @@ class _ListarEventosLeadsScreenState
                       finalizado: evento.yaOcurrio,
                       fijado: fijado,
                       sinCache: sinCache,
-                      meta: [evento.esInterno ? 'Interna' : 'Externa'],
+                      chip: TwOriginPill(interno: evento.esInterno),
                       onTap: () {
                         if (sinCache) {
                           showOfflineUnavailableToast(context);

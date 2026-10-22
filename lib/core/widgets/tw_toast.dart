@@ -9,16 +9,17 @@ import '../theme/tw_tokens.dart';
 /// pantallas rediseñadas: se montan en el `Overlay` raíz, así que sobreviven a
 /// cambios de pantalla y nunca empujan el layout.
 ///
-/// Un solo toast a la vez: el nuevo reemplaza al anterior. Entra deslizando
-/// desde abajo y sale con un fade en el sitio.
+/// Un solo toast a la vez: el nuevo reemplaza al anterior. Aparece arriba,
+/// bajo la barra de estado: cae con un leve rebote, sale subiendo y se puede
+/// descartar deslizándolo hacia arriba. Arriba no compite con la barra
+/// inferior ni con los botones de los formularios.
 enum TwToastKind { info, success, error, progress, link }
 
 class _TwToastData {
-  const _TwToastData(this.message, this.kind, this.bottomOffset, this.seq);
+  const _TwToastData(this.message, this.kind, this.seq);
 
   final String message;
   final TwToastKind kind;
-  final double bottomOffset;
   final int seq;
 }
 
@@ -30,57 +31,39 @@ class TwToast {
   static Timer? _timer;
   static int _seq = 0;
 
-  /// Offset estándar cuando la pantalla NO tiene barra inferior.
-  static const double kBottom = 24;
-
-  /// Offset cuando la pantalla tiene la bottom nav flotante.
-  static const double kBottomWithNav = 96;
-
   static void show(
     BuildContext context,
     String message, {
     TwToastKind kind = TwToastKind.info,
     Duration duration = const Duration(milliseconds: 2600),
-    double bottomOffset = kBottom,
   }) {
     _timer?.cancel();
     _mount(context);
-    _data.value = _TwToastData(message, kind, bottomOffset, ++_seq);
+    _data.value = _TwToastData(message, kind, ++_seq);
     if (kind != TwToastKind.progress) {
       _timer = Timer(duration, hide);
     }
   }
 
-  static void info(BuildContext c, String m, {double bottomOffset = kBottom}) =>
-      show(c, m, kind: TwToastKind.info, bottomOffset: bottomOffset);
+  static void info(BuildContext c, String m) =>
+      show(c, m, kind: TwToastKind.info);
 
-  static void success(
-    BuildContext c,
-    String m, {
-    double bottomOffset = kBottom,
-  }) => show(c, m, kind: TwToastKind.success, bottomOffset: bottomOffset);
+  static void success(BuildContext c, String m) =>
+      show(c, m, kind: TwToastKind.success);
 
-  static void error(
-    BuildContext c,
-    String m, {
-    double bottomOffset = kBottom,
-  }) => show(
+  static void error(BuildContext c, String m) => show(
     c,
     m,
     kind: TwToastKind.error,
     duration: const Duration(milliseconds: 3200),
-    bottomOffset: bottomOffset,
   );
 
-  static void link(BuildContext c, String m, {double bottomOffset = kBottom}) =>
-      show(c, m, kind: TwToastKind.link, bottomOffset: bottomOffset);
+  static void link(BuildContext c, String m) =>
+      show(c, m, kind: TwToastKind.link);
 
   /// No se auto-oculta: ciérralo con [hide] o reemplázalo por otro toast.
-  static void progress(
-    BuildContext c,
-    String m, {
-    double bottomOffset = kBottom,
-  }) => show(c, m, kind: TwToastKind.progress, bottomOffset: bottomOffset);
+  static void progress(BuildContext c, String m) =>
+      show(c, m, kind: TwToastKind.progress);
 
   static void hide() {
     _timer?.cancel();
@@ -130,24 +113,38 @@ class _TwToastLayerState extends State<_TwToastLayer>
   late final Animation<Offset> _slide;
   _TwToastData? _shown;
 
+  /// Desplazamiento del dedo al descartar deslizando hacia arriba.
+  double _arrastre = 0;
+
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 220),
-      reverseDuration: const Duration(milliseconds: 180),
+      duration: const Duration(milliseconds: 420),
+      reverseDuration: const Duration(milliseconds: 220),
     );
     _fade = CurvedAnimation(
       parent: _ctrl,
-      curve: Curves.easeOut,
+      curve: const Interval(0, 0.45, curve: Curves.easeOut),
       reverseCurve: Curves.easeIn,
     );
-    _slide = _EnterOnlySlide(_ctrl);
+    // Cae desde arriba con un leve rebote y sale subiendo.
+    _slide = Tween<Offset>(begin: const Offset(0, -1.4), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _ctrl,
+            curve: Curves.easeOutBack,
+            reverseCurve: Curves.easeInCubic,
+          ),
+        );
     _ctrl.addStatusListener((status) {
       if (!mounted) return;
       if (status == AnimationStatus.dismissed && widget.data == null) {
-        setState(() => _shown = null);
+        setState(() {
+          _shown = null;
+          _arrastre = 0;
+        });
       }
     });
     _sync(widget.data, fromInit: true);
@@ -164,6 +161,7 @@ class _TwToastLayerState extends State<_TwToastLayer>
   void _sync(_TwToastData? data, {bool fromInit = false}) {
     if (data != null) {
       _shown = data;
+      _arrastre = 0;
       _ctrl.forward(from: 0);
       if (!fromInit) setState(() {});
       return;
@@ -180,49 +178,58 @@ class _TwToastLayerState extends State<_TwToastLayer>
     super.dispose();
   }
 
+  void _arrastrar(DragUpdateDetails details) {
+    // Solo hacia arriba; hacia abajo se resiste.
+    setState(() => _arrastre = (_arrastre + details.delta.dy).clamp(-200, 8));
+  }
+
+  void _soltar(DragEndDetails details) {
+    final velocidad = details.primaryVelocity ?? 0;
+    if (_arrastre < -24 || velocidad < -300) {
+      TwToast.hide();
+      return;
+    }
+    setState(() => _arrastre = 0);
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = _shown;
-    final safe = MediaQuery.paddingOf(context).bottom;
-    final bottom = (data?.bottomOffset ?? TwToast.kBottom) + safe;
+    final top = MediaQuery.paddingOf(context).top + 10;
 
     return Positioned(
-      left: 20,
-      right: 20,
-      bottom: bottom,
-      child: IgnorePointer(
-        child: data == null
-            ? const SizedBox.shrink()
-            : FadeTransition(
-                key: const Key('tw-toast-fade'),
-                opacity: _fade,
-                child: SlideTransition(
-                  key: const Key('tw-toast-slide'),
-                  position: _slide,
-                  child: _TwToastCard(key: ValueKey(data.seq), data: data),
+      left: 16,
+      right: 16,
+      top: top,
+      child: data == null
+          ? const SizedBox.shrink()
+          : Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onVerticalDragUpdate: _arrastrar,
+                  onVerticalDragEnd: _soltar,
+                  child: Transform.translate(
+                    offset: Offset(0, _arrastre),
+                    child: FadeTransition(
+                      key: const Key('tw-toast-fade'),
+                      opacity: _fade,
+                      child: SlideTransition(
+                        key: const Key('tw-toast-slide'),
+                        position: _slide,
+                        child: _TwToastCard(
+                          key: ValueKey(data.seq),
+                          data: data,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-      ),
+            ),
     );
-  }
-}
-
-/// El slide solo corre hacia adelante. En reverse el valor se queda en
-/// [Offset.zero] para que la salida sea un fade en el sitio.
-class _EnterOnlySlide extends Animation<Offset>
-    with AnimationWithParentMixin<double> {
-  _EnterOnlySlide(this.parent);
-
-  @override
-  final Animation<double> parent;
-
-  @override
-  Offset get value {
-    if (parent.status == AnimationStatus.reverse) {
-      return Offset.zero;
-    }
-    final t = Curves.easeOut.transform(parent.value.clamp(0.0, 1.0));
-    return Offset(0, 0.28 * (1 - t));
   }
 }
 

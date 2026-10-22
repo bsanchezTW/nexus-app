@@ -18,6 +18,7 @@ import '../../subeventos/providers/subeventos_providers.dart';
 import '../services/excel_export_service.dart';
 import '../services/excel_import_registrados.dart';
 import '../services/export_file_delivery.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 class ExportarScreen extends ConsumerStatefulWidget {
   const ExportarScreen({super.key, required this.eventoId});
@@ -110,80 +111,82 @@ class _ExportarScreenState extends ConsumerState<ExportarScreen> {
         XTypeGroup(label: 'Excel', extensions: ['xlsx']),
       ],
     );
-    if (archivo == null) return;
+    if (archivo == null || !mounted) return;
 
     setState(() => _importando = true);
-    try {
-      final bytes = await archivo.readAsBytes();
-      final registros = _importService.parsear(
-        bytes,
-        eventoId: widget.eventoId,
-      );
-
-      final filas = [
-        for (final r in registros)
-          {
-            'nombre_completo': r.nombreCompleto,
-            'email': r.email,
-            'empresa': r.empresa,
-            'cargo': r.cargo,
-            'telefono': r.telefono,
-            'rut': r.rut,
-            'patente': r.patente,
-          },
-      ];
-      var resultado = await ref
-          .read(registradosRepositoryProvider)
-          .importar(eventoId: widget.eventoId, filas: filas);
-      if (resultado.excedeCupo > 0 && resultado.puedeForzar && mounted) {
-        final forzar = await confirmDialog(
-          context,
-          title: 'Cupo insuficiente',
-          message:
-              'Faltan ${resultado.excedeCupo} cupos. ¿Importar el resto en sobrecupo?',
-          confirmLabel: 'Importar',
+    await conEspera(context, () async {
+      try {
+        final bytes = await archivo.readAsBytes();
+        final registros = _importService.parsear(
+          bytes,
+          eventoId: widget.eventoId,
         );
-        if (forzar) {
-          resultado = await ref
-              .read(registradosRepositoryProvider)
-              .importar(
-                eventoId: widget.eventoId,
-                filas: filas,
-                forzarSobrecupo: true,
-              );
+
+        final filas = [
+          for (final r in registros)
+            {
+              'nombre_completo': r.nombreCompleto,
+              'email': r.email,
+              'empresa': r.empresa,
+              'cargo': r.cargo,
+              'telefono': r.telefono,
+              'rut': r.rut,
+              'patente': r.patente,
+            },
+        ];
+        var resultado = await ref
+            .read(registradosRepositoryProvider)
+            .importar(eventoId: widget.eventoId, filas: filas);
+        if (resultado.excedeCupo > 0 && resultado.puedeForzar && mounted) {
+          final forzar = await confirmDialog(
+            context,
+            title: 'Cupo insuficiente',
+            message:
+                'Faltan ${resultado.excedeCupo} cupos. ¿Importar el resto en sobrecupo?',
+            confirmLabel: 'Importar',
+          );
+          if (forzar) {
+            resultado = await ref
+                .read(registradosRepositoryProvider)
+                .importar(
+                  eventoId: widget.eventoId,
+                  filas: filas,
+                  forzarSobrecupo: true,
+                );
+          }
         }
-      }
-      if (resultado.excedeCupo > 0) {
+        if (resultado.excedeCupo > 0) {
+          if (mounted) {
+            showAppSnackBar(
+              context,
+              'No se importó nadie: el cupo no alcanza.',
+              isError: true,
+            );
+          }
+          return;
+        }
+
+        ref.invalidate(registradosPorEventoProvider(widget.eventoId));
+
         if (mounted) {
           showAppSnackBar(
             context,
-            'No se importó nadie: el cupo no alcanza.',
+            'Se registraron ${resultado.insertados} personas'
+            '${resultado.omitidosDuplicado > 0 ? ' (${resultado.omitidosDuplicado} omitidas por duplicado)' : ''}.',
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            'No se pudo procesar el Excel: $e',
             isError: true,
           );
         }
-        return;
+      } finally {
+        if (mounted) setState(() => _importando = false);
       }
-
-      ref.invalidate(registradosPorEventoProvider(widget.eventoId));
-
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          'Se registraron ${resultado.insertados} personas'
-          '${resultado.omitidosDuplicado > 0 ? ' (${resultado.omitidosDuplicado} omitidas por duplicado)' : ''}.',
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          'No se pudo procesar el Excel: $e',
-          isError: true,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _importando = false);
-    }
+    });
   }
 
   @override

@@ -29,6 +29,7 @@ import '../../eventos/providers/eventos_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
 import '../../subeventos/providers/inscripciones_providers.dart';
 import '../../subeventos/providers/subeventos_providers.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 enum _Filtro { todos, acreditados, pendientes }
 
@@ -218,7 +219,9 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
     );
     final puedeVerContacto = ref.watch(canViewContactDataProvider);
     final inscripciones =
-        ref.watch(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
+        ref
+            .watch(inscripcionesPorEventoProvider(widget.eventoId))
+            .valueOrNull ??
         const <InscripcionSubevento>[];
 
     final filtrados = registradosAsync.maybeWhen(
@@ -525,24 +528,22 @@ class _RegistradoTile extends ConsumerWidget {
 
   Future<void> _onTapAcreditar(BuildContext context, WidgetRef ref) async {
     if (registrado.acreditado) {
-      final quitar = await confirmDialog(
-        context,
-        title: 'Quitar acreditación',
-        message:
-            '¿Deseas quitar la acreditación de ${registrado.nombreCompleto}?',
-        confirmLabel: 'Quitar',
-        destructive: true,
-      );
-      if (!quitar || !context.mounted) return;
-
       try {
-        await persistirAcreditacion(
-          ref,
-          registrado: registrado,
-          acreditado: false,
-          acreditadoPorId: '',
+        final quitada = await confirmarYEjecutar(
+          context,
+          title: 'Quitar acreditación',
+          message:
+              '¿Deseas quitar la acreditación de ${registrado.nombreCompleto}?',
+          confirmLabel: 'Quitar',
+          destructive: true,
+          accion: () => persistirAcreditacion(
+            ref,
+            registrado: registrado,
+            acreditado: false,
+            acreditadoPorId: '',
+          ),
         );
-        if (context.mounted) {
+        if (quitada && context.mounted) {
           showAppSnackBar(
             context,
             'Se quitó la acreditación de ${registrado.nombreCompleto}.',
@@ -560,24 +561,22 @@ class _RegistradoTile extends ConsumerWidget {
       return;
     }
 
-    final confirmar = await confirmDialog(
-      context,
-      title: 'Acreditar asistente',
-      message: '¿Deseas acreditar a ${registrado.nombreCompleto}?',
-      confirmLabel: 'Acreditar',
-    );
-    if (!confirmar || !context.mounted) return;
-
     final userId = ref.read(currentPerfilProvider).valueOrNull?.id;
 
     try {
-      await persistirAcreditacion(
-        ref,
-        registrado: registrado,
-        acreditado: true,
-        acreditadoPorId: userId ?? '',
+      final acreditado = await confirmarYEjecutar(
+        context,
+        title: 'Acreditar asistente',
+        message: '¿Deseas acreditar a ${registrado.nombreCompleto}?',
+        confirmLabel: 'Acreditar',
+        accion: () => persistirAcreditacion(
+          ref,
+          registrado: registrado,
+          acreditado: true,
+          acreditadoPorId: userId ?? '',
+        ),
       );
-      if (context.mounted) {
+      if (acreditado && context.mounted) {
         showAppSnackBar(context, '${registrado.nombreCompleto} acreditado.');
       }
     } catch (e) {
@@ -644,7 +643,9 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
         ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
         const [];
     final inscripciones =
-        ref.watch(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
+        ref
+            .watch(inscripcionesPorEventoProvider(widget.eventoId))
+            .valueOrNull ??
         const [];
     final propios = inscripciones
         .where((fila) => fila.registradoId == registrado.id)
@@ -700,17 +701,17 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
 
   Future<void> _regenerar() async {
     if (!requireOnline(context, ref)) return;
-    final ok = await confirmDialog(
-      context,
-      title: 'Regenerar QR',
-      message: 'El código anterior dejará de servir. ¿Continuar?',
-      confirmLabel: 'Regenerar',
-    );
-    if (!ok || !mounted) return;
     try {
-      await ref
-          .read(registradosRepositoryProvider)
-          .regenerarCodigoQr(widget.registrado.id);
+      final regenerado = await confirmarYEjecutar(
+        context,
+        title: 'Regenerar QR',
+        message: 'El código anterior dejará de servir. ¿Continuar?',
+        confirmLabel: 'Regenerar',
+        accion: () => ref
+            .read(registradosRepositoryProvider)
+            .regenerarCodigoQr(widget.registrado.id),
+      );
+      if (!regenerado) return;
       ref.invalidate(registradosPorEventoProvider(widget.eventoId));
       if (mounted) showAppSnackBar(context, 'Nuevo QR en camino');
     } catch (e) {
@@ -916,7 +917,9 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
                       for (final envio in envios)
                         Text(
                           '${envio.createdAt ?? ''} · ${envio.canales.join(', ')} · ${envio.estado}',
-                          style: const TextStyle(color: AppColors.textSecondary),
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                     ],
                   );

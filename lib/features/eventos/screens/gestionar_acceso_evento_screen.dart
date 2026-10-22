@@ -16,6 +16,7 @@ import '../../usuarios/providers/usuarios_providers.dart';
 import '../providers/acceso_evento_providers.dart';
 import '../providers/eventos_providers.dart';
 import '../widgets/selector_usuarios_acceso.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 /// Asigna qué usuarios y usuarios externos pueden operar un evento.
 class GestionarAccesoEventoScreen extends StatelessWidget {
@@ -58,29 +59,31 @@ class _GestionarAccesoEventoBodyState
   Future<void> _guardar() async {
     if (!requireOnline(context, ref)) return;
     setState(() => _guardando = true);
-    try {
-      await ref
-          .read(authRepositoryProvider)
-          .configurarAccesoEvento(
-            eventoId: widget.eventoId,
-            usuarioIds: _usuarioIds.toList(),
-          );
-      ref.invalidate(usuariosAutorizadosEventoProvider(widget.eventoId));
-      ref.invalidate(usuariosListProvider);
-      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
-      if (!mounted) return;
-      showAppSnackBar(context, 'Acceso al evento actualizado.');
-      volverAtras(context);
-    } catch (e) {
-      if (!mounted) return;
-      showAppSnackBar(
-        context,
-        e.toString().replaceFirst('Exception: ', ''),
-        isError: true,
-      );
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
+    await conEspera(context, () async {
+      try {
+        await ref
+            .read(authRepositoryProvider)
+            .configurarAccesoEvento(
+              eventoId: widget.eventoId,
+              usuarioIds: _usuarioIds.toList(),
+            );
+        ref.invalidate(usuariosAutorizadosEventoProvider(widget.eventoId));
+        ref.invalidate(usuariosListProvider);
+        exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
+        if (!mounted) return;
+        showAppSnackBar(context, 'Acceso al evento actualizado.');
+        volverAtras(context);
+      } catch (e) {
+        if (!mounted) return;
+        showAppSnackBar(
+          context,
+          e.toString().replaceFirst('Exception: ', ''),
+          isError: true,
+        );
+      } finally {
+        if (mounted) setState(() => _guardando = false);
+      }
+    });
   }
 
   Future<bool> _volverConBotonAndroid() async {

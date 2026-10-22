@@ -15,6 +15,7 @@ import '../../../data/models/lead_comentario.dart';
 import '../../../data/repositories/lead_comentarios_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../providers/capturador_providers.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 enum _AccionComentario { editar, borrar }
 
@@ -74,27 +75,29 @@ class _ComentariosLeadScreenState extends ConsumerState<ComentariosLeadScreen> {
     if (!requireOnline(context, ref)) return;
 
     setState(() => _enviando = true);
-    try {
-      await ref
-          .read(leadComentariosRepositoryProvider)
-          .crear(leadId: widget.leadId, cuerpo: texto);
-      _composer.clear();
-      await _recargar();
-      if (!mounted) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_scroll.hasClients) return;
-        _scroll.jumpTo(_scroll.position.maxScrollExtent);
-      });
-    } catch (_) {
-      if (!mounted) return;
-      showAppSnackBar(
-        context,
-        'No se pudo publicar el comentario.',
-        isError: true,
-      );
-    } finally {
-      if (mounted) setState(() => _enviando = false);
-    }
+    await conEspera(context, () async {
+      try {
+        await ref
+            .read(leadComentariosRepositoryProvider)
+            .crear(leadId: widget.leadId, cuerpo: texto);
+        _composer.clear();
+        await _recargar();
+        if (!mounted) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_scroll.hasClients) return;
+          _scroll.jumpTo(_scroll.position.maxScrollExtent);
+        });
+      } catch (_) {
+        if (!mounted) return;
+        showAppSnackBar(
+          context,
+          'No se pudo publicar el comentario.',
+          isError: true,
+        );
+      } finally {
+        if (mounted) setState(() => _enviando = false);
+      }
+    });
   }
 
   Future<void> _menuComentario(LeadComentario comentario) async {
@@ -186,17 +189,20 @@ class _ComentariosLeadScreenState extends ConsumerState<ComentariosLeadScreen> {
 
   Future<void> _borrar(LeadComentario comentario) async {
     if (!requireOnline(context, ref)) return;
-    final ok = await confirmDialog(
-      context,
-      title: '¿Borrar comentario?',
-      message: 'Esta acción no se puede deshacer.',
-      confirmLabel: 'Borrar',
-      destructive: true,
-    );
-    if (!ok || !mounted) return;
     try {
-      await ref.read(leadComentariosRepositoryProvider).borrar(comentario.id);
-      await _recargar();
+      await confirmarYEjecutar(
+        context,
+        title: '¿Borrar comentario?',
+        message: 'Esta acción no se puede deshacer.',
+        confirmLabel: 'Borrar',
+        destructive: true,
+        accion: () async {
+          await ref
+              .read(leadComentariosRepositoryProvider)
+              .borrar(comentario.id);
+          await _recargar();
+        },
+      );
     } catch (_) {
       if (!mounted) return;
       showAppSnackBar(

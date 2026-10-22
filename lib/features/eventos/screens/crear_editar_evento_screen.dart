@@ -32,6 +32,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../providers/eventos_providers.dart';
 import '../../subeventos/providers/subeventos_providers.dart';
 import '../../../data/repositories/storage_cleanup_service.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 
 /// Crear o editar un evento. Disponible para cualquier usuario autenticado.
 class CrearEditarEventoScreen extends StatelessWidget {
@@ -283,75 +284,77 @@ class _CrearEditarEventoFormState
     }
     setState(() => _guardando = true);
 
-    try {
-      var imagenUrl = _imagenUrlExistente;
-      if (_imagenBytes != null) {
-        imagenUrl = await ref
-            .read(storageRepositoryProvider)
-            .subirImagenEvento(_imagenBytes!, 'jpg');
-      }
-      final cambioImagen = _esEdicion && imagenUrl != _original['imagen'];
-
-      final evento = Evento(
-        id: widget.eventoId ?? '',
-        nombre: _nombreController.text.trim(),
-        fecha: _fecha,
-        duracionDias: _duracionDias,
-        pais: _pais,
-        tematica: _tematicaController.text.trim(),
-        direccion: _direccionController.text.trim(),
-        lugar: _lugarController.text.trim(),
-        certificacionCapacitacion: _certificacion,
-        imagenUrl: imagenUrl,
-        accesoQr: _accesoQr,
-        tipo: _tipo,
-        cupoMaximo: int.tryParse(_cupoController.text.trim()),
-        descripcion: _descripcionController.text.trim().isEmpty
-            ? null
-            : _descripcionController.text.trim(),
-        horaInicio: _horaInicio,
-        horaFin: _horaFin,
-        inscripcionesCierre: _cierre,
-        mapaUrl: urlMapaEmbebible(_mapaController.text),
-      );
-
-      final repo = ref.read(eventosRepositoryProvider);
-      if (_esEdicion) {
-        final guardado = await conErroresRpe(
-          () => repo.actualizar(widget.eventoId!, evento.toInsertMap()),
-        );
-        await _publicarEnCache(guardado);
-      } else {
-        await conErroresRpe(() => repo.crear(evento));
-        ref.invalidate(eventosListProvider);
-        exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
-      }
-      // Reemplazar la portada sube un UUID nuevo; quitarla también deja el
-      // objeto anterior sin referencia. El trigger lo encola y aquí esperamos
-      // el intento de borrado antes de abandonar el formulario.
-      if (cambioImagen) {
-        await ref.read(storageCleanupServiceProvider).drenar();
-      }
-
-      if (mounted) {
-        if (_esEdicion) {
-          showAppSnackBar(context, 'Evento actualizado.');
-        } else {
-          showAppSnackBar(context, 'Evento creado correctamente');
+    await conEspera(context, () async {
+      try {
+        var imagenUrl = _imagenUrlExistente;
+        if (_imagenBytes != null) {
+          imagenUrl = await ref
+              .read(storageRepositoryProvider)
+              .subirImagenEvento(_imagenBytes!, 'jpg');
         }
-        volverAtras(context);
-      }
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          e.toString().replaceFirst('Exception: ', ''),
-          isError: true,
+        final cambioImagen = _esEdicion && imagenUrl != _original['imagen'];
+
+        final evento = Evento(
+          id: widget.eventoId ?? '',
+          nombre: _nombreController.text.trim(),
+          fecha: _fecha,
+          duracionDias: _duracionDias,
+          pais: _pais,
+          tematica: _tematicaController.text.trim(),
+          direccion: _direccionController.text.trim(),
+          lugar: _lugarController.text.trim(),
+          certificacionCapacitacion: _certificacion,
+          imagenUrl: imagenUrl,
+          accesoQr: _accesoQr,
+          tipo: _tipo,
+          cupoMaximo: int.tryParse(_cupoController.text.trim()),
+          descripcion: _descripcionController.text.trim().isEmpty
+              ? null
+              : _descripcionController.text.trim(),
+          horaInicio: _horaInicio,
+          horaFin: _horaFin,
+          inscripcionesCierre: _cierre,
+          mapaUrl: urlMapaEmbebible(_mapaController.text),
         );
+
+        final repo = ref.read(eventosRepositoryProvider);
+        if (_esEdicion) {
+          final guardado = await conErroresRpe(
+            () => repo.actualizar(widget.eventoId!, evento.toInsertMap()),
+          );
+          await _publicarEnCache(guardado);
+        } else {
+          await conErroresRpe(() => repo.crear(evento));
+          ref.invalidate(eventosListProvider);
+          exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
+        }
+        // Reemplazar la portada sube un UUID nuevo; quitarla también deja el
+        // objeto anterior sin referencia. El trigger lo encola y aquí esperamos
+        // el intento de borrado antes de abandonar el formulario.
+        if (cambioImagen) {
+          await ref.read(storageCleanupServiceProvider).drenar();
+        }
+
+        if (mounted) {
+          if (_esEdicion) {
+            showAppSnackBar(context, 'Evento actualizado.');
+          } else {
+            showAppSnackBar(context, 'Evento creado correctamente');
+          }
+          volverAtras(context);
+        }
+      } catch (e) {
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            e.toString().replaceFirst('Exception: ', ''),
+            isError: true,
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _guardando = false);
       }
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
+    });
   }
 
   /// Las lecturas del evento son cache-first: sin este parche, el detalle y la
@@ -378,23 +381,29 @@ class _CrearEditarEventoFormState
 
   Future<void> _eliminar() async {
     if (!requireOnline(context, ref)) return;
-    final confirmado = await confirmDialog(
-      context,
-      title: 'Eliminar evento',
-      message:
-          'Esta acción no se puede deshacer. ¿Eliminar el evento y sus registrados?',
-      confirmLabel: 'Eliminar',
-      destructive: true,
-    );
-    if (!confirmado) return;
-
     try {
-      await ref.read(eventosRepositoryProvider).eliminar(widget.eventoId!);
-      await ref.read(storageCleanupServiceProvider).drenar();
+      // El modal queda abierto con spinner hasta que la base termina: antes
+      // se cerraba al instante y el formulario seguía operable unos segundos.
+      final eliminado = await confirmarYEjecutar(
+        context,
+        title: 'Eliminar evento',
+        message:
+            'Esta acción no se puede deshacer. ¿Eliminar el evento y sus registrados?',
+        confirmLabel: 'Eliminar',
+        destructive: true,
+        accion: () async {
+          await ref.read(eventosRepositoryProvider).eliminar(widget.eventoId!);
+          await ref.read(storageCleanupServiceProvider).drenar();
+        },
+      );
+      if (!eliminado) return;
       ref.invalidate(eventosListProvider);
       exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       ref.invalidate(eventoByIdProvider(widget.eventoId!));
-      if (mounted) context.go(RoutePaths.eventos);
+      if (mounted) {
+        showAppSnackBar(context, 'Evento eliminado.');
+        context.go(RoutePaths.eventos);
+      }
     } on EventoConEventoLeadException catch (e) {
       if (mounted) showAppSnackBar(context, e.toString(), isError: true);
     } catch (e) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'espera_bloqueante.dart';
 import 'modal_geometry.dart';
 
 /// Abre un diálogo Material y publica su geometría en iOS.
@@ -22,20 +23,23 @@ Future<T?> showAppDialog<T>({
   bool? requestFocus,
   AnimationStyle? animationStyle,
 }) {
-  return showDialog<T>(
-    context: context,
-    barrierDismissible: barrierDismissible,
-    barrierColor: barrierColor,
-    barrierLabel: barrierLabel,
-    useSafeArea: useSafeArea,
-    useRootNavigator: useRootNavigator,
-    routeSettings: routeSettings,
-    anchorPoint: anchorPoint,
-    traversalEdgeBehavior: traversalEdgeBehavior,
-    fullscreenDialog: fullscreenDialog,
-    requestFocus: requestFocus,
-    animationStyle: animationStyle,
-    builder: (modalContext) => AppModalGeometry(child: builder(modalContext)),
+  // Una operación en curso no puede dejar su barrera encima del diálogo.
+  return EsperaBloqueante.conModal(
+    () => showDialog<T>(
+      context: context,
+      barrierDismissible: barrierDismissible,
+      barrierColor: barrierColor,
+      barrierLabel: barrierLabel,
+      useSafeArea: useSafeArea,
+      useRootNavigator: useRootNavigator,
+      routeSettings: routeSettings,
+      anchorPoint: anchorPoint,
+      traversalEdgeBehavior: traversalEdgeBehavior,
+      fullscreenDialog: fullscreenDialog,
+      requestFocus: requestFocus,
+      animationStyle: animationStyle,
+      builder: (modalContext) => AppModalGeometry(child: builder(modalContext)),
+    ),
   );
 }
 
@@ -67,27 +71,29 @@ Future<T?> showAppModalBottomSheet<T>({
   AnimationStyle? sheetAnimationStyle,
   bool? requestFocus,
 }) {
-  return showModalBottomSheet<T>(
-    context: context,
-    backgroundColor: backgroundColor,
-    barrierLabel: barrierLabel,
-    elevation: elevation,
-    shape: shape,
-    clipBehavior: clipBehavior,
-    constraints: constraints,
-    barrierColor: barrierColor,
-    isScrollControlled: isScrollControlled,
-    scrollControlDisabledMaxHeightRatio: scrollControlDisabledMaxHeightRatio,
-    useRootNavigator: useRootNavigator,
-    isDismissible: isDismissible,
-    enableDrag: enableDrag,
-    showDragHandle: showDragHandle,
-    useSafeArea: useSafeArea,
-    routeSettings: routeSettings,
-    transitionAnimationController: transitionAnimationController,
-    anchorPoint: anchorPoint,
-    sheetAnimationStyle: sheetAnimationStyle,
-    requestFocus: requestFocus,
-    builder: (modalContext) => AppModalGeometry(child: builder(modalContext)),
+  return EsperaBloqueante.conModal(
+    () => showModalBottomSheet<T>(
+      context: context,
+      backgroundColor: backgroundColor,
+      barrierLabel: barrierLabel,
+      elevation: elevation,
+      shape: shape,
+      clipBehavior: clipBehavior,
+      constraints: constraints,
+      barrierColor: barrierColor,
+      isScrollControlled: isScrollControlled,
+      scrollControlDisabledMaxHeightRatio: scrollControlDisabledMaxHeightRatio,
+      useRootNavigator: useRootNavigator,
+      isDismissible: isDismissible,
+      enableDrag: enableDrag,
+      showDragHandle: showDragHandle,
+      useSafeArea: useSafeArea,
+      routeSettings: routeSettings,
+      transitionAnimationController: transitionAnimationController,
+      anchorPoint: anchorPoint,
+      sheetAnimationStyle: sheetAnimationStyle,
+      requestFocus: requestFocus,
+      builder: (modalContext) => AppModalGeometry(child: builder(modalContext)),
+    ),
   );
 }
