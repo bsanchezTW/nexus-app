@@ -19,6 +19,7 @@ import '../../../core/widgets/shell_tab_scroll.dart';
 import '../../../core/widgets/tw_offline_notice_card.dart';
 import '../../../data/models/perfil.dart';
 import '../../../data/offline/offline_read_cache.dart';
+import '../../../data/offline/snapshot_service.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../capturador/providers/capturador_providers.dart';
@@ -122,6 +123,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     if (featuredAsync.hasValue) {
       _ultimosDestacados = featuredAsync.requireValue;
     }
+    final cargandoDestacados =
+        featuredItems.isEmpty &&
+        !featuredAsync.hasValue &&
+        !featuredAsync.hasError;
+    // El respaldo local espera a que el inicio termine de cargar para no
+    // competir con él por la red (ver `snapshotAutoStartProvider`).
+    if (!cargandoDestacados && !ref.read(pantallaInicialCargadaProvider)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(pantallaInicialCargadaProvider.notifier).state = true;
+      });
+    }
     if (perfil == null) {
       featuredItems = featuredItems
           .where((item) => !item.esActividadCaptura)
@@ -206,7 +219,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ),
             ),
             const SizedBox(height: 18),
-            ProximoEventoCard(items: featuredItems),
+            ProximoEventoCard(
+              items: featuredItems,
+              cargando: cargandoDestacados,
+            ),
             const SizedBox(height: 20),
             _HomeColumn(
               child: Column(

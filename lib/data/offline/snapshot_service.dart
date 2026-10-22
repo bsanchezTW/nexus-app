@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/supabase_tables.dart';
@@ -68,17 +70,12 @@ class SnapshotProgreso {
 class SnapshotEstado {
   const SnapshotEstado({
     this.enCurso = false,
-    this.esPrimeraPasada = false,
     this.progreso,
     this.ultimoExito,
     this.errores = const [],
   });
 
   final bool enCurso;
-
-  /// La pasada en curso arrancó sin ninguna copia en disco. Solo entonces el
-  /// splash espera: con caché se entra de inmediato y se refresca por detrás.
-  final bool esPrimeraPasada;
   final SnapshotProgreso? progreso;
   final DateTime? ultimoExito;
 
@@ -88,7 +85,6 @@ class SnapshotEstado {
 
   SnapshotEstado copyWith({
     bool? enCurso,
-    bool? esPrimeraPasada,
     SnapshotProgreso? progreso,
     DateTime? ultimoExito,
     List<String>? errores,
@@ -96,7 +92,6 @@ class SnapshotEstado {
   }) {
     return SnapshotEstado(
       enCurso: enCurso ?? this.enCurso,
-      esPrimeraPasada: esPrimeraPasada ?? this.esPrimeraPasada,
       progreso: limpiarProgreso ? null : (progreso ?? this.progreso),
       ultimoExito: ultimoExito ?? this.ultimoExito,
       errores: errores ?? this.errores,
@@ -110,6 +105,12 @@ class SnapshotEstado {
 /// que ya saben respaldarse en [OfflineReadCache]. Así no hay dos caminos que
 /// puedan divergir —uno para pintar y otro para sincronizar— que es
 /// exactamente el error que tenía el proyecto legado con sus dos colas.
+///
+/// Corre en segundo plano y **después** de que la pantalla inicial cargó (ver
+/// [snapshotAutoStartProvider]). Lo que la UI ya muestra (perfil, catálogo,
+/// home) solo se lee, nunca se invalida: antes el snapshot reiniciaba esos
+/// providers mientras el home los estaba resolviendo, y las cards se quedaban
+/// cargando o con lo que hubiera en disco.
 class SnapshotService extends StateNotifier<SnapshotEstado> {
   SnapshotService(this._ref) : super(const SnapshotEstado());
 
@@ -135,20 +136,6 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
     final marca = filas?.firstOrNull;
     if (marca == null) return;
     state = state.copyWith(ultimoExito: DateTime.tryParse(marca));
-  }
-
-  /// `true` si ya hay una copia utilizable en disco.
-  ///
-  /// El splash solo debe bloquearse la primera vez: con caché se entra de
-  /// inmediato y el refresco va por detrás.
-  bool get hayCacheUtilizable {
-    final eventos = _ref
-        .read(offlineReadCacheProvider)
-        .leerGlobal(
-          tabla: OfflineCacheTables.eventos,
-          desdeFila: Evento.fromMap,
-        );
-    return eventos != null;
   }
 
   /// Eventos que se bajan enteros (listas y fotos).
@@ -201,17 +188,28 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
     );
   }
 
+  /// Lee un provider manteniéndolo vivo hasta que resuelve.
+  ///
+  /// Con `ref.read` a secas un provider `autoDispose` que nadie más escucha
+  /// se destruye al final del frame aunque su carga siga esperando la red; al
+  /// volver, la carga llamaba `ref.onDispose` sobre el provider muerto y la
+  /// etapa fallaba con "Cannot call onDispose after a provider was disposed".
+  Future<T> _leer<T>(ProviderListenable<Future<T>> futuro) async {
+    final suscripcion = _ref.listen<Future<T>>(futuro, (_, _) {});
+    try {
+      return await suscripcion.read();
+    } finally {
+      suscripcion.close();
+    }
+  }
+
   Future<void> ejecutar() async {
     restaurarMetadatosSiHaceFalta();
     if (state.enCurso) return;
     if (!supportsOfflineCacheAqui) return;
     if (!_ref.read(isOnlineProvider)) return;
 
-    state = state.copyWith(
-      enCurso: true,
-      esPrimeraPasada: !hayCacheUtilizable,
-      errores: const [],
-    );
+    state = state.copyWith(enCurso: true, errores: const []);
     final errores = <String>[];
 
     Future<T?> etapa<T>(
@@ -239,40 +237,39 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
     }
 
     try {
-      await etapa(SnapshotEtapa.perfil, () async {
-        _ref.invalidate(currentPerfilProvider);
-        return _ref.read(currentPerfilProvider.future);
-      });
+      // Perfil, catálogo, usuarios y home ya se leen del servidor (y se
+      // respaldan) al pintarse: aquí solo se espera su resultado vigente. Para
+      // forzar una lectura nueva se sube la época antes (ver la pantalla de
+      // Sincronización).
+      await etapa(
+        SnapshotEtapa.perfil,
+        () => _leer(currentPerfilProvider.future),
+      );
 
       // El resultado nullable se conserva: `null` es "la etapa falló", y la
       // purga no puede confundir eso con "el usuario no tiene nada".
-      final catalogoBajado = await etapa(SnapshotEtapa.catalogo, () async {
-        _ref.invalidate(eventosListProvider);
-        return _ref.read(eventosListProvider.future);
-      });
+      final catalogoBajado = await etapa(
+        SnapshotEtapa.catalogo,
+        () => _leer(eventosListProvider.future),
+      );
       final catalogo = catalogoBajado ?? const <Evento>[];
 
       final actividadesBajadas = await etapa(
         SnapshotEtapa.actividades,
-        () async {
-          _ref.invalidate(eventosLeadsListProvider);
-          return _ref.read(eventosLeadsListProvider.future);
-        },
+        () => _leer(eventosLeadsListProvider.future),
       );
       final actividades = actividadesBajadas ?? const <EventoLead>[];
 
-      await etapa(SnapshotEtapa.usuarios, () async {
-        _ref.invalidate(usuariosListProvider);
-        return _ref.read(usuariosListProvider.future);
-      });
+      await etapa(
+        SnapshotEtapa.usuarios,
+        () => _leer(usuariosListProvider.future),
+      );
 
       await etapa(SnapshotEtapa.home, () async {
-        _ref.invalidate(eventosFijadosProvider);
-        _ref.invalidate(campanasFijadasProvider);
-        _ref.invalidate(homeDashboardProvider);
-        _ref.invalidate(homeFeaturedItemsProvider);
-        await _ref.read(homeDashboardProvider.future);
-        return _ref.read(homeFeaturedItemsProvider.future);
+        await _leer(eventosFijadosProvider.future);
+        await _leer(campanasFijadasProvider.future);
+        await _leer(homeDashboardProvider.future);
+        return _leer(homeFeaturedItemsProvider.future);
       });
 
       // Los registrados cuelgan de un evento y los leads de una actividad de
@@ -292,11 +289,11 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
           SnapshotEtapa.listas,
           () async {
             _ref.invalidate(registradosPorEventoProvider(evento.id));
-            await _ref.read(registradosPorEventoProvider(evento.id).future);
+            await _leer(registradosPorEventoProvider(evento.id).future);
             _ref.invalidate(subeventosPorEventoProvider(evento.id));
-            await _ref.read(subeventosPorEventoProvider(evento.id).future);
+            await _leer(subeventosPorEventoProvider(evento.id).future);
             _ref.invalidate(inscripcionesPorEventoProvider(evento.id));
-            await _ref.read(inscripcionesPorEventoProvider(evento.id).future);
+            await _leer(inscripcionesPorEventoProvider(evento.id).future);
           },
           completados: hechos,
           total: total,
@@ -309,10 +306,10 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
           SnapshotEtapa.listas,
           () async {
             _ref.invalidate(leadsPorEventoProvider(campana.id));
-            await _ref.read(leadsPorEventoProvider(campana.id).future);
+            await _leer(leadsPorEventoProvider(campana.id).future);
             try {
               _ref.invalidate(leadsResumenRemotoProvider(campana.id));
-              await _ref.read(leadsResumenRemotoProvider(campana.id).future);
+              await _leer(leadsResumenRemotoProvider(campana.id).future);
             } catch (e) {
               if (!esErrorSinAccesoResumen(e)) rethrow;
             }
@@ -356,7 +353,6 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
     } finally {
       state = state.copyWith(
         enCurso: false,
-        esPrimeraPasada: false,
         errores: errores,
         limpiarProgreso: true,
       );
@@ -555,20 +551,39 @@ final snapshotServiceProvider =
       return SnapshotService(ref);
     });
 
-/// `true` mientras la **primera** bajada completa sigue en curso.
-///
-/// Es lo único que justifica retener el splash: sin copia previa la app no
-/// tiene nada que mostrar. En aperturas siguientes se entra con disco y el
-/// refresco va por detrás.
-final esperandoPrimerSnapshotProvider = Provider<bool>((ref) {
-  final estado = ref.watch(snapshotServiceProvider);
-  return estado.enCurso && estado.esPrimeraPasada;
-});
+/// La pantalla con la que abre la app (el home) terminó su primera carga. El
+/// respaldo local espera esta señal para no competir con ella por la red.
+final pantallaInicialCargadaProvider = StateProvider<bool>((ref) => false);
 
-/// Mantiene vivo el disparo automático del snapshot. Se lee una vez cerca de
-/// la raíz (ver `app.dart`).
+/// Si nadie avisa que la pantalla inicial cargó (el externo no pasa por el
+/// home, o el home falló), el respaldo arranca igual pasado este tiempo.
+const Duration _esperaMaximaPantallaInicial = Duration(seconds: 8);
+
+/// Volver a la app tras este tiempo sin respaldar cuenta como abrirla.
+const Duration _respaldoAlVolverTras = Duration(minutes: 10);
+const Duration _pausaMinimaParaRespaldar = Duration(seconds: 20);
+
+/// Margen para que, al volver o recuperar la red, las pantallas recarguen
+/// del servidor antes de que el respaldo empiece a consultar.
+const Duration _esperaTrasRecarga = Duration(seconds: 3);
+
+/// Dispara el respaldo local en segundo plano. Se lee una vez cerca de la raíz
+/// (ver `app.dart`).
+///
+/// - Al abrir la app (perfil resuelto), **después** de que el home cargó.
+/// - Al recuperar la red.
+/// - Al volver a la app si el último respaldo tiene más de
+///   [_respaldoAlVolverTras].
+///
+/// Un refresco del mismo perfil (token renovado, recarga del home) no lo
+/// relanza: antes cada emisión del perfil volvía a bajar todo.
 final snapshotAutoStartProvider = Provider<void>((ref) {
+  Timer? programado;
+  var hechoEnSesion = false;
+  DateTime? pausadaDesde;
+
   void lanzar() {
+    programado?.cancel();
     if (ref.read(currentPerfilProvider).valueOrNull == null) return;
     final servicio = ref.read(snapshotServiceProvider.notifier);
     // Sin red `ejecutar` sale de inmediato, así que la purga va aparte: la
@@ -580,15 +595,69 @@ final snapshotAutoStartProvider = Provider<void>((ref) {
     ref.read(storageCleanupServiceProvider).drenar();
   }
 
-  // Perfil resuelto: primera bajada (o refresco) de la sesión.
-  ref.listen(currentPerfilProvider, (_, next) {
-    if (next.valueOrNull != null) lanzar();
+  void programar(Duration espera) {
+    programado?.cancel();
+    programado = Timer(espera, lanzar);
+  }
+
+  void lanzarTrasCargaInicial() {
+    if (hechoEnSesion) return;
+    if (ref.read(currentPerfilProvider).valueOrNull == null) return;
+    hechoEnSesion = true;
+    lanzar();
+  }
+
+  void sesionNueva() {
+    hechoEnSesion = false;
+    ref.read(pantallaInicialCargadaProvider.notifier).state = false;
+    programado?.cancel();
+    programado = Timer(_esperaMaximaPantallaInicial, lanzarTrasCargaInicial);
+  }
+
+  ref.listen(currentPerfilProvider, (previous, next) {
+    final antes = previous?.valueOrNull?.id;
+    final ahora = next.valueOrNull?.id;
+    if (ahora == null) {
+      // Sesión cerrada: nada que respaldar hasta el próximo perfil.
+      hechoEnSesion = false;
+      programado?.cancel();
+      return;
+    }
+    if (ahora != antes) sesionNueva();
+  });
+
+  ref.listen<bool>(pantallaInicialCargadaProvider, (_, cargada) {
+    if (cargada) lanzarTrasCargaInicial();
   });
 
   // Al recuperar la red se vuelve a bajar el set activo.
   ref.listen(connectivityStreamProvider, (previous, next) {
-    if (previous?.valueOrNull == false && next.valueOrNull == true) lanzar();
+    if (previous?.valueOrNull == false && next.valueOrNull == true) {
+      programar(_esperaTrasRecarga);
+    }
   });
 
-  if (ref.read(currentPerfilProvider).valueOrNull != null) lanzar();
+  final ciclo = AppLifecycleListener(
+    onPause: () => pausadaDesde = DateTime.now(),
+    onResume: () {
+      final desde = pausadaDesde;
+      pausadaDesde = null;
+      if (desde == null || !hechoEnSesion) return;
+      // Diálogos del sistema (cámara, fotos) también pausan la app.
+      if (DateTime.now().difference(desde) < _pausaMinimaParaRespaldar) return;
+      final ultimo = ref.read(snapshotServiceProvider).ultimoExito;
+      if (ultimo != null &&
+          DateTime.now().difference(ultimo) < _respaldoAlVolverTras) {
+        return;
+      }
+      programar(_esperaTrasRecarga);
+    },
+  );
+
+  if (ref.read(currentPerfilProvider).valueOrNull != null) sesionNueva();
+
+  ref.onDispose(() {
+    programado?.cancel();
+    ciclo.dispose();
+  });
 });

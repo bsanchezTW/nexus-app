@@ -51,29 +51,29 @@ class _KpiGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cards = <TwKpiCard>[
-      TwKpiCard(
+    final cards = <TwKpiTile>[
+      TwKpiTile(
         value: '${data.eventosActivos}',
         label: 'Activos',
         icon: Symbols.bolt_rounded,
         tint: TwColors.amberTint,
         iconColor: TwColors.amberInk,
       ),
-      TwKpiCard(
+      TwKpiTile(
         value: '${data.totalRegistrados}',
         label: 'Registrados',
         icon: Symbols.groups_rounded,
         tint: TwColors.blueTint,
         iconColor: TwColors.blueInk,
       ),
-      TwKpiCard(
+      TwKpiTile(
         value: '${(data.porcentajeAcreditacion * 100).toStringAsFixed(0)}%',
         label: 'Acreditación',
         icon: Symbols.verified_rounded,
         tint: TwColors.greenTint,
         iconColor: TwColors.greenInk,
       ),
-      TwKpiCard(
+      TwKpiTile(
         value: '${data.eventosEsteMes}',
         label: 'Este mes',
         icon: Symbols.insights_rounded,
@@ -85,13 +85,13 @@ class _KpiGrid extends StatelessWidget {
     return Column(
       children: [
         for (var row = 0; row * 2 < cards.length; row++) ...[
-          if (row > 0) const SizedBox(height: 12),
+          if (row > 0) const SizedBox(height: 10),
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (var col = 0; col < 2; col++) ...[
-                  if (col > 0) const SizedBox(width: 12),
+                  if (col > 0) const SizedBox(width: 10),
                   Expanded(
                     child: row * 2 + col < cards.length
                         ? _HomeCardIn(

@@ -195,18 +195,19 @@ class HomeFeaturedItem {
   }
 }
 
-/// Slider del home: fijados primero. El próximo (evento o actividad) cierra
-/// la lista si no está ya fijado (si lo está, se muestra como fijado y no se
-/// duplica).
+/// Slider del home: fijados primero. Los próximos (evento y actividad) cierran
+/// la lista, salvo los que ya están fijados (se muestran como fijados y no se
+/// duplican).
 List<HomeFeaturedItem> ensamblarHomeFeaturedItems({
   required List<HomeFeaturedItem> fijados,
-  HomeFeaturedItem? proximo,
+  List<HomeFeaturedItem> proximos = const [],
 }) {
-  if (proximo == null) return List<HomeFeaturedItem>.of(fijados);
-  if (fijados.any((item) => item.id == proximo.id)) {
-    return List<HomeFeaturedItem>.of(fijados);
-  }
-  return [...fijados, proximo];
+  final ids = fijados.map((item) => item.id).toSet();
+  return [
+    ...fijados,
+    for (final proximo in proximos)
+      if (!ids.contains(proximo.id)) proximo,
+  ];
 }
 
 /// Actividad de captura vigente más cercana, o `null` si todas ya terminaron.
@@ -216,21 +217,25 @@ EventoLead? proximaActividadVigente(Iterable<EventoLead> actividades) {
   return lista.isEmpty ? null : lista.first;
 }
 
-/// El slot de próximo del home: el más cercano entre evento de registro y
-/// actividad de captura. Si la actividad es la interna de ese evento, manda
-/// el evento (misma pieza, sin duplicar el hero).
-HomeFeaturedItem? elegirProximoDestacado({
+/// Los slots de próximo del home: el próximo evento de registro y la próxima
+/// actividad de captura, el más cercano primero.
+///
+/// Antes solo se mostraba el más cercano de los dos: con una actividad en
+/// curso (una feria de varios días), un evento recién creado nunca aparecía
+/// en el inicio. Si la actividad es la interna de ese evento, queda solo el
+/// evento (misma pieza, sin duplicar el hero).
+List<HomeFeaturedItem> elegirProximosDestacados({
   Evento? evento,
   EventoLead? actividad,
 }) {
-  if (evento == null && actividad == null) return null;
-  if (evento == null) return HomeFeaturedItem.proximaActividad(actividad!);
-  if (actividad == null) return HomeFeaturedItem.proximoEvento(evento);
-  if (actividad.eventoOrigenId == evento.id) {
-    return HomeFeaturedItem.proximoEvento(evento);
+  if (evento == null && actividad == null) return const [];
+  if (evento == null) return [HomeFeaturedItem.proximaActividad(actividad!)];
+  final itemEvento = HomeFeaturedItem.proximoEvento(evento);
+  if (actividad == null || actividad.eventoOrigenId == evento.id) {
+    return [itemEvento];
   }
-  if (actividad.fecha.isBefore(evento.fecha)) {
-    return HomeFeaturedItem.proximaActividad(actividad);
-  }
-  return HomeFeaturedItem.proximoEvento(evento);
+  final itemActividad = HomeFeaturedItem.proximaActividad(actividad);
+  return actividad.fecha.isBefore(evento.fecha)
+      ? [itemActividad, itemEvento]
+      : [itemEvento, itemActividad];
 }

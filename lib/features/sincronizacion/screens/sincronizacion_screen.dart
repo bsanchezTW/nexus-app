@@ -9,6 +9,7 @@ import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../../../core/widgets/tw_toast.dart';
+import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/offline/snapshot_service.dart';
 import '../../../data/offline/sync_coordinator.dart';
 import '../../../data/offline/sync_queue_item.dart';
@@ -24,6 +25,48 @@ class SincronizacionScreen extends ConsumerWidget {
     return DateFormat("d 'de' MMMM, HH:mm", 'es').format(fecha);
   }
 
+  static String _etiquetaTabla(String tabla) => switch (tabla) {
+    SupabaseTables.leads => 'Lead',
+    SupabaseTables.registrados => 'Acreditación',
+    SupabaseTables.inscripcionesSubevento => 'Inscripción a taller',
+    _ => tabla,
+  };
+
+  /// Primero se sube lo capturado y después se vuelve a bajar: al revés, el
+  /// snapshot pisaría con datos del servidor unas listas a las que aún les
+  /// falta lo local. La época sube antes de bajar para que el respaldo lea
+  /// del servidor y no lo que la pantalla ya tenía.
+  Future<void> _sincronizar(BuildContext context, WidgetRef ref) async {
+    await ref.read(syncCoordinatorProvider).sincronizarAhora();
+    exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
+    await ref.read(snapshotServiceProvider.notifier).ejecutar();
+    if (!context.mounted) return;
+
+    final errores = ref.read(snapshotServiceProvider).errores;
+    final sinSubir = ref
+        .read(syncQueueServiceProvider)
+        .where((i) => i.status == SyncStatus.failed)
+        .length;
+    if (errores.isEmpty && sinSubir == 0) {
+      TwToast.success(context, 'Sincronización completada.');
+    } else {
+      final partes = [
+        if (sinSubir > 0)
+          sinSubir == 1
+              ? '1 cambio no se pudo subir'
+              : '$sinSubir cambios no se pudieron subir',
+        if (errores.isNotEmpty)
+          errores.length == 1
+              ? '1 parte de la copia local falló'
+              : '${errores.length} partes de la copia local fallaron',
+      ];
+      TwToast.error(
+        context,
+        'Sincronización incompleta: ${partes.join(' y ')}.',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.read(snapshotServiceProvider.notifier).restaurarMetadatosSiHaceFalta();
@@ -31,18 +74,19 @@ class SincronizacionScreen extends ConsumerWidget {
     final cola = ref.watch(syncQueueServiceProvider);
     final hayRed = ref.watch(isOnlineProvider);
 
-    final pendientes = cola.where(
-      (i) =>
-          i.status == SyncStatus.pending ||
-          i.status == SyncStatus.syncing ||
-          i.status == SyncStatus.failed,
-    );
-    final leadsPendientes = pendientes
-        .where((i) => i.table == SupabaseTables.leads)
-        .length;
-    final acreditacionesPendientes = pendientes
-        .where((i) => i.table == SupabaseTables.registrados)
-        .length;
+    final pendientes = cola
+        .where(
+          (i) =>
+              i.status == SyncStatus.pending ||
+              i.status == SyncStatus.syncing ||
+              i.status == SyncStatus.failed,
+        )
+        .toList();
+    int contar(String tabla) =>
+        pendientes.where((i) => i.table == tabla).length;
+    final fallidos = pendientes
+        .where((i) => i.status == SyncStatus.failed)
+        .toList();
 
     return AppScaffold(
       title: 'Sincronización',
@@ -54,46 +98,39 @@ class SincronizacionScreen extends ConsumerWidget {
           _Contador(
             icono: Symbols.person_search_rounded,
             etiqueta: 'Leads capturados',
-            valor: leadsPendientes,
+            valor: contar(SupabaseTables.leads),
           ),
           const SizedBox(height: 10),
           _Contador(
             icono: Symbols.how_to_reg_rounded,
             etiqueta: 'Acreditaciones',
-            valor: acreditacionesPendientes,
+            valor: contar(SupabaseTables.registrados),
           ),
+          const SizedBox(height: 10),
+          _Contador(
+            icono: Symbols.event_available_rounded,
+            etiqueta: 'Inscripciones a talleres',
+            valor: contar(SupabaseTables.inscripcionesSubevento),
+          ),
+          if (fallidos.isNotEmpty) ...[
+            const TwSectionLabel('No se pudieron subir'),
+            for (final item in fallidos)
+              _Incidencia(
+                texto:
+                    '${_etiquetaTabla(item.table)}: '
+                    '${item.lastError ?? 'error desconocido'}'
+                    '${item.retries > 1 ? ' (${item.retries} intentos)' : ''}',
+              ),
+          ],
           if (snapshot.errores.isNotEmpty) ...[
             const TwSectionLabel('Incidencias de la última bajada'),
-            for (final error in snapshot.errores)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Symbols.error_rounded,
-                      size: 18,
-                      color: TwColors.danger,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(error, style: TwText.errorText)),
-                  ],
-                ),
-              ),
+            for (final error in snapshot.errores) _Incidencia(texto: error),
           ],
           const SizedBox(height: 24),
           FilledButton.icon(
             onPressed: snapshot.enCurso || !hayRed
                 ? null
-                : () async {
-                    // Primero se sube lo capturado y después se vuelve a bajar:
-                    // al revés, el snapshot pisaría con datos del servidor unas
-                    // listas a las que aún les falta lo local.
-                    await ref.read(syncCoordinatorProvider).sincronizarAhora();
-                    await ref.read(snapshotServiceProvider.notifier).ejecutar();
-                    if (!context.mounted) return;
-                    TwToast.info(context, 'Sincronización completada.');
-                  },
+                : () => _sincronizar(context, ref),
             icon: snapshot.enCurso
                 ? const SizedBox(
                     width: 16,
@@ -203,6 +240,27 @@ class _Contador extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _Incidencia extends StatelessWidget {
+  const _Incidencia({required this.texto});
+
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Symbols.error_rounded, size: 18, color: TwColors.danger),
+          const SizedBox(width: 8),
+          Expanded(child: Text(texto, style: TwText.errorText)),
+        ],
+      ),
     );
   }
 }

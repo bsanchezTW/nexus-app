@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/connectivity_service.dart';
@@ -24,12 +26,18 @@ final eventosListProvider = FutureProvider.autoDispose<List<Evento>>((
     desdeServidor: () async {
       final eventos = await repo.listarTodos();
       // Guardar también cada evento por separado deja listo el detalle: entrar
-      // a un evento sin red no debería depender de haberlo abierto antes.
-      for (final evento in eventos) {
-        await cache.guardar(OfflineCacheTables.eventoDetalle, evento.id, [
-          evento.toCacheMap(),
-        ]);
-      }
+      // a un evento sin red no debería depender de haberlo abierto antes. Va
+      // en segundo plano: antes la lista esperaba estas escrituras y, con
+      // muchos eventos, se pasaba del tope y se servía la copia vieja.
+      unawaited(
+        Future(() async {
+          for (final evento in eventos) {
+            await cache.guardar(OfflineCacheTables.eventoDetalle, evento.id, [
+              evento.toCacheMap(),
+            ]);
+          }
+        }),
+      );
       return eventos;
     },
     aFila: (evento) => evento.toCacheMap(),

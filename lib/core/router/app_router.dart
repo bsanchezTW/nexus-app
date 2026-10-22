@@ -40,7 +40,6 @@ import '../../features/usar_app/screens/usar_evento_screen.dart';
 import '../../features/usuarios/screens/editar_usuario_screen.dart';
 import '../../features/usuarios/screens/gestionar_usuarios_screen.dart';
 import '../../features/usuarios/screens/nuevo_usuario_screen.dart';
-import '../../data/offline/snapshot_service.dart';
 import '../network/connectivity_service.dart';
 import 'external_route_policy.dart';
 import 'go_router_refresh_stream.dart';
@@ -103,10 +102,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   // Varias decisiones del redirect (cerrar sesión, forzar cambio de clave)
   // ahora dependen de si hay red: al recuperarla hay que re-evaluarlas.
   ref.listen(connectivityStreamProvider, (_, _) => refreshListenable.refresh());
-  ref.listen(
-    esperandoPrimerSnapshotProvider,
-    (_, _) => refreshListenable.refresh(),
-  );
 
   final router = GoRouter(
     initialLocation: authClient.currentSession != null
@@ -159,18 +154,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         );
       }
 
-      // Primera instalación: sin ninguna copia en disco no hay nada que
-      // mostrar, así que el splash retiene hasta que baje el set completo.
-      // Solo la primera pasada; después se entra con caché y se refresca por
-      // detrás. Cada etapa va acotada por su propio timeout, de modo que la
-      // espera siempre termina.
-      if (session != null &&
-          perfil != null &&
-          enSplash &&
-          ref.read(esperandoPrimerSnapshotProvider)) {
-        return null;
-      }
-
+      // El respaldo local nunca retiene el splash: el home carga desde el
+      // servidor y la copia offline se baja después, en segundo plano.
       if (session != null &&
           perfil != null &&
           (location == RoutePaths.login || enSplash)) {

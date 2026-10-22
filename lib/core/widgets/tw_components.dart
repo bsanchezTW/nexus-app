@@ -975,6 +975,79 @@ class TwKpiCard extends StatelessWidget {
   }
 }
 
+/// Variante horizontal y compacta de [TwKpiCard]: ícono a la izquierda,
+/// valor y etiqueta a la derecha. Para resúmenes que acompañan a otro
+/// contenido (el home) y no deben ocupar media pantalla.
+class TwKpiTile extends StatelessWidget {
+  const TwKpiTile({
+    super.key,
+    required this.value,
+    required this.label,
+    required this.icon,
+    required this.tint,
+    required this.iconColor,
+  });
+
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color tint;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+      decoration: const BoxDecoration(
+        color: TwColors.surface,
+        borderRadius: TwRadii.card,
+        border: Border.fromBorderSide(BorderSide(color: TwColors.border07)),
+        boxShadow: TwShadows.card,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: tint, borderRadius: TwRadii.field),
+            child: Icon(icon, size: 18, color: iconColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: Text(
+                      value,
+                      key: ValueKey(value),
+                      maxLines: 1,
+                      style: TwText.kpiValue.copyWith(fontSize: 19),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TwText.kpiLabel.copyWith(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Fila de acción de las pantallas-menú (Evento y Evento de leads).
 class TwActionTile extends StatelessWidget {
   const TwActionTile({

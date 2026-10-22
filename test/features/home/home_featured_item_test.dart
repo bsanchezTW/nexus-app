@@ -19,7 +19,7 @@ void main() {
 
     final items = ensamblarHomeFeaturedItems(
       fijados: [fijado],
-      proximo: proximo,
+      proximos: [proximo],
     );
 
     expect(items.map((item) => item.id), ['fijado', 'proximo']);
@@ -32,7 +32,7 @@ void main() {
 
     final items = ensamblarHomeFeaturedItems(
       fijados: [fijado],
-      proximo: proximo,
+      proximos: [proximo],
     );
 
     expect(items, hasLength(1));
@@ -45,7 +45,7 @@ void main() {
 
     final items = ensamblarHomeFeaturedItems(
       fijados: [fijada],
-      proximo: proxima,
+      proximos: [proxima],
     );
 
     expect(items, hasLength(1));
@@ -57,7 +57,7 @@ void main() {
 
     final items = ensamblarHomeFeaturedItems(
       fijados: const [],
-      proximo: proximo,
+      proximos: [proximo],
     );
 
     expect(items, hasLength(1));
@@ -107,10 +107,9 @@ void main() {
       fecha: DateTime(2026, 9, 20),
     );
 
-    final item = elegirProximoDestacado(actividad: actividad);
+    final item = elegirProximosDestacados(actividad: actividad).single;
 
-    expect(item, isNotNull);
-    expect(item!.kind, HomeFeaturedKind.proximaActividad);
+    expect(item.kind, HomeFeaturedKind.proximaActividad);
     expect(item.id, 'a1');
     expect(item.etiqueta, 'PRÓXIMA ACTIVIDAD');
     expect(item.ctaLabel, 'Ver actividad');
@@ -118,7 +117,7 @@ void main() {
     expect(item.qrRoutePath, isNull);
   });
 
-  test('si el evento es antes que la actividad manda el evento', () {
+  test('evento y actividad aparecen ambos, el evento primero si es antes', () {
     final evento = Evento(
       id: 'e1',
       nombre: 'Taller',
@@ -130,13 +129,19 @@ void main() {
       fecha: DateTime(2026, 9, 20),
     );
 
-    final item = elegirProximoDestacado(evento: evento, actividad: actividad);
+    final items = elegirProximosDestacados(
+      evento: evento,
+      actividad: actividad,
+    );
 
-    expect(item!.kind, HomeFeaturedKind.proximoEvento);
-    expect(item.id, 'e1');
+    expect(items.map((item) => item.kind), [
+      HomeFeaturedKind.proximoEvento,
+      HomeFeaturedKind.proximaActividad,
+    ]);
+    expect(items.map((item) => item.id), ['e1', 'a1']);
   });
 
-  test('si la actividad es antes que el evento manda la actividad', () {
+  test('una actividad anterior no esconde el evento recién creado', () {
     final evento = Evento(
       id: 'e1',
       nombre: 'Taller',
@@ -148,10 +153,13 @@ void main() {
       fecha: DateTime(2026, 9, 20),
     );
 
-    final item = elegirProximoDestacado(evento: evento, actividad: actividad);
+    final items = elegirProximosDestacados(
+      evento: evento,
+      actividad: actividad,
+    );
 
-    expect(item!.kind, HomeFeaturedKind.proximaActividad);
-    expect(item.id, 'a1');
+    expect(items.map((item) => item.id), ['a1', 'e1']);
+    expect(items.last.etiqueta, 'PRÓXIMO EVENTO');
   });
 
   test('la interna del próximo evento no duplica el hero', () {
@@ -168,10 +176,13 @@ void main() {
       tipo: TipoEventoLead.interno,
     );
 
-    final item = elegirProximoDestacado(evento: evento, actividad: actividad);
+    final items = elegirProximosDestacados(
+      evento: evento,
+      actividad: actividad,
+    );
 
-    expect(item!.kind, HomeFeaturedKind.proximoEvento);
-    expect(item.id, 'e1');
+    expect(items.single.kind, HomeFeaturedKind.proximoEvento);
+    expect(items.single.id, 'e1');
   });
 
   test('elige la actividad vigente más cercana y descarta las terminadas', () {

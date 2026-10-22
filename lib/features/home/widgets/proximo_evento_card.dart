@@ -22,12 +22,22 @@ double homeFeaturedSettledInset(double width) {
 
 /// Card del home: próximo evento, slider de fijados, o estado vacío.
 ///
-/// Rediseño: hero navy radio 22, métricas separadas por hairline y dos CTA de
-/// 48 dp (blanco + fantasma), según el prototipo de la pantalla de inicio.
+/// Hero navy radio 22 y compacto: métricas separadas por hairline y los dos
+/// CTA lado a lado. Una sola card mide lo que su contenido; el slider usa una
+/// altura común para que las páginas no salten al deslizar.
 class ProximoEventoCard extends StatefulWidget {
-  const ProximoEventoCard({super.key, required this.items});
+  const ProximoEventoCard({
+    super.key,
+    required this.items,
+    this.cargando = false,
+  });
 
   final List<HomeFeaturedItem> items;
+
+  /// Primera carga en curso: se muestra el esqueleto en vez del estado vacío,
+  /// que antes aparecía ("Todo tranquilo por aquí") mientras el servidor
+  /// todavía no contestaba.
+  final bool cargando;
 
   @override
   State<ProximoEventoCard> createState() => _ProximoEventoCardState();
@@ -85,16 +95,12 @@ class _ProximoEventoCardState extends State<ProximoEventoCard> {
     return true;
   }
 
-  double _alturaCard(BuildContext context, {required bool vacia}) {
+  /// Altura común del slider (y del esqueleto): el caso peor de una página,
+  /// título de 2 líneas + lugar + métricas + fila de CTA. La parte fija
+  /// (paddings, huecos y botones de 44) no escala con el texto.
+  double _alturaSlider(BuildContext context) {
     final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.6);
-    if (vacia) {
-      // Eyebrow + título + subtítulo de 2 líneas, sin métricas ni CTA.
-      return 36 + 148 * scale;
-    }
-    // 296 dp cubren el caso peor: título de 2 líneas + métricas + dos CTA de
-    // 48. El aire extra queda entre el título y las métricas, para que los
-    // botones coincidan de una card a otra.
-    return 36 + 296 * scale;
+    return 124 + 132 * scale;
   }
 
   double _pageValue() {
@@ -110,26 +116,24 @@ class _ProximoEventoCardState extends State<ProximoEventoCard> {
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
         final settledInset = homeFeaturedSettledInset(width);
-        final vacia = widget.items.isEmpty;
-        final cardHeight = _alturaCard(context, vacia: vacia);
+        final cardHeight = _alturaSlider(context);
 
-        if (vacia) {
+        if (widget.items.isEmpty) {
           return Padding(
             padding: EdgeInsets.symmetric(horizontal: settledInset),
-            child: SizedBox(
-              height: cardHeight,
-              child: const _EmptyProximoEventoCard(),
-            ),
+            child: widget.cargando
+                ? SizedBox(
+                    height: cardHeight,
+                    child: const _CargandoProximoEventoCard(),
+                  )
+                : const _EmptyProximoEventoCard(),
           );
         }
 
         if (!_esSlider) {
           return Padding(
             padding: EdgeInsets.symmetric(horizontal: settledInset),
-            child: SizedBox(
-              height: cardHeight,
-              child: _FeaturedSlide(item: widget.items.first),
-            ),
+            child: _FeaturedSlide(item: widget.items.first, altoFijo: false),
           );
         }
 
@@ -310,8 +314,8 @@ class _PuntoCarrusel extends StatelessWidget {
   }
 }
 
-/// Hero del home cuando no hay próximo evento ni fijados: el hueco se
-/// mantiene para que el inicio no salte al quedar vacío.
+/// Hero del home cuando no hay próximo evento ni fijados. Compacto: sin
+/// métricas ni botones no hay razón para reservar el alto de una card llena.
 class _EmptyProximoEventoCard extends StatelessWidget {
   const _EmptyProximoEventoCard();
 
@@ -320,72 +324,257 @@ class _EmptyProximoEventoCard extends StatelessWidget {
     return Container(
       key: const Key('proximo_evento_vacio'),
       width: double.infinity,
-      height: double.infinity,
       decoration: const BoxDecoration(
         gradient: TwGradients.hero,
         borderRadius: TwRadii.hero,
         boxShadow: TwShadows.hero,
       ),
       clipBehavior: Clip.antiAlias,
-      child: const Padding(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      padding: const EdgeInsets.all(16),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Eyebrow(icono: Symbols.schedule_rounded, texto: 'PRÓXIMO EVENTO'),
+          SizedBox(height: 14),
+          Text(
+            'Todo tranquilo por aquí',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TwText.homeHeroTitle,
+          ),
+          SizedBox(height: 6),
+          Text(
+            'No hay próximos eventos programados por ahora',
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TwText.heroMeta,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Esqueleto del hero mientras llega la primera respuesta del servidor.
+class _CargandoProximoEventoCard extends StatelessWidget {
+  const _CargandoProximoEventoCard();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget barra(double ancho, double alto) => Container(
+      width: ancho,
+      height: alto,
+      decoration: BoxDecoration(
+        color: TwColors.whiteA14,
+        borderRadius: BorderRadius.circular(alto / 2),
+      ),
+    );
+
+    return Semantics(
+      label: 'Cargando próximo evento',
+      child: Container(
+        key: const Key('proximo_evento_cargando'),
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: TwGradients.hero,
+          borderRadius: TwRadii.hero,
+          boxShadow: TwShadows.hero,
+        ),
+        padding: const EdgeInsets.all(16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final ancho = constraints.maxWidth;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Symbols.schedule_rounded,
-                  size: 15,
-                  fill: 1,
-                  color: TwColors.whiteA75,
-                ),
-                SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'PRÓXIMO EVENTO',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TwText.homeEyebrow,
-                  ),
+                barra(110, 10),
+                const SizedBox(height: 18),
+                barra(ancho * 0.85, 18),
+                const SizedBox(height: 10),
+                barra(ancho * 0.55, 18),
+                const SizedBox(height: 12),
+                barra(ancho * 0.4, 12),
+                const Spacer(),
+                Row(
+                  children: [
+                    Expanded(child: barra(double.infinity, 44)),
+                    const SizedBox(width: 10),
+                    Expanded(child: barra(double.infinity, 44)),
+                  ],
                 ),
               ],
-            ),
-            Spacer(),
-            Text(
-              'Todo tranquilo por aquí',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TwText.homeHeroTitle,
-            ),
-            SizedBox(height: 8),
-            Text(
-              'No hay próximos eventos programados por ahora',
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: TwText.heroMeta,
-            ),
-            Spacer(),
-          ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
+class _Eyebrow extends StatelessWidget {
+  const _Eyebrow({required this.icono, required this.texto, this.trailing});
+
+  final IconData icono;
+  final String texto;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icono, size: 15, fill: 1, color: TwColors.whiteA75),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            texto,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TwText.homeEyebrow,
+          ),
+        ),
+        if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+      ],
+    );
+  }
+}
+
+const _veloSobreFoto = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xC708182C), Color(0xEB081628), Color(0xF7081628)],
+  stops: [0.0, 0.45, 1.0],
+);
+
 class _FeaturedSlide extends StatelessWidget {
-  const _FeaturedSlide({super.key, required this.item, this.conSombra = true});
+  const _FeaturedSlide({
+    super.key,
+    required this.item,
+    this.conSombra = true,
+    this.altoFijo = true,
+  });
 
   final HomeFeaturedItem item;
 
   /// En el carrusel la sombra la pinta el fondo del Stack, no cada slide.
   final bool conSombra;
 
+  /// En el carrusel todas las páginas miden lo mismo y el sobrante queda
+  /// entre el título y las métricas. Sola, la card mide su contenido.
+  final bool altoFijo;
+
   @override
   Widget build(BuildContext context) {
+    final secundario = item.qrRoutePath != null
+        ? _HeroCta(
+            key: Key('proximo_evento_escanear_qr_${item.id}'),
+            label: 'Escanear QR',
+            icon: Symbols.qr_code_scanner_rounded,
+            filled: false,
+            onTap: () => context.push(item.qrRoutePath!),
+          )
+        : item.secondaryRoutePath != null
+        ? _HeroCta(
+            key: Key('proximo_evento_capturar_lead_${item.id}'),
+            label: item.secondaryCtaLabel!,
+            icon: Symbols.person_add_rounded,
+            filled: false,
+            onTap: () => context.push(item.secondaryRoutePath!),
+          )
+        : null;
+
+    final contenido = Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: altoFijo ? MainAxisSize.max : MainAxisSize.min,
+        children: [
+          _Eyebrow(
+            icono: item.esFijado
+                ? Symbols.push_pin_rounded
+                : Symbols.schedule_rounded,
+            texto: item.etiqueta,
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              decoration: BoxDecoration(
+                color: TwColors.whiteA16,
+                borderRadius: TwRadii.pill,
+                border: Border.all(color: TwColors.whiteA16),
+              ),
+              child: Text(
+                formatearDiaMesCorto(item.fecha),
+                style: TwText.homeDateChip,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            item.nombre,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TwText.homeHeroTitle,
+          ),
+          if (item.lugar.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(
+                  Symbols.location_on_rounded,
+                  size: 16,
+                  color: TwColors.whiteA66,
+                ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    item.lugar,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TwText.heroMeta,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (altoFijo) const Spacer() else const SizedBox(height: 14),
+          // Una actividad de captura no tiene registrados ni acreditación:
+          // sus métricas son las de leads.
+          _HomeStats(
+            columnas: item.esActividadCaptura
+                ? [
+                    ('${item.leads}', 'LEADS'),
+                    ('${item.empresas}', 'EMPRESAS'),
+                    ('${item.duracionDias}', 'DÍAS'),
+                  ]
+                : [
+                    ('${item.registrados}', 'REGISTRADOS'),
+                    (item.porcentajeAcreditados, 'ACREDITADOS'),
+                    ('${item.leads}', 'LEADS'),
+                  ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _HeroCta(
+                  label: item.ctaLabel,
+                  filled: true,
+                  onTap: () => context.push(item.ctaRoutePath),
+                ),
+              ),
+              if (secundario != null) ...[
+                const SizedBox(width: 10),
+                Expanded(child: secundario),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+
     return Container(
       width: double.infinity,
-      height: double.infinity,
+      height: altoFijo ? double.infinity : null,
       decoration: BoxDecoration(
         gradient: TwGradients.hero,
         borderRadius: TwRadii.hero,
@@ -393,131 +582,26 @@ class _FeaturedSlide extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
-        fit: StackFit.expand,
+        fit: altoFijo ? StackFit.expand : StackFit.loose,
         children: [
           if (item.tieneImagen)
             Positioned.fill(
               child: EventoHeroFoto(imagenUrl: item.imagenUrl!, velo: 0),
             ),
           // Velo sobre foto o degradado: el texto blanco y las métricas leen.
-          const Positioned.fill(
+          // Con foto va más cerrado: las portadas suelen ser afiches con
+          // texto propio, y en la card compacta ese texto caía detrás de las
+          // métricas.
+          Positioned.fill(
             child: DecoratedBox(
-              decoration: BoxDecoration(gradient: TwGradients.heroScrim),
+              decoration: BoxDecoration(
+                gradient: item.tieneImagen
+                    ? _veloSobreFoto
+                    : TwGradients.heroScrim,
+              ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      item.esFijado
-                          ? Symbols.push_pin_rounded
-                          : Symbols.schedule_rounded,
-                      size: 15,
-                      fill: 1,
-                      color: TwColors.whiteA75,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        item.etiqueta,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TwText.homeEyebrow,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: TwColors.whiteA16,
-                        borderRadius: TwRadii.pill,
-                        border: Border.all(color: TwColors.whiteA16),
-                      ),
-                      child: Text(
-                        formatearDiaMesCorto(item.fecha),
-                        style: TwText.homeDateChip,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  item.nombre,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TwText.homeHeroTitle,
-                ),
-                if (item.lugar.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(
-                        Symbols.location_on_rounded,
-                        size: 16,
-                        color: TwColors.whiteA66,
-                      ),
-                      const SizedBox(width: 5),
-                      Expanded(
-                        child: Text(
-                          item.lugar,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TwText.heroMeta,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                const Spacer(),
-                // Una actividad de captura no tiene registrados ni
-                // acreditación: sus métricas son las de leads.
-                _HomeStats(
-                  columnas: item.esActividadCaptura
-                      ? [
-                          ('${item.leads}', 'LEADS'),
-                          ('${item.empresas}', 'EMPRESAS'),
-                          ('${item.duracionDias}', 'DÍAS'),
-                        ]
-                      : [
-                          ('${item.registrados}', 'REGISTRADOS'),
-                          (item.porcentajeAcreditados, 'ACREDITADOS'),
-                          ('${item.leads}', 'LEADS'),
-                        ],
-                ),
-                _HeroCta(
-                  label: item.ctaLabel,
-                  filled: true,
-                  onTap: () => context.push(item.ctaRoutePath),
-                ),
-                if (item.qrRoutePath != null) ...[
-                  const SizedBox(height: 10),
-                  _HeroCta(
-                    key: Key('proximo_evento_escanear_qr_${item.id}'),
-                    label: 'Escanear QR',
-                    icon: Symbols.qr_code_scanner_rounded,
-                    filled: false,
-                    onTap: () => context.push(item.qrRoutePath!),
-                  ),
-                ] else if (item.secondaryRoutePath != null) ...[
-                  const SizedBox(height: 10),
-                  _HeroCta(
-                    key: Key('proximo_evento_capturar_lead_${item.id}'),
-                    label: item.secondaryCtaLabel!,
-                    icon: Symbols.person_add_rounded,
-                    filled: false,
-                    onTap: () => context.push(item.secondaryRoutePath!),
-                  ),
-                ],
-              ],
-            ),
-          ),
+          contenido,
         ],
       ),
     );
@@ -534,48 +618,45 @@ class _HomeStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 18, bottom: 16),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < columnas.length; i++)
-              Expanded(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: i == 0
-                        ? null
-                        : const Border(
-                            left: BorderSide(color: TwColors.whiteA14),
-                          ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          columnas[i].$1,
-                          maxLines: 1,
-                          style: TwText.homeStatValue,
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < columnas.length; i++)
+            Expanded(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: i == 0
+                      ? null
+                      : const Border(
+                          left: BorderSide(color: TwColors.whiteA14),
                         ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        columnas[i].$1,
+                        maxLines: 1,
+                        style: TwText.homeStatValue.copyWith(fontSize: 21),
                       ),
-                      const SizedBox(height: 6),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          columnas[i].$2,
-                          maxLines: 1,
-                          style: TwText.homeStatLabel,
-                        ),
+                    ),
+                    const SizedBox(height: 5),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        columnas[i].$2,
+                        maxLines: 1,
+                        style: TwText.homeStatLabel,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -603,13 +684,13 @@ class _HeroCta extends StatelessWidget {
     return TwPressable(
       onTap: onTap,
       child: Container(
-        height: 48,
+        height: 44,
         decoration: BoxDecoration(
           color: filled ? TwColors.surface : TwColors.whiteA14,
           borderRadius: TwRadii.button,
           border: filled ? null : Border.all(color: TwColors.whiteA22),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         alignment: Alignment.center,
         child: FittedBox(
           fit: BoxFit.scaleDown,
@@ -617,8 +698,8 @@ class _HeroCta extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 20, color: color),
-                const SizedBox(width: 8),
+                Icon(icon, size: 19, color: color),
+                const SizedBox(width: 7),
               ],
               Text(label, style: filled ? TwText.heroCta : TwText.heroCtaGhost),
             ],

@@ -43,10 +43,7 @@ void main() {
       const MaterialApp(
         home: Scaffold(
           body: Center(
-            child: SizedBox(
-              width: 320,
-              child: ProximoEventoCard(items: []),
-            ),
+            child: SizedBox(width: 320, child: ProximoEventoCard(items: [])),
           ),
         ),
       ),
@@ -60,8 +57,32 @@ void main() {
       find.text('No hay próximos eventos programados por ahora'),
       findsOneWidget,
     );
-    expect(tester.getSize(find.byType(ProximoEventoCard)).height, greaterThan(0));
+    expect(
+      tester.getSize(find.byType(ProximoEventoCard)).height,
+      greaterThan(0),
+    );
     expect(find.text('Ver evento'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mientras carga muestra el esqueleto y no el estado vacío', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 320,
+              child: ProximoEventoCard(items: [], cargando: true),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('proximo_evento_cargando')), findsOneWidget);
+    expect(find.text('Todo tranquilo por aquí'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -361,15 +382,19 @@ void main() {
 
     expect(find.text('Taller ALTAI: Título por confirmar'), findsOneWidget);
     expect(find.byType(EventoHeroFoto), findsOneWidget);
+    // Sobre la foto el velo es al menos tan cerrado como el del hero: las
+    // portadas suelen ser afiches con texto que compite con las métricas.
+    final velos = tester
+        .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+        .map((box) => box.decoration)
+        .whereType<BoxDecoration>()
+        .map((deco) => deco.gradient)
+        .whereType<LinearGradient>()
+        .where((g) => g != TwGradients.hero);
     expect(
-      tester
-          .widgetList<DecoratedBox>(find.byType(DecoratedBox))
-          .any(
-            (box) =>
-                box.decoration is BoxDecoration &&
-                (box.decoration as BoxDecoration).gradient ==
-                    TwGradients.heroScrim,
-          ),
+      velos.any(
+        (g) => g.colors.first.a >= TwGradients.heroScrim.colors.first.a,
+      ),
       isTrue,
     );
     expect(tester.takeException(), isNull);

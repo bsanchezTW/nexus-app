@@ -16,7 +16,8 @@ import '../../fijados/providers/fijados_providers.dart';
 import '../models/home_featured_item.dart';
 import 'home_dashboard_providers.dart';
 
-/// Ítems del header del home: fijados primero; el próximo evento al final.
+/// Ítems del header del home: fijados primero; el próximo evento y la próxima
+/// actividad al final.
 ///
 /// El resultado ya ensamblado se respalda en disco: son media docena de
 /// consultas encadenadas y sin red no hay forma de rehacerlas, así que el
@@ -108,7 +109,7 @@ Future<List<HomeFeaturedItem>> _construirDestacados({
     repos.fijados.listarEventosFijadosOrdenados(),
     repos.fijados.listarCampanasFijadasOrdenadas(),
   ).wait;
-  final proximo = elegirProximoDestacado(
+  final proximos = elegirProximosDestacados(
     evento: proximoEvento,
     actividad: proximaActividadVigente(campanas),
   );
@@ -128,7 +129,10 @@ Future<List<HomeFeaturedItem>> _construirDestacados({
           .catchError((Object _) => null),
   ])).whereType<HomeFeaturedItem>().toList();
 
-  final items = ensamblarHomeFeaturedItems(fijados: fijados, proximo: proximo);
+  final items = ensamblarHomeFeaturedItems(
+    fijados: fijados,
+    proximos: proximos,
+  );
 
   if (items.isEmpty) return items;
 
@@ -153,10 +157,7 @@ Future<HomeFeaturedItem> _conMetricas({
   try {
     if (item.esActividadCaptura) {
       final resumen = await leadsRepo.obtenerResumenCampana(item.id);
-      return item.copyWith(
-        leads: resumen.total,
-        empresas: resumen.empresas,
-      );
+      return item.copyWith(leads: resumen.total, empresas: resumen.empresas);
     }
 
     final resumen = await registradosRepo.obtenerResumenPorEvento(item.id);
