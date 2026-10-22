@@ -15,7 +15,6 @@ import '../../../core/widgets/collapsing_nav.dart';
 import '../../../core/widgets/evento_list_context_menu.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/shell_tab_scroll.dart';
-import '../../../core/widgets/tw_components.dart';
 import '../../../data/models/evento_lead.dart';
 import '../../../data/offline/offline_availability.dart';
 import '../../../data/offline/offline_read_cache.dart';
@@ -386,24 +385,13 @@ class _ListarEventosLeadsScreenState
                         );
                     return EventRow(
                       date: evento.fecha,
+                      endDate: evento.fechaFin,
                       title: evento.nombre,
                       place: evento.pais ?? '',
                       finalizado: evento.yaOcurrio,
                       fijado: fijado,
                       sinCache: sinCache,
-                      chip: evento.esMultiDia
-                          ? Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                TwOriginPill(interno: evento.esInterno),
-                                StatusChip(
-                                  label: evento.etiquetaDuracion,
-                                  variant: StatusChipVariant.neutral,
-                                ),
-                              ],
-                            )
-                          : TwOriginPill(interno: evento.esInterno),
+                      meta: [evento.esInterno ? 'Interna' : 'Externa'],
                       onTap: () {
                         if (sinCache) {
                           showOfflineUnavailableToast(context);

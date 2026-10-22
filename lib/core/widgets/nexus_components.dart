@@ -232,29 +232,71 @@ class FilterChipBar extends StatelessWidget {
   }
 }
 
+/// Las dos líneas del bloque de fecha de una fila de evento:
+/// - un día: `25` / `NOV`;
+/// - varios días del mismo mes: `20–24` / `OCT`;
+/// - entre dos meses (o dos años): `30 OCT` / `2 NOV`.
+///
+/// Requiere `initializeDateFormatting('es')`.
+(String, String) lineasBloqueFecha(DateTime inicio, DateTime fin) {
+  final a = DateTime(inicio.year, inicio.month, inicio.day);
+  final b = DateTime(fin.year, fin.month, fin.day);
+  String mes(DateTime f) =>
+      DateFormat('MMM', 'es').format(f).toUpperCase().replaceAll('.', '');
+  if (!b.isAfter(a)) return ('${a.day}', mes(a));
+  if (a.year == b.year && a.month == b.month) {
+    return ('${a.day}–${b.day}', mes(a));
+  }
+  return ('${a.day} ${mes(a)}', '${b.day} ${mes(b)}');
+}
+
 class DateTile extends StatelessWidget {
   const DateTile({
     super.key,
     required this.date,
+    this.end,
     this.hero = false,
     this.muted = false,
   });
 
   final DateTime date;
+
+  /// Último día de un evento de varios días. Con [end] el bloque muestra el
+  /// rango y usa un ancho fijo algo mayor, el mismo para uno o varios días,
+  /// para que las filas de una lista queden alineadas.
+  final DateTime? end;
   final bool hero;
   final bool muted;
 
   @override
   Widget build(BuildContext context) {
-    final day = DateFormat('d', 'es').format(date);
-    final month = DateFormat('MMM', 'es').format(date).toUpperCase();
+    final (arriba, abajo) = lineasBloqueFecha(date, end ?? date);
+    // Entre dos meses las dos líneas pesan lo mismo: `30 OCT` / `2 NOV`.
+    final entreMeses = arriba.contains(' ');
     final escalaSolicitada = MediaQuery.textScalerOf(context).scale(1);
     final textScale = escalaSolicitada < 1 ? 1.0 : escalaSolicitada;
-    final baseWidth = hero ? 52.0 : 48.0;
+    final baseWidth = end != null ? 54.0 : (hero ? 52.0 : 48.0);
     final baseHeight = hero ? 56.0 : 52.0;
+    final tinta = muted ? TwColors.muted : TwColors.hero700;
+    final estiloDia = TwText.kpiValue.copyWith(
+      fontSize: arriba.length > 2 ? 16 : (hero ? 19 : 18),
+      color: tinta,
+    );
+    final estiloMes = TwText.statLabel.copyWith(
+      fontSize: hero ? 10 : 9.5,
+      letterSpacing: 0.4,
+      color: muted ? TwColors.muted : TwColors.blueInk,
+    );
+    final estiloEntreMeses = TwText.statLabel.copyWith(
+      fontSize: 11.5,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.2,
+      color: tinta,
+    );
     return Container(
       width: baseWidth * textScale,
       height: baseHeight * textScale,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
         color: muted ? TwColors.surfaceTint : TwColors.blueTint,
         borderRadius: TwRadii.iconLg,
@@ -262,20 +304,21 @@ class DateTile extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            day,
-            style: TwText.kpiValue.copyWith(
-              fontSize: hero ? 19 : 18,
-              color: muted ? TwColors.muted : TwColors.hero700,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              arriba,
+              maxLines: 1,
+              style: entreMeses ? estiloEntreMeses : estiloDia,
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            month.replaceAll('.', ''),
-            style: TwText.statLabel.copyWith(
-              fontSize: hero ? 10 : 9.5,
-              letterSpacing: 0.4,
-              color: muted ? TwColors.muted : TwColors.blueInk,
+          SizedBox(height: entreMeses ? 3 : 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              abajo,
+              maxLines: 1,
+              style: entreMeses ? estiloEntreMeses : estiloMes,
             ),
           ),
         ],
@@ -321,6 +364,7 @@ class EventRow extends StatelessWidget {
   const EventRow({
     super.key,
     required this.date,
+    this.endDate,
     required this.title,
     required this.place,
     required this.onTap,
@@ -329,7 +373,7 @@ class EventRow extends StatelessWidget {
     this.fijado = false,
     this.trailing,
     this.actions,
-    this.chip,
+    this.meta = const [],
     this.sinCache = false,
     this.footer,
   });
@@ -339,6 +383,9 @@ class EventRow extends StatelessWidget {
   final Widget? footer;
 
   final DateTime date;
+
+  /// Último día del evento; el bloque de fecha muestra el rango.
+  final DateTime? endDate;
   final String title;
   final String place;
   final VoidCallback onTap;
@@ -352,12 +399,20 @@ class EventRow extends StatelessWidget {
   /// tocarla avisa en vez de abrir una pantalla que no tiene datos que mostrar.
   final bool sinCache;
 
-  /// Distintivo extra bajo el título, junto al estado (p. ej. el origen de un
-  /// evento de leads).
-  final Widget? chip;
+  /// Datos cortos que siguen al lugar en la segunda línea, separados por
+  /// ` · ` (p. ej. `Interna` o `Taller`). La fila agrega por su cuenta
+  /// `Finalizado` y `Sin conexión`.
+  final List<String> meta;
 
   @override
   Widget build(BuildContext context) {
+    final detalles = [
+      ...meta,
+      if (finalizado) 'Finalizado',
+      if (sinCache) 'Sin conexión',
+    ].join(' · ');
+    final estiloSegundaLinea = TwText.tileSubtitle.copyWith(fontSize: 12);
+
     final chevron = sinCache
         ? const Icon(Symbols.lock_rounded, size: 20, color: TwColors.muted)
         : trailing ??
@@ -378,7 +433,11 @@ class EventRow extends StatelessWidget {
               padding: const EdgeInsets.all(13),
               child: Row(
                 children: [
-                  DateTile(date: date, muted: finalizado),
+                  DateTile(
+                    date: date,
+                    end: endDate ?? date,
+                    muted: finalizado,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -411,47 +470,50 @@ class EventRow extends StatelessWidget {
                             ),
                           ],
                         ),
-                        if (place.isNotEmpty) ...[
+                        if (place.isNotEmpty || detalles.isNotEmpty) ...[
                           const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              const Icon(
-                                Symbols.location_on_rounded,
-                                size: 14,
-                                color: TwColors.muted,
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  place,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TwText.tileSubtitle.copyWith(
-                                    fontSize: 12,
+                          // Un lugar largo se corta antes que los detalles,
+                          // aunque siempre deja ver el pin y el comienzo.
+                          LayoutBuilder(
+                            builder: (context, constraints) => Row(
+                              children: [
+                                if (place.isNotEmpty) ...[
+                                  const Icon(
+                                    Symbols.location_on_rounded,
+                                    size: 14,
+                                    color: TwColors.muted,
                                   ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        if (chip != null || finalizado || sinCache) ...[
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: [
-                              ?chip,
-                              if (finalizado)
-                                const StatusChip(
-                                  label: 'Evento finalizado',
-                                  variant: StatusChipVariant.danger,
-                                ),
-                              if (sinCache)
-                                const StatusChip(
-                                  label: 'No descargado',
-                                  variant: StatusChipVariant.neutral,
-                                ),
-                            ],
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      place,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: estiloSegundaLinea,
+                                    ),
+                                  ),
+                                ],
+                                if (detalles.isNotEmpty)
+                                  ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxWidth: place.isEmpty
+                                          ? constraints.maxWidth
+                                          : (constraints.maxWidth - 64).clamp(
+                                              0,
+                                              constraints.maxWidth,
+                                            ),
+                                    ),
+                                    child: Text(
+                                      place.isNotEmpty
+                                          ? ' · $detalles'
+                                          : detalles,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: estiloSegundaLinea,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ],
                       ],

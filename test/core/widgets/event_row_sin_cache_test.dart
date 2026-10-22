@@ -40,7 +40,7 @@ void main() {
       onLongPress: () => mantenidos++,
     );
 
-    expect(find.text('No descargado'), findsOneWidget);
+    expect(find.textContaining('Sin conexión'), findsOneWidget);
     expect(find.byIcon(Symbols.lock_rounded), findsOneWidget);
     expect(find.byIcon(Symbols.chevron_right_rounded), findsNothing);
 
@@ -64,7 +64,7 @@ void main() {
       onLongPress: () => mantenidos++,
     );
 
-    expect(find.text('No descargado'), findsNothing);
+    expect(find.textContaining('Sin conexión'), findsNothing);
     expect(find.byIcon(Symbols.lock_rounded), findsNothing);
     expect(find.byIcon(Symbols.chevron_right_rounded), findsOneWidget);
 
