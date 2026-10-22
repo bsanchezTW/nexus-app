@@ -31,7 +31,9 @@ import '../../updates/widgets/update_checker.dart';
 import '../models/home_featured_item.dart';
 import '../providers/home_dashboard_providers.dart';
 import '../providers/home_featured_providers.dart';
+import '../providers/orden_carrusel_provider.dart';
 import '../widgets/home_dashboard_section.dart';
+import '../widgets/ordenar_carrusel_sheet.dart';
 import '../widgets/proximo_evento_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -155,6 +157,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           )
           .toList();
     }
+    // Orden elegido en este teléfono (hoja "Ordenar").
+    featuredItems = aplicarOrdenCarrusel(
+      featuredItems,
+      ref.watch(ordenCarruselProvider),
+    );
     ref.listen<int>(shellTabEpochProvider(ShellTabBranch.inicio), (prev, next) {
       if (prev == next) return;
       if (_scrollController.hasClients) {
@@ -218,17 +225,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 onMiPerfil: () => context.push(RoutePaths.perfil),
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
             ProximoEventoCard(
               items: featuredItems,
               cargando: cargandoDestacados,
+              onOrdenar: () =>
+                  showOrdenarCarruselSheet(context, items: featuredItems),
             ),
-            const SizedBox(height: 20),
+            // Con varias tarjetas, las viñetas ya separan del resto.
+            SizedBox(height: featuredItems.length > 1 ? 12 : 24),
             _HomeColumn(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const TwOfflineNoticeCard(bottomGap: 20),
+                  const TwOfflineNoticeCard(bottomGap: 24),
                   perfilAsync.when(
                     skipLoadingOnReload: true,
                     skipLoadingOnRefresh: true,

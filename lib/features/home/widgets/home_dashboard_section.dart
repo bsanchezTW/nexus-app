@@ -85,13 +85,13 @@ class _KpiGrid extends StatelessWidget {
     return Column(
       children: [
         for (var row = 0; row * 2 < cards.length; row++) ...[
-          if (row > 0) const SizedBox(height: 10),
+          if (row > 0) const SizedBox(height: 12),
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (var col = 0; col < 2; col++) ...[
-                  if (col > 0) const SizedBox(width: 10),
+                  if (col > 0) const SizedBox(width: 12),
                   Expanded(
                     child: row * 2 + col < cards.length
                         ? _HomeCardIn(

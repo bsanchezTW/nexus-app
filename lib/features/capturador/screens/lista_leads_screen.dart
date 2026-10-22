@@ -32,6 +32,7 @@ import '../../../data/offline/sync_queue_service.dart';
 import '../../../data/repositories/leads_repository.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../lead_comentario_flujo.dart';
+import '../permisos_lead.dart';
 import '../providers/capturador_providers.dart';
 import '../widgets/avatar_lead.dart';
 import '../widgets/foto_lead_identidad.dart';
@@ -136,7 +137,7 @@ class _ListaLeadsScreenState extends ConsumerState<ListaLeadsScreen>
   List<Lead> _filtrarLeads(
     List<Lead> leads, {
     required bool canViewAllLeads,
-    required bool puedeVerContacto,
+    required bool Function(Lead) puedeVerContacto,
     String? perfilId,
   }) {
     return leads.where((lead) {
@@ -158,7 +159,7 @@ class _ListaLeadsScreenState extends ConsumerState<ListaLeadsScreen>
       // correo oculto se podría reconstruir por tanteo.
       return lead.nombreCompleto.toLowerCase().contains(_busqueda) ||
           (lead.empresa ?? '').toLowerCase().contains(_busqueda) ||
-          (puedeVerContacto &&
+          (puedeVerContacto(lead) &&
               (lead.email ?? '').toLowerCase().contains(_busqueda));
     }).toList();
   }
@@ -230,9 +231,18 @@ class _ListaLeadsScreenState extends ConsumerState<ListaLeadsScreen>
   @override
   Widget build(BuildContext context) {
     final leadsAsync = ref.watch(leadsPorEventoProvider(widget.eventoId));
-    final perfilId = ref.watch(currentPerfilProvider).valueOrNull?.id;
+    final perfil = ref.watch(currentPerfilProvider).valueOrNull;
+    final perfilId = perfil?.id;
     final canViewAllLeads = ref.watch(canViewAllLeadsProvider);
-    final puedeVerContacto = ref.watch(canViewContactDataProvider);
+    final actividad = ref
+        .watch(eventoLeadByIdProvider(widget.eventoId))
+        .valueOrNull;
+    // Cada lead decide: el capturador ve completos los suyos hasta el cierre.
+    bool puedeVerContacto(Lead lead) => permisosLead(
+      perfil: perfil,
+      lead: lead,
+      actividad: actividad,
+    ).verContacto;
 
     final filtrados = leadsAsync.maybeWhen(
       data: (leads) => _filtrarLeads(
@@ -338,7 +348,7 @@ class _ListaLeadsScreenState extends ConsumerState<ListaLeadsScreen>
                     desdeEvento: widget.desdeEvento,
                     lead: filtrados[index],
                     index: index,
-                    puedeVerContacto: puedeVerContacto,
+                    puedeVerContacto: puedeVerContacto(filtrados[index]),
                   ),
                 ),
               ),
@@ -518,6 +528,10 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
   String? _emailGuardado;
   String? _telefonoGuardado;
 
+  /// Si los campos de contacto muestran el valor real o la máscara. Depende
+  /// de la actividad (cierre), que puede resolverse después del lead.
+  bool? _contactoVisible;
+
   @override
   void dispose() {
     _nombreController.dispose();
@@ -548,6 +562,7 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
     _emailController.text = puedeVerContacto
         ? (lead.email ?? '')
         : enmascararEmail(lead.email);
+    _contactoVisible = puedeVerContacto;
     _descripcionController.text = lead.descripcion ?? '';
     _fotos = lead.fotosUrls;
     _nombre0 = _nombreController.text;
@@ -557,6 +572,21 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
     _email0 = _emailController.text;
     _descripcion0 = _descripcionController.text;
     _fotos0 = List<String>.from(_fotos);
+  }
+
+  /// Cambia el contacto entre valor real y máscara cuando el permiso cambia
+  /// (la actividad llegó después del lead, o la edición cerró).
+  void _ajustarContactoVisible(bool visible) {
+    if (!_cargado || _contactoVisible == visible) return;
+    _contactoVisible = visible;
+    _telefonoController.text = visible
+        ? formatearTelefonoNacional(_telefonoGuardado ?? '', _paisTelefono)
+        : enmascararTelefono(_telefonoGuardado);
+    _emailController.text = visible
+        ? (_emailGuardado ?? '')
+        : enmascararEmail(_emailGuardado);
+    _telefono0 = _telefonoController.text;
+    _email0 = _emailController.text;
   }
 
   void _inicializarPaisTelefonoEvento(
@@ -640,7 +670,7 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
     String? valorOpcional(TextEditingController controller) =>
         _sinVacios(controller.text);
 
-    final puedeVerContacto = ref.read(canViewContactDataProvider);
+    final puedeVerContacto = _contactoVisible ?? false;
     final email = puedeVerContacto
         ? valorOpcional(_emailController) == null
               ? null
@@ -856,23 +886,47 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
     }
   }
 
+  /// Borrado lógico. Sin red se encola como un cambio y el lead desaparece de
+  /// la lista al instante (ver `fusionarLeadsConCola`); al volver la conexión
+  /// la cola lo envía a `cl_eliminar_lead`.
   Future<void> _eliminar() async {
     final ok = await confirmDialog(
       context,
       title: 'Eliminar lead',
-      message: '¿Eliminar este lead de forma permanente?',
+      message:
+          'El lead dejará de aparecer en la lista, los conteos y el Excel. '
+          'Si fue un error, un administrador puede recuperarlo.',
       confirmLabel: 'Eliminar',
       destructive: true,
     );
     if (!ok) return;
 
+    Future<void> encolar() => ref
+        .read(syncQueueServiceProvider.notifier)
+        .enqueueUpdate(
+          table: SupabaseTables.leads,
+          entityId: widget.leadId,
+          changes: {
+            campoLeadEliminadoAt: DateTime.now().toUtc().toIso8601String(),
+          },
+        );
+
     try {
-      await ref.read(leadsRepositoryProvider).eliminar(widget.leadId);
-      // Las fotos del lead ya no tienen fila que las referencie.
-      await ref.read(storageCleanupServiceProvider).drenar();
+      if (ref.read(isOnlineProvider)) {
+        try {
+          await ref.read(leadsRepositoryProvider).eliminar(widget.leadId);
+        } catch (error) {
+          if (!isNetworkTransportError(error)) rethrow;
+          await encolar();
+        }
+      } else {
+        await encolar();
+      }
       ref.invalidate(leadsPorEventoProvider(widget.eventoId));
+      ref.invalidate(leadsResumenRemotoProvider(widget.eventoId));
       exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
       if (mounted) {
+        showAppSnackBar(context, 'Lead eliminado.');
         volverALista(
           context,
           RoutePaths.verLeads(widget.eventoId, desdeEvento: widget.desdeEvento),
@@ -891,31 +945,35 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
     // en vez de pedir el lead al servidor: así el detalle se abre sin
     // conexión y también sirve para leads que aún no se han sincronizado.
     final leadsAsync = ref.watch(leadsPorEventoProvider(widget.eventoId));
-    final esAdmin = ref.watch(isAdminProvider);
-    final perfilId = ref.watch(currentPerfilProvider).valueOrNull?.id;
-    final puedeEditarCualquiera = ref.watch(canEditAnyLeadProvider);
-    final puedeVerContacto = ref.watch(canViewContactDataProvider);
+    final perfil = ref.watch(currentPerfilProvider).valueOrNull;
     final eventoCaptura = ref
         .watch(eventoLeadByIdProvider(widget.eventoId))
         .valueOrNull;
+    final esPendiente = esIdSoloLocal(widget.leadId);
+
+    // El lead se resuelve antes del scaffold porque el título y el modo del
+    // formulario dependen de quién lo capturó y de si la actividad cerró.
+    final leadActual = leadsAsync.valueOrNull?.firstWhereOrNull(
+      (l) => l.id == widget.leadId,
+    );
+    final permisos = leadActual == null
+        ? PermisosLead.ninguno
+        : permisosLead(
+            perfil: perfil,
+            lead: leadActual,
+            actividad: eventoCaptura,
+          );
+    final puedeVerContacto = permisos.verContacto;
+    final puedeEditar = permisos.editar;
+    final esPropio = leadActual != null && leadActual.perfilId == perfil?.id;
+    // Un capturador con su lead ya cerrado: se le explica por qué no edita.
+    final cerradoParaMi = esPropio && !puedeEditar && eventoCaptura != null;
     if (eventoCaptura != null) {
       _inicializarPaisTelefonoEvento(
         eventoCaptura.pais,
         puedeVerContacto: puedeVerContacto,
       );
     }
-    final esPendiente = esIdSoloLocal(widget.leadId);
-
-    // El lead se resuelve antes del scaffold porque el título y el modo del
-    // formulario dependen de quién lo capturó.
-    final leadActual = leadsAsync.valueOrNull?.firstWhereOrNull(
-      (l) => l.id == widget.leadId,
-    );
-    final esPropio =
-        leadActual != null &&
-        perfilId != null &&
-        leadActual.perfilId == perfilId;
-    final puedeEditar = puedeEditarCualquiera || esPropio;
 
     return AppScaffold(
       title: puedeEditar ? 'Editar lead' : 'Detalle del lead',
@@ -928,7 +986,7 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
       actions: [
         // Un insert encolado no existe en el servidor: borrarlo desde acá lo
         // dejaría en la cola y reaparecería al sincronizar.
-        if (esAdmin && !esPendiente)
+        if (permisos.eliminar && !esPendiente)
           NexusHeaderAction(
             icon: Symbols.delete_outline_rounded,
             tooltip: 'Eliminar lead',
@@ -959,6 +1017,7 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
             );
           }
           _precargar(lead, puedeVerContacto: puedeVerContacto);
+          _ajustarContactoVisible(puedeVerContacto);
           final editable = puedeEditar && !_guardando;
 
           // Una foto capturada sin conexión vive en disco, no en Storage: se
@@ -1073,7 +1132,10 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
                     title: 'Contacto',
                     subtitle: puedeVerContacto
                         ? null
-                        : 'Solo visible para administradores y organizadores.',
+                        : cerradoParaMi
+                        ? 'La actividad cerró: tus leads quedan en solo lectura.'
+                        : 'Solo visible para quien lo capturó y para '
+                              'administradores.',
                     children: [
                       FormLabeledField(
                         label: 'Teléfono',

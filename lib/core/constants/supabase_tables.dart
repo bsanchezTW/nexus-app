@@ -52,6 +52,7 @@ class SupabaseRpc {
   static const resumenCampana = 'cl_resumen_campana';
   static const guardarLead = 'cl_guardar_lead';
   static const buscarLeadPorEmail = 'cl_buscar_lead_por_email';
+  static const eliminarLead = 'cl_eliminar_lead';
   static const existeEmailRegistrado = 'rpe_existe_email_registrado';
   static const registrarAsistente = 'rpe_registrar_asistente';
   static const importarRegistrados = 'rpe_importar_registrados';

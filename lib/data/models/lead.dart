@@ -1,5 +1,10 @@
 import 'supabase_row_parsers.dart';
 
+/// Marca de borrado lógico (`leads.eliminado_at`). El servidor ya no entrega
+/// los leads borrados; en la app solo aparece como cambio encolado de un
+/// borrado hecho sin red.
+const campoLeadEliminadoAt = 'eliminado_at';
+
 /// Lead capturado en un evento de leads (`public.leads`).
 class Lead {
   const Lead({

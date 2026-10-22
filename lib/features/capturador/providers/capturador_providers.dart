@@ -237,10 +237,14 @@ List<Lead> fusionarLeadsConCola({
     };
   }
 
-  final servidorConCambios = servidor.map((lead) {
-    final cambios = cambiosPorId[lead.id];
-    return cambios == null ? lead : lead.conCambiosPendientes(cambios);
-  }).toList();
+  final servidorConCambios = servidor
+      // Borrado sin red: desaparece ya, aunque el servidor aún no lo sepa.
+      .where((lead) => cambiosPorId[lead.id]?[campoLeadEliminadoAt] == null)
+      .map((lead) {
+        final cambios = cambiosPorId[lead.id];
+        return cambios == null ? lead : lead.conCambiosPendientes(cambios);
+      })
+      .toList();
 
   return [...inserts, ...servidorConCambios];
 }

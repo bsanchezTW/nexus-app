@@ -225,9 +225,12 @@ class LeadsRepository implements SyncExecutor {
     return result;
   }
 
-  /// Solo admin (política `cl_leads_delete` / `rpe_is_admin`).
+  /// Borrado lógico (`cl_eliminar_lead`): el lead deja de verse en listas,
+  /// conteos y Excel, pero la fila queda para que el admin pueda recuperarla.
+  /// La base lo permite al admin y a quien lo capturó; la ventana de tiempo
+  /// la decide la app (ver `permisosLead`).
   Future<void> eliminar(String id) async {
-    await _client.from(SupabaseTables.leads).delete().eq('id', id);
+    await _client.rpc(SupabaseRpc.eliminarLead, params: {'p_lead_id': id});
   }
 
   @override
@@ -285,6 +288,11 @@ class LeadsRepository implements SyncExecutor {
     }
     final id = payload['id'] as String;
     final changes = Map<String, dynamic>.from(payload['changes'] as Map);
+    // Un borrado hecho sin red: lo demás que se haya editado ya no importa.
+    if (changes[campoLeadEliminadoAt] != null) {
+      await eliminar(id);
+      return;
+    }
     final result = await actualizar(id, changes);
     if (result.esDuplicado) {
       throw SyncDiscardedException(result.mensajeDuplicado);

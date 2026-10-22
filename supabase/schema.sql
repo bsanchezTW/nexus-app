@@ -384,6 +384,12 @@ CREATE TABLE IF NOT EXISTS public.leads (
     REFERENCES public.perfiles (id)
 );
 
+-- Borrado lógico (cl_eliminar_lead): la fila queda, pero RLS la oculta.
+ALTER TABLE public.leads
+  ADD COLUMN IF NOT EXISTS eliminado_at timestamptz,
+  ADD COLUMN IF NOT EXISTS eliminado_por uuid
+    REFERENCES public.perfiles (id) ON DELETE SET NULL;
+
 -- Hilo grupal por lead. El nombre del autor se denormaliza para no abrir
 -- la RLS de perfiles y para sobrevivir a la baja de la cuenta.
 CREATE TABLE IF NOT EXISTS public.lead_comentarios (
@@ -506,9 +512,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_eventos_leads_evento_origen_unique
   WHERE evento_origen_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_leads_evento_id ON public.leads (evento_id);
 CREATE INDEX IF NOT EXISTS idx_leads_perfil_id ON public.leads (perfil_id);
+-- El email solo es único entre los leads vigentes (no borrados).
+DROP INDEX IF EXISTS public.idx_leads_evento_email_normalizado_unique;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_evento_email_normalizado_unique
   ON public.leads (evento_id, email_normalizado)
-  WHERE email_normalizado IS NOT NULL;
+  WHERE email_normalizado IS NOT NULL AND eliminado_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_lead_comentarios_lead_created
   ON public.lead_comentarios (lead_id, created_at);
 
@@ -815,6 +823,7 @@ BEGIN
       WHERE l.evento_id = NEW.evento_id
         AND l.id IS DISTINCT FROM NEW.id
         AND NULLIF(lower(btrim(l.email)), '') = v_email_normalizado
+        AND l.eliminado_at IS NULL
     ) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23505',
@@ -833,6 +842,7 @@ BEGIN
       WHERE l.evento_id = NEW.evento_id
         AND l.id IS DISTINCT FROM NEW.id
         AND NULLIF(lower(btrim(l.email)), '') = v_email_normalizado
+        AND l.eliminado_at IS NULL
     ) THEN
       RAISE EXCEPTION USING
         ERRCODE = '23505',
@@ -1683,9 +1693,9 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'El nombre es obligatorio';
   END IF;
 
-  -- La fila se carga antes de validar el email porque quien no edita de forma
-  -- global tampoco puede cambiar el contacto: su email y teléfono se reemplazan
-  -- por los ya guardados, y son esos los que se validan y se buscan duplicados.
+  -- Quien capturó el lead lo edita completo, contacto incluido; el resto
+  -- necesita rol global. El plazo de edición del capturador (fin de la
+  -- actividad + 24 h) lo aplica la app.
   IF p_lead_id IS NOT NULL THEN
     SELECT l.* INTO v_existente
     FROM public.leads l
@@ -1693,17 +1703,15 @@ BEGIN
     FOR UPDATE;
 
     IF FOUND THEN
+      IF v_existente.eliminado_at IS NOT NULL THEN
+        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'El lead fue eliminado';
+      END IF;
       IF v_existente.evento_id <> p_evento_id THEN
         RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'El lead pertenece a otra campaña';
       END IF;
       IF NOT v_puede_editar_global
          AND v_existente.perfil_id IS DISTINCT FROM v_usuario_id THEN
         RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Solo puedes editar tus propios leads';
-      END IF;
-      IF NOT v_puede_editar_global THEN
-        v_email := NULLIF(btrim(v_existente.email), '');
-        v_email_normalizado := NULLIF(lower(btrim(v_existente.email)), '');
-        v_telefono := NULLIF(btrim(v_existente.telefono), '');
       END IF;
     END IF;
   END IF;
@@ -1730,6 +1738,7 @@ BEGIN
     WHERE l.evento_id = p_evento_id
       AND l.id IS DISTINCT FROM v_lead_id
       AND NULLIF(lower(btrim(l.email)), '') = v_email_normalizado
+      AND l.eliminado_at IS NULL
     ORDER BY l.created_at NULLS LAST, l.id
     LIMIT 1;
 
@@ -1800,6 +1809,7 @@ EXCEPTION
     WHERE l.evento_id = p_evento_id
       AND l.id IS DISTINCT FROM v_lead_id
       AND NULLIF(lower(btrim(l.email)), '') = v_email_normalizado
+      AND l.eliminado_at IS NULL
     ORDER BY l.created_at NULLS LAST, l.id
     LIMIT 1;
 
@@ -1842,7 +1852,8 @@ BEGIN
       WHERE nullif(btrim(l.empresa), '') IS NOT NULL
     )::bigint AS empresas
   FROM public.leads l
-  WHERE l.evento_id = p_evento_id;
+  WHERE l.evento_id = p_evento_id
+    AND l.eliminado_at IS NULL;
 END;
 $$;
 
@@ -1899,6 +1910,7 @@ BEGIN
   FROM public.leads l
   WHERE l.evento_id = p_evento_id
     AND NULLIF(lower(btrim(l.email)), '') = v_email_normalizado
+    AND l.eliminado_at IS NULL
   ORDER BY l.created_at NULLS LAST, l.id
   LIMIT 1;
 
@@ -1912,6 +1924,60 @@ BEGIN
   RETURN NEXT;
 END;
 $$;
+
+-- Borrado lógico de un lead: admin o quien lo capturó.
+CREATE OR REPLACE FUNCTION public.cl_eliminar_lead(p_lead_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_usuario_id uuid := auth.uid();
+  v_activo boolean;
+  v_lead public.leads%ROWTYPE;
+BEGIN
+  IF v_usuario_id IS NULL THEN
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'No autenticado';
+  END IF;
+
+  SELECT p.activo INTO v_activo
+  FROM public.perfiles p
+  WHERE p.id = v_usuario_id;
+
+  IF NOT FOUND OR v_activo IS NOT TRUE THEN
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Usuario inactivo o sin perfil';
+  END IF;
+
+  SELECT l.* INTO v_lead
+  FROM public.leads l
+  WHERE l.id = p_lead_id
+  FOR UPDATE;
+
+  -- Ya no existe o ya estaba borrado: un reintento de la cola offline no
+  -- puede quedar fallando para siempre.
+  IF NOT FOUND OR v_lead.eliminado_at IS NOT NULL THEN
+    RETURN;
+  END IF;
+
+  IF NOT public.cl_campana_autorizada(v_lead.evento_id) THEN
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Sin acceso a la campaña';
+  END IF;
+
+  IF NOT public.rpe_is_admin()
+     AND v_lead.perfil_id IS DISTINCT FROM v_usuario_id THEN
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Solo puedes eliminar tus propios leads';
+  END IF;
+
+  UPDATE public.leads
+  SET eliminado_at = now(),
+      eliminado_por = v_usuario_id
+  WHERE id = p_lead_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.cl_eliminar_lead(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cl_eliminar_lead(uuid) TO authenticated;
 
 -- Perfil sistema al que se reasignan las acreditaciones cuando se
 -- elimina al usuario que las hizo. UUID fijo; no aparece en la UI
@@ -2265,7 +2331,10 @@ CREATE POLICY cl_eventos_leads_delete ON public.eventos_leads
 DROP POLICY IF EXISTS cl_leads_select ON public.leads;
 CREATE POLICY cl_leads_select ON public.leads
   FOR SELECT TO authenticated
-  USING (public.cl_campana_autorizada(evento_id));
+  USING (
+    eliminado_at IS NULL
+    AND public.cl_campana_autorizada(evento_id)
+  );
 
 DROP POLICY IF EXISTS cl_leads_insert ON public.leads;
 CREATE POLICY cl_leads_insert ON public.leads

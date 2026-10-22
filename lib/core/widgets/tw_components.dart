@@ -997,7 +997,7 @@ class TwKpiTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+      padding: const EdgeInsets.all(12),
       decoration: const BoxDecoration(
         color: TwColors.surface,
         borderRadius: TwRadii.card,

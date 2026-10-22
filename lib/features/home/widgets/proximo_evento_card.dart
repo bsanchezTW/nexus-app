@@ -30,9 +30,13 @@ class ProximoEventoCard extends StatefulWidget {
     super.key,
     required this.items,
     this.cargando = false,
+    this.onOrdenar,
   });
 
   final List<HomeFeaturedItem> items;
+
+  /// Abre la hoja "Ordenar". Con una sola tarjeta no se muestra.
+  final VoidCallback? onOrdenar;
 
   /// Primera carga en curso: se muestra el esqueleto en vez del estado vacío,
   /// que antes aparecía ("Todo tranquilo por aquí") mientras el servidor
@@ -95,12 +99,53 @@ class _ProximoEventoCardState extends State<ProximoEventoCard> {
     return true;
   }
 
-  /// Altura común del slider (y del esqueleto): el caso peor de una página,
-  /// título de 2 líneas + lugar + métricas + fila de CTA. La parte fija
-  /// (paddings, huecos y botones de 44) no escala con el texto.
-  double _alturaSlider(BuildContext context) {
-    final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.6);
-    return 124 + 132 * scale;
+  /// Altura común del slider: la de su página más alta, **medida** con el
+  /// texto real y la escala de fuente del teléfono. Antes se reservaba el
+  /// caso peor (título de 2 líneas + lugar) aunque ninguna página lo usara, y
+  /// con la letra grande del teléfono quedaba aire bajo el lugar.
+  double _alturaSlider(BuildContext context, double anchoCard) {
+    final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.6);
+    final base = DefaultTextStyle.of(context).style;
+    double alto(String texto, TextStyle style, {int maxLines = 1}) {
+      final painter = TextPainter(
+        text: TextSpan(text: texto, style: base.merge(style)),
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+        maxLines: maxLines,
+      )..layout(maxWidth: anchoCard - 32);
+      return painter.height;
+    }
+
+    // Eyebrow: el chip de fecha (texto + 6 de padding y 1 de borde por lado).
+    final eyebrow = math.max(15.0, alto('31 OCT', TwText.homeDateChip) + 14);
+    final metricas =
+        alto('0', TwText.homeStatValue.copyWith(fontSize: 21)) +
+        5 +
+        alto('LEADS', TwText.homeStatLabel);
+    double altoPagina(String titulo, bool conLugar) {
+      final lugar = conLugar
+          ? 6 + math.max(16.0, alto('Lugar', TwText.heroMeta))
+          : 0.0;
+      return 16 +
+          eyebrow +
+          10 +
+          alto(titulo, TwText.homeHeroTitle, maxLines: 2) +
+          lugar +
+          14 +
+          metricas +
+          14 +
+          44 +
+          16 +
+          2;
+    }
+
+    if (widget.items.isEmpty) {
+      // Esqueleto: un título largo con lugar, para no saltar demasiado.
+      return altoPagina('Título de un evento con nombre largo', true);
+    }
+    return widget.items
+        .map((item) => altoPagina(item.nombre, item.lugar.isNotEmpty))
+        .reduce(math.max);
   }
 
   double _pageValue() {
@@ -116,7 +161,7 @@ class _ProximoEventoCardState extends State<ProximoEventoCard> {
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
         final settledInset = homeFeaturedSettledInset(width);
-        final cardHeight = _alturaSlider(context);
+        final cardHeight = _alturaSlider(context, width - settledInset * 2);
 
         if (widget.items.isEmpty) {
           return Padding(
@@ -218,23 +263,64 @@ class _ProximoEventoCardState extends State<ProximoEventoCard> {
             ),
             if (widget.items.length > 1) ...[
               const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (var i = 0; i < widget.items.length; i++)
-                    _PuntoCarrusel(
-                      key: Key('proximo_evento_punto_$i'),
-                      activo: i == _page,
-                      posicion: i + 1,
-                      total: widget.items.length,
-                      onTap: () => _irAPagina(i),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: settledInset),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (var i = 0; i < widget.items.length; i++)
+                          _PuntoCarrusel(
+                            key: Key('proximo_evento_punto_$i'),
+                            activo: i == _page,
+                            posicion: i + 1,
+                            total: widget.items.length,
+                            onTap: () => _irAPagina(i),
+                          ),
+                      ],
                     ),
-                ],
+                    if (widget.onOrdenar != null)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: _BotonOrdenar(onTap: widget.onOrdenar!),
+                      ),
+                  ],
+                ),
               ),
             ],
           ],
         );
       },
+    );
+  }
+}
+
+/// Acceso a la hoja "Ordenar", discreto junto a las viñetas.
+class _BotonOrdenar extends StatelessWidget {
+  const _BotonOrdenar({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Ordenar tarjetas',
+      child: TwPressable(
+        key: const Key('proximo_evento_ordenar'),
+        onTap: onTap,
+        scale: 0.92,
+        child: const SizedBox(
+          width: 32,
+          height: 32,
+          child: Icon(
+            Symbols.swap_vert_rounded,
+            size: 18,
+            color: TwColors.muted,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -443,8 +529,13 @@ class _Eyebrow extends StatelessWidget {
 const _veloSobreFoto = LinearGradient(
   begin: Alignment.topCenter,
   end: Alignment.bottomCenter,
-  colors: [Color(0xC708182C), Color(0xEB081628), Color(0xF7081628)],
-  stops: [0.0, 0.45, 1.0],
+  colors: [
+    Color(0xB808182C),
+    Color(0xE6081628),
+    Color(0xF5081628),
+    Color(0xFA081628),
+  ],
+  stops: [0.0, 0.35, 0.55, 1.0],
 );
 
 class _FeaturedSlide extends StatelessWidget {
