@@ -45,17 +45,28 @@ void main() {
     });
 
     test('entre dos meses cada línea lleva su mes', () {
-      expect(
-        lineasBloqueFecha(DateTime(2026, 10, 30), DateTime(2026, 11, 2)),
-        ('30 OCT', '2 NOV'),
-      );
+      expect(lineasBloqueFecha(DateTime(2026, 10, 30), DateTime(2026, 11, 2)), (
+        '30 OCT',
+        '2 NOV',
+      ));
     });
 
     test('entre dos años se lee igual que entre meses', () {
-      expect(
-        lineasBloqueFecha(DateTime(2026, 12, 30), DateTime(2027, 1, 2)),
-        ('30 DIC', '2 ENE'),
-      );
+      expect(lineasBloqueFecha(DateTime(2026, 12, 30), DateTime(2027, 1, 2)), (
+        '30 DIC',
+        '2 ENE',
+      ));
+    });
+
+    test('todos los meses van en 3 letras, septiembre incluido', () {
+      expect(lineasBloqueFecha(DateTime(2026, 9, 9), DateTime(2026, 9, 11)), (
+        '9–11',
+        'SEP',
+      ));
+      expect(formatearDiaMesCorto(DateTime(2026, 9, 9)), '9 SEP');
+      for (var mes = 1; mes <= 12; mes++) {
+        expect(mesCortoMayus(DateTime(2026, mes)), hasLength(3));
+      }
     });
 
     test('la hora no cuenta como otro día', () {
@@ -196,6 +207,18 @@ void main() {
         isTrue,
       );
       expect(cortado(' · Interna · Finalizado'), isFalse);
+      // Cortado con "…", el lugar mide lo que dibuja: sin esto ocupaba todo su
+      // espacio y dejaba un hueco antes de " · Finalizado".
+      expect(
+        tester
+            .renderObject<RenderParagraph>(
+              find.text(
+                'Centro de Convenciones Espacio Riesco, Avenida El Salto 5000, Huechuraba',
+              ),
+            )
+            .textWidthBasis,
+        TextWidthBasis.longestLine,
+      );
       expect(tester.takeException(), isNull);
     });
   });

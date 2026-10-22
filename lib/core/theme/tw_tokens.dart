@@ -645,12 +645,25 @@ String formatearFechaActividad(DateTime fecha, int duracionDias) {
   return '${formatearFechaLarga(inicio)} – ${formatearFechaLarga(fin)}';
 }
 
+const _mesesCortos = [
+  'ENE',
+  'FEB',
+  'MAR',
+  'ABR',
+  'MAY',
+  'JUN',
+  'JUL',
+  'AGO',
+  'SEP',
+  'OCT',
+  'NOV',
+  'DIC',
+];
+
+/// Mes en 3 letras y mayúsculas (`SEP`). `DateFormat('MMM', 'es')` da
+/// `sept.` para septiembre y descuadraba los bloques de fecha.
+String mesCortoMayus(DateTime fecha) => _mesesCortos[fecha.month - 1];
+
 /// `25 AGO` — píldora corta del hero del home.
-String formatearDiaMesCorto(DateTime fecha) {
-  final dia = DateFormat('d', 'es').format(fecha);
-  final mes = DateFormat(
-    'MMM',
-    'es',
-  ).format(fecha).toUpperCase().replaceAll('.', '');
-  return '$dia $mes';
-}
+String formatearDiaMesCorto(DateTime fecha) =>
+    '${fecha.day} ${mesCortoMayus(fecha)}';

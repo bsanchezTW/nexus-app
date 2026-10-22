@@ -241,8 +241,7 @@ class FilterChipBar extends StatelessWidget {
 (String, String) lineasBloqueFecha(DateTime inicio, DateTime fin) {
   final a = DateTime(inicio.year, inicio.month, inicio.day);
   final b = DateTime(fin.year, fin.month, fin.day);
-  String mes(DateTime f) =>
-      DateFormat('MMM', 'es').format(f).toUpperCase().replaceAll('.', '');
+  const mes = mesCortoMayus;
   if (!b.isAfter(a)) return ('${a.day}', mes(a));
   if (a.year == b.year && a.month == b.month) {
     return ('${a.day}–${b.day}', mes(a));
@@ -433,11 +432,7 @@ class EventRow extends StatelessWidget {
               padding: const EdgeInsets.all(13),
               child: Row(
                 children: [
-                  DateTile(
-                    date: date,
-                    end: endDate ?? date,
-                    muted: finalizado,
-                  ),
+                  DateTile(date: date, end: endDate ?? date, muted: finalizado),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -489,6 +484,10 @@ class EventRow extends StatelessWidget {
                                       place,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
+                                      // Mide lo que dibuja: cortado con "…",
+                                      // no deja hueco antes de los detalles.
+                                      textWidthBasis:
+                                          TextWidthBasis.longestLine,
                                       style: estiloSegundaLinea,
                                     ),
                                   ),
