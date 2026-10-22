@@ -23,6 +23,7 @@ import '../../../core/widgets/tw_components.dart';
 import '../../../data/models/envio_qr.dart';
 import '../../../data/models/inscripcion_subevento.dart';
 import '../../../data/models/registrado.dart';
+import '../../../data/models/subevento.dart';
 import '../../../data/models/resultado_envio_qr.dart';
 import '../../../data/offline/sync_queue_service.dart';
 import '../../../data/repositories/envios_qr_repository.dart';
@@ -159,7 +160,79 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
     ref.invalidate(registradosPorEventoProvider(widget.eventoId));
   }
 
+  /// Selector del filtro de talleres. Antes era una fila aparte de chips
+  /// Material, uno por taller, con otro aspecto que los filtros de estado.
+  Future<void> _elegirTaller(List<Subevento> talleres) async {
+    const todos = '';
+    final elegido = await showAppModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: AppColors.surface,
+      builder: (context) {
+        Widget opcion(String id, String titulo, {String? detalle}) {
+          final activo = (_tallerFiltro ?? todos) == id;
+          return ListTile(
+            title: Text(
+              titulo,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: activo ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+            subtitle: detalle == null ? null : Text(detalle),
+            trailing: activo
+                ? const Icon(Symbols.check_rounded, color: AppColors.primary)
+                : null,
+            onTap: () => Navigator.of(context).pop(id),
+          );
+        }
+
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+            ),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+                  child: TwSectionLabel('Filtrar por taller', top: 0),
+                ),
+                opcion(todos, 'Todos los talleres'),
+                for (final taller in talleres)
+                  opcion(
+                    taller.id,
+                    taller.nombre,
+                    detalle: DateFormat("EEE d MMM '·' HH:mm", 'es').format(
+                      DateTime(
+                        taller.dia.year,
+                        taller.dia.month,
+                        taller.dia.day,
+                        taller.horaInicio.hour,
+                        taller.horaInicio.minute,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (elegido == null || !mounted) return;
+    setState(() => _tallerFiltro = elegido == todos ? null : elegido);
+  }
+
   Widget _buildPinnedControls() {
+    final talleres =
+        ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const <Subevento>[];
+    final tallerElegido = talleres
+        .where((taller) => taller.id == _tallerFiltro)
+        .firstOrNull;
     return Column(
       children: [
         SizedBox(height: 48, child: _buildSearchField()),
@@ -169,47 +242,29 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
             alignment: Alignment.centerLeft,
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: FilterChipBar(
-                options: _filtroLabels.values.toList(),
-                selected: _filtroLabels[_filtro]!,
-                onSelected: (label) {
-                  final entry = _filtroLabels.entries.firstWhere(
-                    (e) => e.value == label,
-                  );
-                  setState(() => _filtro = entry.key);
-                },
+              child: Row(
+                children: [
+                  FilterChipBar(
+                    options: _filtroLabels.values.toList(),
+                    selected: _filtroLabels[_filtro]!,
+                    onSelected: (label) {
+                      final entry = _filtroLabels.entries.firstWhere(
+                        (e) => e.value == label,
+                      );
+                      setState(() => _filtro = entry.key);
+                    },
+                  ),
+                  // Mismo estilo y misma fila que los filtros de estado.
+                  if (talleres.isNotEmpty)
+                    FiltroDesplegableChip(
+                      key: const Key('filtro_talleres'),
+                      label: tallerElegido?.nombre ?? 'Talleres',
+                      activo: tallerElegido != null,
+                      onTap: () => _elegirTaller(talleres),
+                    ),
+                ],
               ),
             ),
-          ),
-        ),
-        SizedBox(
-          height: 40,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              ActionChip(
-                label: const Text('Todos los talleres'),
-                avatar: _tallerFiltro == null
-                    ? const Icon(Symbols.check_rounded, size: 16)
-                    : null,
-                onPressed: () => setState(() => _tallerFiltro = null),
-              ),
-              for (final taller
-                  in ref
-                          .watch(subeventosPorEventoProvider(widget.eventoId))
-                          .valueOrNull ??
-                      const [])
-                Padding(
-                  padding: const EdgeInsets.only(left: AppSpacing.sm),
-                  child: ActionChip(
-                    label: Text(taller.nombre),
-                    avatar: _tallerFiltro == taller.id
-                        ? const Icon(Symbols.check_rounded, size: 16)
-                        : null,
-                    onPressed: () => setState(() => _tallerFiltro = taller.id),
-                  ),
-                ),
-            ],
           ),
         ),
       ],
@@ -247,7 +302,7 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
         onTap: () => volverAtras(context),
       ),
       pinnedContent: _buildPinnedControls(),
-      pinnedContentHeight: 156,
+      pinnedContentHeight: 112,
       scrollResetToken: '$_busqueda|$_filtro',
       lockScroll: listaVacia,
       onRefresh: () async => _actualizarRegistrados(),
@@ -670,7 +725,8 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
     return puedeVerContacto ? telefono : enmascararTelefono(telefono);
   }
 
-  Widget _talleresDe(Registrado registrado) {
+  /// Nombres de los talleres en que está inscrito el asistente.
+  List<String> _talleresInscritos(Registrado registrado) {
     final talleres =
         ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
         const [];
@@ -683,52 +739,20 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
         .where((fila) => fila.registradoId == registrado.id)
         .map((fila) => fila.subeventoId)
         .toSet();
-    final nombres = [
+    return [
       for (final taller in talleres)
         if (propios.contains(taller.id)) taller.nombre,
     ];
-    final online = ref.watch(isOnlineProvider);
-    final puedeEditar = online && !esIdSoloLocal(registrado.id);
+  }
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Column(
-        children: [
-          if (nombres.isEmpty)
-            const Text(
-              'Sin talleres',
-              style: TextStyle(color: AppColors.textSecondary),
-            )
-          else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                for (final nombre in nombres)
-                  Chip(
-                    label: Text(nombre),
-                    visualDensity: VisualDensity.compact,
-                  ),
-              ],
-            ),
-          TextButton(
-            onPressed: puedeEditar
-                ? () {
-                    final destino = RoutePaths.editarRegistrado(
-                      widget.eventoId,
-                      registrado.id,
-                    );
-                    final router = GoRouter.of(context);
-                    Navigator.of(context).pop();
-                    router.push(destino);
-                  }
-                : null,
-            child: const Text('Editar talleres'),
-          ),
-        ],
-      ),
+  void _editarTalleres() {
+    final destino = RoutePaths.editarRegistrado(
+      widget.eventoId,
+      widget.registrado.id,
     );
+    final router = GoRouter.of(context);
+    Navigator.of(context).pop();
+    router.push(destino);
   }
 
   Future<void> _regenerar() async {
@@ -862,11 +886,14 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
     final telefonoVisible = _telefonoVisible(
       puedeVerContacto: puedeVerContacto,
     );
+    final talleres = _talleresInscritos(r);
+    final puedeEditarTalleres = isOnline && !soloEnLaCola;
+    final puedeRegenerar = ref.watch(canCreateContentProvider) && !soloEnLaCola;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final qrSize = (constraints.maxWidth - AppSpacing.screenH * 2 - 24)
-            .clamp(128.0, 200.0);
+        final qrSize = (constraints.maxWidth - AppSpacing.screenH * 2 - 64)
+            .clamp(160.0, 240.0);
 
         return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
@@ -876,64 +903,165 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
             AppSpacing.xxl,
           ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                r.nombreCompleto,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              Text(
-                _correoVisible(puedeVerContacto: puedeVerContacto),
-                style: const TextStyle(color: AppColors.textSecondary),
-              ),
-              if (telefonoVisible.isNotEmpty)
-                Text(
-                  telefonoVisible,
-                  style: const TextStyle(color: AppColors.textSecondary),
+              // Pase del asistente: sus datos y el QR en una sola tarjeta,
+              // como lo vería en la entrada.
+              Container(
+                key: const Key('qr_pase'),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  border: Border.all(color: AppColors.border),
+                  boxShadow: AppColors.shadowRest,
                 ),
-              _talleresDe(r),
-              const SizedBox(height: 16),
-              if (soloEnLaCola)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.warningTint,
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: const Text(
-                    'Este registro aún no se sincroniza con el servidor; '
-                    'su QR estará disponible cuando vuelva la conexión.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.warning,
-                      fontWeight: FontWeight.w600,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                      child: Row(
+                        children: [
+                          AvatarInitials(name: r.nombreCompleto, size: 48),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  r.nombreCompleto,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.ink,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _correoVisible(
+                                    puedeVerContacto: puedeVerContacto,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                if (telefonoVisible.isNotEmpty)
+                                  Text(
+                                    telefonoVisible,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    StatusChip(
+                                      label: r.acreditado
+                                          ? 'Acreditado'
+                                          : 'Pendiente',
+                                      variant: r.acreditado
+                                          ? StatusChipVariant.success
+                                          : StatusChipVariant.warning,
+                                    ),
+                                    StatusChip(
+                                      key: const Key('qr_talleres'),
+                                      label: switch (talleres.length) {
+                                        0 => 'Sin talleres',
+                                        1 => '1 taller',
+                                        final n => '$n talleres',
+                                      },
+                                      variant: StatusChipVariant.neutral,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (talleres.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            talleres.join(' · '),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    const Divider(height: 1, color: AppColors.border),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      child: soloEnLaCola
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16),
+                              child: Text(
+                                'Este registro aún no se sincroniza con el '
+                                'servidor; su QR estará disponible cuando '
+                                'vuelva la conexión.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: AppColors.warning,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            )
+                          : Column(
+                              children: [
+                                QrImageView(
+                                  data: r.codigoQr,
+                                  size: qrSize,
+                                  backgroundColor: Colors.white,
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Código de acceso al evento',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _BotonSecundarioQr(
+                      icono: Symbols.event_note_rounded,
+                      texto: 'Editar talleres',
+                      onTap: puedeEditarTalleres ? _editarTalleres : null,
                     ),
                   ),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: QrImageView(
-                    data: r.codigoQr,
-                    size: qrSize,
-                    backgroundColor: Colors.white,
-                  ),
-                ),
-              if (ref.watch(canCreateContentProvider) && !soloEnLaCola) ...[
-                const SizedBox(height: 10),
-                TextButton(
-                  onPressed: puedeEnviar ? _regenerar : null,
-                  child: const Text('Regenerar QR'),
-                ),
-              ],
-              const SizedBox(height: 8),
+                  if (puedeRegenerar) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _BotonSecundarioQr(
+                        icono: Symbols.autorenew_rounded,
+                        texto: 'Regenerar QR',
+                        onTap: puedeEnviar ? _regenerar : null,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
               FutureBuilder(
                 future: ref
                     .read(enviosQrRepositoryProvider)
@@ -941,7 +1069,7 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
                 builder: (context, snapshot) =>
                     _HistorialEnvios(envios: snapshot.data ?? const []),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               PrimaryGradientButton(
                 label: r.emailConfirmacionEnviado
                     ? 'Reenviar por email'
@@ -978,6 +1106,7 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
                     padding: EdgeInsets.only(top: 8),
                     child: Text(
                       'Este asistente no tiene teléfono.',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
@@ -990,6 +1119,7 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
                   padding: EdgeInsets.only(top: 8),
                   child: Text(
                     kMensajeSinConexion,
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 12,
                       color: AppColors.textSecondary,
@@ -1000,6 +1130,59 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Botón secundario de la hoja del QR (Editar talleres, Regenerar QR): mismo
+/// alto y estilo, lado a lado.
+class _BotonSecundarioQr extends StatelessWidget {
+  const _BotonSecundarioQr({
+    required this.icono,
+    required this.texto,
+    required this.onTap,
+  });
+
+  final IconData icono;
+  final String texto;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final habilitado = onTap != null;
+    return Opacity(
+      opacity: habilitado ? 1 : 0.5,
+      child: Pressable(
+        scale: 0.97,
+        onTap: onTap,
+        child: Container(
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: AppColors.tintNavy,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icono, size: 18, color: AppColors.primary),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  texto,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1024,7 +1207,7 @@ class _HistorialEnvios extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const TwSectionLabel('Historial de envíos', top: 8),
+        const TwSectionLabel('Historial de envíos', top: 20),
         if (envios.isEmpty)
           const Text(
             'Todavía no se ha enviado el QR.',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:transworld_nexus/core/constants/app_role.dart';
@@ -19,6 +20,8 @@ import 'package:transworld_nexus/features/subeventos/providers/inscripciones_pro
 import 'package:transworld_nexus/features/subeventos/providers/subeventos_providers.dart';
 
 void main() {
+  setUpAll(() => initializeDateFormatting('es'));
+
   testWidgets('filtrar por taller muestra solo al inscrito', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(800, 900);
@@ -103,11 +106,20 @@ void main() {
     expect(find.text('Ana Pérez'), findsOneWidget);
     expect(find.text('Luis Soto'), findsOneWidget);
 
-    await tester.ensureVisible(find.widgetWithText(ActionChip, 'Taller IA'));
-    await tester.tap(find.widgetWithText(ActionChip, 'Taller IA'));
+    // El filtro de talleres es una píldora más en la fila de filtros.
+    final filtro = find.byKey(const Key('filtro_talleres'));
+    await tester.ensureVisible(filtro);
+    await tester.tap(filtro);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Taller IA'));
     await tester.pumpAndSettle();
 
     expect(find.text('Ana Pérez'), findsOneWidget);
     expect(find.text('Luis Soto'), findsNothing);
+    // La píldora queda activa con el nombre del taller.
+    expect(
+      find.descendant(of: filtro, matching: find.text('Taller IA')),
+      findsOneWidget,
+    );
   });
 }

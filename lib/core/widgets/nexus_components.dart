@@ -232,6 +232,61 @@ class FilterChipBar extends StatelessWidget {
   }
 }
 
+/// Filtro desplegable con el mismo aspecto que las píldoras de
+/// [FilterChipBar] (p. ej. "Talleres ▾"): queda en la misma fila y abre su
+/// propio selector en [onTap]. [activo] lo pinta como seleccionado.
+class FiltroDesplegableChip extends StatelessWidget {
+  const FiltroDesplegableChip({
+    super.key,
+    required this.label,
+    required this.activo,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool activo;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tinta = activo ? Colors.white : TwColors.labelInk;
+    return Pressable(
+      scale: 0.95,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: AppMotion.toggle,
+        curve: AppMotion.ease,
+        constraints: const BoxConstraints(maxWidth: 220),
+        padding: const EdgeInsets.fromLTRB(12, 7, 8, 7),
+        decoration: BoxDecoration(
+          color: activo ? TwColors.ink : TwColors.surface,
+          borderRadius: TwRadii.pill,
+          border: Border.all(color: activo ? TwColors.ink : TwColors.border10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TwText.tileSubtitle.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: tinta,
+                ),
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(Symbols.keyboard_arrow_down_rounded, size: 16, color: tinta),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Las dos líneas del bloque de fecha de una fila de evento:
 /// - un día: `25` / `NOV`;
 /// - varios días del mismo mes: `20–24` / `OCT`;
