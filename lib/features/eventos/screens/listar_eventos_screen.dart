@@ -445,22 +445,13 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
                                   _abrirTaller(evento, taller, eventos),
                             ),
                       date: evento.fecha,
+                      endDate: evento.fechaFin,
                       title: evento.nombre,
                       place: evento.lugar ?? evento.pais ?? '',
                       finalizado: evento.yaOcurrio,
                       fijado: fijado,
                       sinCache: sinCache,
-                      chip: evento.esTaller
-                          ? const StatusChip(
-                              label: 'Taller',
-                              variant: StatusChipVariant.neutral,
-                            )
-                          : evento.esMultiDia
-                          ? StatusChip(
-                              label: evento.etiquetaDuracion,
-                              variant: StatusChipVariant.neutral,
-                            )
-                          : null,
+                      meta: [if (evento.esTaller) 'Taller'],
                       onTap: () {
                         if (sinCache) {
                           showOfflineUnavailableToast(context);
