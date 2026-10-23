@@ -90,12 +90,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
 
     setState(() => _desinstalando = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result.message ?? 'No se pudo iniciar la desinstalación.',
-        ),
-      ),
+    showAppSnackBar(
+      context,
+      result.message ?? 'No se pudo iniciar la desinstalación.',
+      isError: true,
     );
   }
 

@@ -238,31 +238,40 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
         SizedBox(height: 48, child: _buildSearchField()),
         const SizedBox(height: 4),
         Expanded(
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  FilterChipBar(
-                    options: _filtroLabels.values.toList(),
-                    selected: _filtroLabels[_filtro]!,
-                    onSelected: (label) {
-                      final entry = _filtroLabels.entries.firstWhere(
-                        (e) => e.value == label,
-                      );
-                      setState(() => _filtro = entry.key);
-                    },
+          // La fila se desliza hasta el borde de la pantalla: con talleres
+          // no cabe entera y, recortada en el margen, la última píldora
+          // quedaba cortada sin borde.
+          child: LayoutBuilder(
+            builder: (context, constraints) => OverflowBox(
+              maxWidth: constraints.maxWidth + _margenFiltros * 2,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.symmetric(horizontal: _margenFiltros),
+                  child: Row(
+                    children: [
+                      FilterChipBar(
+                        options: _filtroLabels.values.toList(),
+                        selected: _filtroLabels[_filtro]!,
+                        onSelected: (label) {
+                          final entry = _filtroLabels.entries.firstWhere(
+                            (e) => e.value == label,
+                          );
+                          setState(() => _filtro = entry.key);
+                        },
+                      ),
+                      // Mismo estilo y misma fila que los filtros de estado.
+                      if (talleres.isNotEmpty)
+                        FiltroDesplegableChip(
+                          key: const Key('filtro_talleres'),
+                          label: tallerElegido?.nombre ?? 'Talleres',
+                          activo: tallerElegido != null,
+                          onTap: () => _elegirTaller(talleres),
+                        ),
+                    ],
                   ),
-                  // Mismo estilo y misma fila que los filtros de estado.
-                  if (talleres.isNotEmpty)
-                    FiltroDesplegableChip(
-                      key: const Key('filtro_talleres'),
-                      label: tallerElegido?.nombre ?? 'Talleres',
-                      activo: tallerElegido != null,
-                      onTap: () => _elegirTaller(talleres),
-                    ),
-                ],
+                ),
               ),
             ),
           ),
@@ -270,6 +279,9 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
       ],
     );
   }
+
+  /// Margen lateral de la cabecera fija ([CollapsingScrollScaffold.pinnedPadding]).
+  static final _margenFiltros = CollapsingScrollScaffold.pinnedPadding.left;
 
   @override
   Widget build(BuildContext context) {

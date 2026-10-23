@@ -27,6 +27,7 @@ import '../../eventos/providers/eventos_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
 import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/espera_bloqueante.dart';
 import '../../../core/widgets/tw_toast.dart';
 import '../qr_codigo_parser.dart';
 import '../decidir_accion_escaneo.dart';
@@ -504,18 +505,18 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     );
     if (!ok || !mounted) return;
     try {
-      final Map<String, dynamic>? resultado;
-      if (sinRed) {
-        resultado = await persistirAsistenciaSubevento(
-          ref,
-          eventoId: widget.eventoId,
-          registradoId: registrado.id,
-          subeventoId: subeventoId,
-          accion: 'inscribir_y_marcar',
-          forzar: true,
-        );
-      } else {
-        resultado = await inscribirConAvisoDeCupo(
+      final resultado = await conEspera(context, () async {
+        if (sinRed) {
+          return persistirAsistenciaSubevento(
+            ref,
+            eventoId: widget.eventoId,
+            registradoId: registrado.id,
+            subeventoId: subeventoId,
+            accion: 'inscribir_y_marcar',
+            forzar: true,
+          );
+        }
+        return inscribirConAvisoDeCupo(
           intentar: (forzar) => _intentarInscribir(
             registrado: registrado,
             subeventoId: subeventoId,
@@ -524,7 +525,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
           confirmarSobrecupo: _confirmarSobrecupo,
           puedeForzar: puedeForzar,
         );
-      }
+      });
       if (resultado == null || !mounted) return;
       _scanner.showFeedback(
         resultado['ya_inscrito'] == true
@@ -636,19 +637,19 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     if (!mover || !mounted) return;
     final sinRed = !ref.read(isOnlineProvider);
     try {
-      final Map<String, dynamic>? resultado;
-      if (sinRed) {
-        resultado = await persistirAsistenciaSubevento(
-          ref,
-          eventoId: widget.eventoId,
-          registradoId: registrado.id,
-          subeventoId: subeventoId,
-          accion: 'inscribir_y_marcar',
-          forzar: true,
-          reemplazar: true,
-        );
-      } else {
-        resultado = await inscribirConAvisoDeCupo(
+      final resultado = await conEspera(context, () async {
+        if (sinRed) {
+          return persistirAsistenciaSubevento(
+            ref,
+            eventoId: widget.eventoId,
+            registradoId: registrado.id,
+            subeventoId: subeventoId,
+            accion: 'inscribir_y_marcar',
+            forzar: true,
+            reemplazar: true,
+          );
+        }
+        return inscribirConAvisoDeCupo(
           intentar: (forzar) => _intentarInscribir(
             registrado: registrado,
             subeventoId: subeventoId,
@@ -658,7 +659,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
           confirmarSobrecupo: _confirmarSobrecupo,
           puedeForzar: puedeForzar,
         );
-      }
+      });
       if (resultado == null || !mounted) return;
       _scanner.showFeedback('Movido y asistencia marcada.', isError: false);
     } on AsistenciaRechazada catch (rechazo) {
