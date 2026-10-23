@@ -19,6 +19,7 @@ import '../../../core/widgets/app_modals.dart';
 import '../../../core/widgets/collapsing_nav.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
+import '../../../core/widgets/selector_filtro_sheet.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../../../data/models/envio_qr.dart';
 import '../../../data/models/inscripcion_subevento.dart';
@@ -160,70 +161,75 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
     ref.invalidate(registradosPorEventoProvider(widget.eventoId));
   }
 
-  /// Selector del filtro de talleres. Antes era una fila aparte de chips
-  /// Material, uno por taller, con otro aspecto que los filtros de estado.
-  Future<void> _elegirTaller(List<Subevento> talleres) async {
-    const todos = '';
-    final elegido = await showAppModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: AppColors.surface,
-      builder: (context) {
-        Widget opcion(String id, String titulo, {String? detalle}) {
-          final activo = (_tallerFiltro ?? todos) == id;
-          return ListTile(
-            title: Text(
-              titulo,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: activo ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-            subtitle: detalle == null ? null : Text(detalle),
-            trailing: activo
-                ? const Icon(Symbols.check_rounded, color: AppColors.primary)
-                : null,
-            onTap: () => Navigator.of(context).pop(id),
-          );
-        }
-
-        return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(context).height * 0.7,
-            ),
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
-                  child: TwSectionLabel('Filtrar por taller', top: 0),
-                ),
-                opcion(todos, 'Todos los talleres'),
-                for (final taller in talleres)
-                  opcion(
-                    taller.id,
-                    taller.nombre,
-                    detalle: DateFormat("EEE d MMM '·' HH:mm", 'es').format(
-                      DateTime(
-                        taller.dia.year,
-                        taller.dia.month,
-                        taller.dia.day,
-                        taller.horaInicio.hour,
-                        taller.horaInicio.minute,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
+  /// Selector del estado (Todos / Acreditados / Pendientes), con cuántos
+  /// asistentes quedan en cada uno dentro del taller elegido.
+  Future<void> _elegirEstado(List<Registrado> delTaller) async {
+    final acreditados = delTaller.where((r) => r.acreditado).length;
+    final elegido = await showSelectorFiltroSheet<_Filtro>(
+      context,
+      titulo: 'Filtrar por estado',
+      seleccionado: _filtro,
+      opciones: [
+        OpcionFiltro(
+          valor: _Filtro.todos,
+          titulo: _filtroLabels[_Filtro.todos]!,
+          conteo: delTaller.length,
+        ),
+        OpcionFiltro(
+          valor: _Filtro.acreditados,
+          titulo: _filtroLabels[_Filtro.acreditados]!,
+          conteo: acreditados,
+        ),
+        OpcionFiltro(
+          valor: _Filtro.pendientes,
+          titulo: _filtroLabels[_Filtro.pendientes]!,
+          conteo: delTaller.length - acreditados,
+        ),
+      ],
     );
     if (elegido == null || !mounted) return;
-    setState(() => _tallerFiltro = elegido == todos ? null : elegido);
+    setState(() => _filtro = elegido.valor);
+  }
+
+  /// Selector del filtro de talleres, con cuántos inscritos tiene cada uno.
+  Future<void> _elegirTaller({
+    required List<Subevento> talleres,
+    required List<Registrado> registrados,
+    required List<InscripcionSubevento> inscripciones,
+  }) async {
+    final elegido = await showSelectorFiltroSheet<String?>(
+      context,
+      titulo: 'Filtrar por taller',
+      seleccionado: _tallerFiltro,
+      opciones: [
+        OpcionFiltro(
+          valor: null,
+          titulo: 'Todos los talleres',
+          conteo: registrados.length,
+        ),
+        for (final taller in talleres)
+          OpcionFiltro(
+            valor: taller.id,
+            titulo: taller.nombre,
+            detalle: DateFormat("EEE d MMM '·' HH:mm", 'es').format(
+              DateTime(
+                taller.dia.year,
+                taller.dia.month,
+                taller.dia.day,
+                taller.horaInicio.hour,
+                taller.horaInicio.minute,
+              ),
+            ),
+            conteo: filtrarRegistradosPorModo(
+              registrados: registrados,
+              inscripciones: inscripciones,
+              subeventoId: taller.id,
+            ).length,
+          ),
+      ],
+    );
+    if (elegido == null || !mounted) return;
+    setState(() => _tallerFiltro = elegido.valor);
   }
 
   Widget _buildPinnedControls() {
@@ -233,6 +239,14 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
     final tallerElegido = talleres
         .where((taller) => taller.id == _tallerFiltro)
         .firstOrNull;
+    final registrados =
+        ref.watch(registradosPorEventoProvider(widget.eventoId)).valueOrNull ??
+        const <Registrado>[];
+    final inscripciones =
+        ref
+            .watch(inscripcionesPorEventoProvider(widget.eventoId))
+            .valueOrNull ??
+        const <InscripcionSubevento>[];
     return Column(
       children: [
         SizedBox(height: 48, child: _buildSearchField()),
@@ -251,24 +265,33 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
                   padding: EdgeInsets.symmetric(horizontal: _margenFiltros),
                   child: Row(
                     children: [
-                      FilterChipBar(
-                        options: _filtroLabels.values.toList(),
-                        selected: _filtroLabels[_filtro]!,
-                        onSelected: (label) {
-                          final entry = _filtroLabels.entries.firstWhere(
-                            (e) => e.value == label,
-                          );
-                          setState(() => _filtro = entry.key);
-                        },
+                      FiltroDesplegableChip(
+                        key: const Key('filtro_estado'),
+                        label: _filtro == _Filtro.todos
+                            ? 'Estado'
+                            : _filtroLabels[_filtro]!,
+                        activo: _filtro != _Filtro.todos,
+                        onTap: () => _elegirEstado(
+                          filtrarRegistradosPorModo(
+                            registrados: registrados,
+                            inscripciones: inscripciones,
+                            subeventoId: _tallerFiltro,
+                          ),
+                        ),
                       ),
-                      // Mismo estilo y misma fila que los filtros de estado.
-                      if (talleres.isNotEmpty)
+                      if (talleres.isNotEmpty) ...[
+                        const SizedBox(width: 8),
                         FiltroDesplegableChip(
                           key: const Key('filtro_talleres'),
                           label: tallerElegido?.nombre ?? 'Talleres',
                           activo: tallerElegido != null,
-                          onTap: () => _elegirTaller(talleres),
+                          onTap: () => _elegirTaller(
+                            talleres: talleres,
+                            registrados: registrados,
+                            inscripciones: inscripciones,
+                          ),
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -315,7 +338,7 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
       ),
       pinnedContent: _buildPinnedControls(),
       pinnedContentHeight: 112,
-      scrollResetToken: '$_busqueda|$_filtro',
+      scrollResetToken: '$_busqueda|$_filtro|$_tallerFiltro',
       lockScroll: listaVacia,
       onRefresh: () async => _actualizarRegistrados(),
       slivers: [

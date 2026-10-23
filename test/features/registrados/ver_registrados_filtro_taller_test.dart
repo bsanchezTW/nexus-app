@@ -22,7 +22,7 @@ import 'package:transworld_nexus/features/subeventos/providers/subeventos_provid
 void main() {
   setUpAll(() => initializeDateFormatting('es'));
 
-  testWidgets('filtrar por taller muestra solo al inscrito', (tester) async {
+  testWidgets('filtrar por taller y por estado con los desplegables', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(800, 900);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -111,7 +111,9 @@ void main() {
     await tester.ensureVisible(filtro);
     await tester.tap(filtro);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Taller IA'));
+    // La hoja muestra cuántos inscritos tiene cada taller.
+    expect(find.text('1'), findsOneWidget);
+    await tester.tap(find.text('Taller IA'));
     await tester.pumpAndSettle();
 
     expect(find.text('Ana Pérez'), findsOneWidget);
@@ -119,6 +121,20 @@ void main() {
     // La píldora queda activa con el nombre del taller.
     expect(
       find.descendant(of: filtro, matching: find.text('Taller IA')),
+      findsOneWidget,
+    );
+
+    // El estado es otro desplegable: Acreditados deja vacía la lista del
+    // taller, porque Ana está pendiente.
+    final estado = find.byKey(const Key('filtro_estado'));
+    await tester.tap(estado);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Acreditados'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ana Pérez'), findsNothing);
+    expect(
+      find.descendant(of: estado, matching: find.text('Acreditados')),
       findsOneWidget,
     );
   });
