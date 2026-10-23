@@ -251,16 +251,6 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
                     onTap: () => _crearEventoLead(evento),
                   ),
                 ],
-                if (puedeEditar && !evento.esTaller) ...[
-                  const SizedBox(height: TwSpacing.tileGap),
-                  TwActionTile(
-                    icon: Symbols.calendar_view_day_rounded,
-                    title: 'Subeventos',
-                    subtitle: 'Talleres de este evento',
-                    onTap: () =>
-                        context.push(RoutePaths.subeventos(widget.eventoId)),
-                  ),
-                ],
                 const TwSectionLabel('Administración'),
                 if (esAdmin) ...[
                   TwActionTile(
@@ -271,6 +261,18 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
                       if (!requireOnline(context, ref)) return;
                       context.push(RoutePaths.accesoEvento(widget.eventoId));
                     },
+                  ),
+                  const SizedBox(height: TwSpacing.tileGap),
+                ],
+                // Los talleres se configuran: van con la administración del
+                // evento, no con las acciones del día.
+                if (puedeEditar && !evento.esTaller) ...[
+                  TwActionTile(
+                    icon: Symbols.calendar_view_day_rounded,
+                    title: 'Subeventos',
+                    subtitle: 'Talleres de este evento',
+                    onTap: () =>
+                        context.push(RoutePaths.subeventos(widget.eventoId)),
                   ),
                   const SizedBox(height: TwSpacing.tileGap),
                 ],

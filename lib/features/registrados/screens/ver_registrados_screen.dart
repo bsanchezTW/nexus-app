@@ -27,7 +27,6 @@ import '../../../data/offline/sync_queue_service.dart';
 import '../../../data/repositories/registrados_repository.dart';
 import '../../acreditacion/screens/acreditar_confirmado_screen.dart';
 import '../../auth/providers/auth_providers.dart';
-import '../../eventos/providers/eventos_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
 import '../../subeventos/providers/inscripciones_providers.dart';
 import '../../subeventos/providers/subeventos_providers.dart';
@@ -903,8 +902,6 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
   Widget build(BuildContext context) {
     final isOnline = ref.watch(isOnlineProvider);
     final puedeVerContacto = ref.watch(canViewContactDataProvider);
-    final evento = ref.watch(eventoByIdProvider(widget.eventoId)).valueOrNull;
-    final mostrarSms = evento?.accesoQr == true;
     final r = widget.registrado;
     // Un registro que solo existe en la cola local todavía no tiene id real
     // en el servidor: su QR no serviría para acreditar ni para el email. Se
@@ -912,7 +909,6 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
     // sincronizada que solo tiene una edición en cola sí tiene QR válido.
     final soloEnLaCola = esIdSoloLocal(r.id);
     final puedeEnviar = isOnline && !soloEnLaCola && !_ocupado;
-    final telefono = r.telefono?.trim() ?? '';
     final telefonoVisible = _telefonoVisible(
       puedeVerContacto: puedeVerContacto,
     );
@@ -1094,49 +1090,15 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
               ),
               const SizedBox(height: 20),
               PrimaryGradientButton(
+                // El envío por SMS no está disponible: solo correo.
                 label: r.emailConfirmacionEnviado
-                    ? 'Reenviar por email'
-                    : 'Enviar por email',
+                    ? 'Reenviar por correo'
+                    : 'Enviar por correo',
                 loading: _enviandoEmail,
                 onPressed: puedeEnviar
                     ? () => _enviar(canal: CanalesEnvioQr.email)
                     : null,
               ),
-              if (mostrarSms) ...[
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: OutlinedButton(
-                    onPressed: (puedeEnviar && telefono.isNotEmpty)
-                        ? () => _enviar(canal: CanalesEnvioQr.sms)
-                        : null,
-                    child: _enviandoSms
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(
-                            r.smsConfirmacionEnviado
-                                ? 'Reenviar por SMS'
-                                : 'Enviar por SMS',
-                          ),
-                  ),
-                ),
-                if (telefono.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text(
-                      'Este asistente no tiene teléfono.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-              ],
               if (!isOnline)
                 const Padding(
                   padding: EdgeInsets.only(top: 8),

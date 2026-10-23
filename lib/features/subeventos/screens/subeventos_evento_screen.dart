@@ -23,6 +23,7 @@ import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/subeventos_repository.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../providers/subeventos_providers.dart';
+import '../agrupar_talleres.dart';
 import '../subevento_desde_evento.dart';
 import '../../../core/widgets/espera_bloqueante.dart';
 
@@ -274,6 +275,8 @@ class _SelectorTalleresState extends ConsumerState<_SelectorTalleres> {
   @override
   Widget build(BuildContext context) {
     final eventos = ref.watch(eventosListProvider);
+    // Para saber a qué evento está agregado cada taller.
+    final subeventos = ref.watch(subeventosTodosProvider);
     final altura = MediaQuery.sizeOf(context).height * 0.7;
     return SafeArea(
       child: SizedBox(
@@ -285,13 +288,27 @@ class _SelectorTalleresState extends ConsumerState<_SelectorTalleres> {
             onRetry: () => ref.invalidate(eventosListProvider),
           ),
           data: (lista) {
+            if (subeventos.isLoading && !subeventos.hasValue) {
+              return const LoadingView();
+            }
+            if (subeventos.hasError && !subeventos.hasValue) {
+              return ErrorView(
+                message: subeventos.error.toString(),
+                onRetry: () => ref.invalidate(subeventosTodosProvider),
+              );
+            }
             final talleres = [
               for (final evento in lista)
                 if (evento.esTaller &&
                     evento.id != widget.eventoId &&
                     !widget.yaVinculados.contains(evento.id))
                   evento,
-            ]..sort((a, b) => a.fecha.compareTo(b.fecha));
+            ];
+            final grupos = agruparTalleresPorEvento(
+              talleres: talleres,
+              eventos: lista,
+              subeventos: subeventos.valueOrNull ?? const [],
+            );
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -329,25 +346,34 @@ class _SelectorTalleresState extends ConsumerState<_SelectorTalleres> {
                           message:
                               'No hay talleres disponibles.\nCrea un evento y márcalo como Taller.',
                         )
-                      : ListView.separated(
+                      : ListView(
                           padding: const EdgeInsets.symmetric(
                             horizontal: TwSpacing.screenH,
                           ),
-                          itemCount: talleres.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 8),
-                          itemBuilder: (context, index) {
-                            final evento = talleres[index];
-                            final marcado = _elegidos.contains(evento.id);
-                            return _OpcionTaller(
-                              evento: evento,
-                              marcado: marcado,
-                              onTap: () => setState(() {
-                                if (!_elegidos.remove(evento.id)) {
-                                  _elegidos.add(evento.id);
-                                }
-                              }),
-                            );
-                          },
+                          children: [
+                            for (final (i, grupo) in grupos.indexed) ...[
+                              TwSectionLabel(
+                                grupo.evento == null
+                                    ? 'Sin evento'
+                                    : '${grupo.evento!.nombre} · '
+                                          '${formatearDiaMesCorto(grupo.evento!.fecha)}',
+                                top: i == 0 ? 4 : 20,
+                              ),
+                              for (final (j, evento)
+                                  in grupo.talleres.indexed) ...[
+                                if (j > 0) const SizedBox(height: 8),
+                                _OpcionTaller(
+                                  evento: evento,
+                                  marcado: _elegidos.contains(evento.id),
+                                  onTap: () => setState(() {
+                                    if (!_elegidos.remove(evento.id)) {
+                                      _elegidos.add(evento.id);
+                                    }
+                                  }),
+                                ),
+                              ],
+                            ],
+                          ],
                         ),
                 ),
                 Padding(
