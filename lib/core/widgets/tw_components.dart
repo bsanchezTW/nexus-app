@@ -1191,8 +1191,9 @@ class TwActionTile extends StatelessWidget {
 
 /// Hero a sangre de los menús de evento y de actividad de leads: ocupa la
 /// parte superior de la pantalla, desde el borde, con la foto de portada o el
-/// degradado navy, y el contenido (estado + fecha, título, ubicación,
-/// métricas y CTA) anclado abajo. Va en `TwDetailScaffold.heroBuilder`.
+/// degradado navy. Mide lo que su contenido (estado + fecha, título,
+/// ubicación, métricas y CTA), que arranca justo bajo la barra de botones.
+/// Va en `TwDetailScaffold.heroBuilder`.
 ///
 /// El velo solo se pinta sobre la foto: las portadas suelen ser afiches con
 /// texto propio y la barra de estado y los botones flotan encima. Sin foto,
@@ -1232,34 +1233,28 @@ class TwEventHero extends StatelessWidget {
   final double? titleHeight;
   final double maxContentWidth;
 
-  /// Alto mínimo respecto de la pantalla: con títulos cortos la foto sigue
-  /// luciendo y el hero no se encoge a una franja.
-  static const _altoMinimo = 0.48;
-
-  /// Oscuro arriba (barra de estado y botones), más abierto al centro para
-  /// que se vea la portada, y cerrado abajo, donde va el texto.
+  /// Parejo y cerrado: el texto arranca casi arriba, bajo los botones, así
+  /// que no hay franja libre donde dejar ver la portada sin que su propio
+  /// texto compita con los chips y el título.
   static const veloFoto = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
     colors: [
-      Color(0x9908182C),
-      Color(0x4D08182C),
-      Color(0xD9081628),
+      Color(0xB808182C),
+      Color(0xBF08182C),
+      Color(0xE6081628),
       Color(0xF5081628),
     ],
-    stops: [0.0, 0.3, 0.62, 1.0],
+    stops: [0.0, 0.35, 0.7, 1.0],
   );
 
   @override
   Widget build(BuildContext context) {
-    final altoMinimo = MediaQuery.sizeOf(context).height * _altoMinimo;
-
-    return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: altoMinimo),
+    return SizedBox(
+      width: double.infinity,
       child: DecoratedBox(
         decoration: const BoxDecoration(gradient: TwGradients.hero),
         child: Stack(
-          fit: StackFit.passthrough,
           children: [
             if (photo != null) ...[
               Positioned.fill(child: photo!),
@@ -1272,7 +1267,8 @@ class TwEventHero extends StatelessWidget {
             Padding(
               padding: padding,
               child: Align(
-                alignment: Alignment.bottomCenter,
+                alignment: Alignment.topCenter,
+                heightFactor: 1,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: maxContentWidth),
                   child: SizedBox(
