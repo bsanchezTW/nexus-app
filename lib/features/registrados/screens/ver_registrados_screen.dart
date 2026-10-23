@@ -514,6 +514,7 @@ class _RegistradoTile extends ConsumerWidget {
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       StatusChip(
                         label: registrado.acreditado
@@ -680,10 +681,9 @@ class _RegistradoTile extends ConsumerWidget {
   }
 }
 
-/// QR de acreditación de un registrado (codifica `registrados.id`, lo que
-/// lee `AcreditarQrScreen`). Permite enviarlo por email y SMS vía
-/// la Edge Function `enviar-qr`.
-/// "QR enviado" con el canal por el que salió (correo, SMS o ambos).
+/// "QR enviado" con el canal por el que salió (correo, SMS o ambos). Solo
+/// íconos y del alto de [StatusChip]: con texto no cabía junto al estado,
+/// bajaba a otra línea y la tarjeta crecía.
 class _ChipQrEnviado extends StatelessWidget {
   const _ChipQrEnviado({required this.email, required this.sms});
 
@@ -695,43 +695,42 @@ class _ChipQrEnviado extends StatelessWidget {
     final canales = [if (email) 'email', if (sms) 'SMS'].join(' y ');
     return Tooltip(
       message: 'QR enviado por $canales',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.tintNavy,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (email)
-              const Icon(
-                Symbols.mark_email_read_rounded,
-                size: 14,
-                color: AppColors.textSecondary,
-              ),
-            if (email && sms) const SizedBox(width: 3),
-            if (sms)
-              const Icon(
-                Symbols.sms_rounded,
-                size: 14,
-                color: AppColors.textSecondary,
-              ),
-            const SizedBox(width: 4),
-            const Text(
-              'QR enviado',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
+      child: Semantics(
+        label: 'QR enviado por $canales',
+        child: Container(
+          key: const Key('chip_qr_enviado'),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+          decoration: BoxDecoration(
+            color: AppColors.tintNavy,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (email)
+                const Icon(
+                  Symbols.mark_email_read_rounded,
+                  size: 14,
+                  color: AppColors.primary,
+                ),
+              if (email && sms) const SizedBox(width: 4),
+              if (sms)
+                const Icon(
+                  Symbols.sms_rounded,
+                  size: 14,
+                  color: AppColors.primary,
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
+
+/// QR de acreditación de un registrado (codifica `registrados.id`, lo que
+/// lee `AcreditarQrScreen`). Permite enviarlo por email y SMS vía
+/// la Edge Function `enviar-qr`.
 
 class _QrSheet extends ConsumerStatefulWidget {
   const _QrSheet({required this.registrado, required this.eventoId});
@@ -748,6 +747,18 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
   bool _enviandoSms = false;
 
   bool get _ocupado => _enviandoEmail || _enviandoSms;
+
+  /// Se pide una vez al abrir la hoja y de nuevo tras enviar o regenerar;
+  /// antes se pedía en cada build.
+  late Future<List<EnvioQr>> _historial = _cargarHistorial();
+
+  Future<List<EnvioQr>> _cargarHistorial() => ref
+      .read(enviosQrRepositoryProvider)
+      .listarPorRegistrado(widget.registrado.id);
+
+  void _recargarHistorial() {
+    if (mounted) setState(() => _historial = _cargarHistorial());
+  }
 
   String _correoVisible({required bool puedeVerContacto}) {
     final correo = widget.registrado.email;
@@ -804,6 +815,7 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
       );
       if (!regenerado) return;
       ref.invalidate(registradosPorEventoProvider(widget.eventoId));
+      _recargarHistorial();
       if (mounted) showAppSnackBar(context, 'Nuevo QR en camino');
     } catch (e) {
       if (mounted) {
@@ -831,6 +843,7 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
           .read(registradosRepositoryProvider)
           .enviarQr(widget.registrado.id, canales: [canal]);
       ref.invalidate(registradosPorEventoProvider(widget.eventoId));
+      _recargarHistorial();
       if (!mounted) return;
       final canalResultado = canal == CanalesEnvioQr.email
           ? resultado.email
@@ -848,8 +861,8 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
         showAppSnackBar(
           context,
           canal == CanalesEnvioQr.email
-              ? 'No se pudo enviar el QR por email. Verifica que la Edge Function enviar-qr esté desplegada.'
-              : 'No se pudo enviar el QR por SMS. Verifica créditos SMS de Brevo y que enviar-qr esté desplegada.',
+              ? 'No se pudo enviar el QR por email. Intenta de nuevo en unos minutos.'
+              : 'No se pudo enviar el QR por SMS. Intenta de nuevo en unos minutos.',
           isError: true,
         );
       }
@@ -1098,11 +1111,14 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
                 ],
               ),
               FutureBuilder(
-                future: ref
-                    .read(enviosQrRepositoryProvider)
-                    .listarPorRegistrado(r.id),
-                builder: (context, snapshot) =>
-                    _HistorialEnvios(envios: snapshot.data ?? const []),
+                future: _historial,
+                builder: (context, snapshot) => _HistorialEnvios(
+                  envios: snapshot.data,
+                  cargando: snapshot.connectionState != ConnectionState.done,
+                  fallo: snapshot.hasError,
+                  emailSinHistorial: r.emailConfirmacionEnviado,
+                  smsSinHistorial: r.smsConfirmacionEnviado,
+                ),
               ),
               const SizedBox(height: 12),
               PrimaryGradientButton(
@@ -1226,9 +1242,24 @@ class _BotonSecundarioQr extends StatelessWidget {
 /// (hora local) y cómo le fue a cada canal. Antes se mostraba la fila cruda
 /// (`2026-10-22 16:20:05.898704Z · email, sms · completado`).
 class _HistorialEnvios extends StatelessWidget {
-  const _HistorialEnvios({required this.envios});
+  const _HistorialEnvios({
+    required this.envios,
+    required this.cargando,
+    required this.fallo,
+    required this.emailSinHistorial,
+    required this.smsSinHistorial,
+  });
 
-  final List<EnvioQr> envios;
+  final List<EnvioQr>? envios;
+  final bool cargando;
+  final bool fallo;
+
+  /// Marcas de envío del registrado. Los QR enviados antes de que existiera
+  /// `envios_qr` (sep 2026) solo dejaron estas marcas, sin fila en el
+  /// historial: sin ellas la hoja decía "Todavía no se ha enviado el QR"
+  /// mientras la lista mostraba "QR enviado".
+  final bool emailSinHistorial;
+  final bool smsSinHistorial;
 
   static String _fecha(DateTime fecha) {
     final local = fecha.toLocal();
@@ -1237,73 +1268,140 @@ class _HistorialEnvios extends StatelessWidget {
         '${local.year} · $hora';
   }
 
+  static const _estiloNota = TextStyle(
+    fontSize: 13,
+    color: AppColors.textSecondary,
+  );
+
   @override
   Widget build(BuildContext context) {
+    final filas = envios ?? const <EnvioQr>[];
+    final Widget contenido;
+    if (cargando) {
+      contenido = const Row(
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 8),
+          Text('Cargando historial…', style: _estiloNota),
+        ],
+      );
+    } else if (fallo) {
+      contenido = const Text(
+        'No se pudo cargar el historial.',
+        style: _estiloNota,
+      );
+    } else if (filas.isNotEmpty) {
+      contenido = Column(
+        children: [
+          for (final envio in filas)
+            _FilaEnvio(
+              titulo: envio.etiquetaMotivo,
+              detalle: envio.createdAt == null
+                  ? null
+                  : _fecha(envio.createdAt!),
+              canales: [
+                for (final canal in envio.canales)
+                  (canal, envio.estadoDe(canal)),
+              ],
+            ),
+        ],
+      );
+    } else if (emailSinHistorial || smsSinHistorial) {
+      contenido = _FilaEnvio(
+        key: const Key('envio_sin_historial'),
+        titulo: 'QR enviado',
+        detalle: 'Sin fecha: se envió antes de que se guardara el historial.',
+        canales: [
+          if (emailSinHistorial)
+            (CanalesEnvioQr.email, EstadoCanalEnvio.enviado),
+          if (smsSinHistorial) (CanalesEnvioQr.sms, EstadoCanalEnvio.enviado),
+        ],
+      );
+    } else {
+      contenido = const Text(
+        'Todavía no se ha enviado el QR.',
+        style: _estiloNota,
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const TwSectionLabel('Historial de envíos', top: 20),
-        if (envios.isEmpty)
-          const Text(
-            'Todavía no se ha enviado el QR.',
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-          )
-        else
-          for (final envio in envios)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            envio.etiquetaMotivo,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
-                            ),
-                          ),
-                          if (envio.createdAt != null) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              _fecha(envio.createdAt!),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ],
+        contenido,
+      ],
+    );
+  }
+}
+
+/// Un envío del historial: motivo, fecha y cómo le fue a cada canal.
+class _FilaEnvio extends StatelessWidget {
+  const _FilaEnvio({
+    super.key,
+    required this.titulo,
+    required this.detalle,
+    required this.canales,
+  });
+
+  final String titulo;
+  final String? detalle;
+  final List<(String, EstadoCanalEnvio)> canales;
+
+  @override
+  Widget build(BuildContext context) {
+    final detalle = this.detalle;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    titulo,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                  if (detalle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      detalle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      alignment: WrapAlignment.end,
-                      children: [
-                        for (final canal in envio.canales)
-                          _ChipCanal(
-                            canal: canal,
-                            estado: envio.estadoDe(canal),
-                          ),
-                      ],
-                    ),
                   ],
-                ),
+                ],
               ),
             ),
-      ],
+            const SizedBox(width: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              alignment: WrapAlignment.end,
+              children: [
+                for (final (canal, estado) in canales)
+                  _ChipCanal(canal: canal, estado: estado),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
