@@ -7,6 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tw_tokens.dart';
+import '../../../core/widgets/app_image_skeleton.dart';
 import '../../../core/widgets/evento_hero_banner.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../models/home_featured_item.dart';
@@ -139,10 +140,6 @@ class _ProximoEventoCardState extends State<ProximoEventoCard> {
           2;
     }
 
-    if (widget.items.isEmpty) {
-      // Esqueleto: un título largo con lugar, para no saltar demasiado.
-      return altoPagina('Título de un evento con nombre largo', true);
-    }
     return widget.items
         .map((item) => altoPagina(item.nombre, item.lugar.isNotEmpty))
         .reduce(math.max);
@@ -161,19 +158,17 @@ class _ProximoEventoCardState extends State<ProximoEventoCard> {
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
         final settledInset = homeFeaturedSettledInset(width);
-        final cardHeight = _alturaSlider(context, width - settledInset * 2);
 
         if (widget.items.isEmpty) {
           return Padding(
             padding: EdgeInsets.symmetric(horizontal: settledInset),
             child: widget.cargando
-                ? SizedBox(
-                    height: cardHeight,
-                    child: const _CargandoProximoEventoCard(),
-                  )
+                ? const _CargandoProximoEventoCard()
                 : const _EmptyProximoEventoCard(),
           );
         }
+
+        final cardHeight = _alturaSlider(context, width - settledInset * 2);
 
         if (!_esSlider) {
           return Padding(
@@ -450,26 +445,30 @@ class _EmptyProximoEventoCard extends StatelessWidget {
 }
 
 /// Esqueleto del hero mientras llega la primera respuesta del servidor.
+///
+/// Calca la estructura de [_FeaturedSlide] sin foto (eyebrow con chip de
+/// fecha, título de una línea, lugar, métricas y los dos CTA) con barras del
+/// mismo alto que cada texto, así la card real llega sin saltar.
 class _CargandoProximoEventoCard extends StatelessWidget {
   const _CargandoProximoEventoCard();
 
+  static const _relleno = TwColors.whiteA14;
+
   @override
   Widget build(BuildContext context) {
-    Widget barra(double ancho, double alto) => Container(
-      width: ancho,
-      height: alto,
-      decoration: BoxDecoration(
-        color: TwColors.whiteA14,
-        borderRadius: BorderRadius.circular(alto / 2),
-      ),
-    );
+    Widget texto(String muestra, TextStyle style, {double? ancho}) =>
+        AppSkeletonText(
+          muestra: muestra,
+          style: style,
+          width: ancho,
+          color: _relleno,
+        );
 
     return Semantics(
       label: 'Cargando próximo evento',
       child: Container(
         key: const Key('proximo_evento_cargando'),
         width: double.infinity,
-        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: TwGradients.hero,
           borderRadius: TwRadii.hero,
@@ -480,21 +479,114 @@ class _CargandoProximoEventoCard extends StatelessWidget {
           builder: (context, constraints) {
             final ancho = constraints.maxWidth;
             return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                barra(110, 10),
-                const SizedBox(height: 18),
-                barra(ancho * 0.85, 18),
-                const SizedBox(height: 10),
-                barra(ancho * 0.55, 18),
-                const SizedBox(height: 12),
-                barra(ancho * 0.4, 12),
-                const Spacer(),
                 Row(
                   children: [
-                    Expanded(child: barra(double.infinity, 44)),
-                    const SizedBox(width: 10),
-                    Expanded(child: barra(double.infinity, 44)),
+                    texto('PRÓXIMO EVENTO', TwText.homeEyebrow, ancho: 110),
+                    const Spacer(),
+                    // Chip de fecha vacío: mismo padding y borde que el real.
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _relleno,
+                        borderRadius: TwRadii.pill,
+                        border: Border.all(color: Colors.transparent),
+                      ),
+                      child: Text(
+                        '25 NOV',
+                        style: TwText.homeDateChip.copyWith(
+                          color: Colors.transparent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: texto(
+                    'Nombre del evento',
+                    TwText.homeHeroTitle,
+                    ancho: ancho * 0.75,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: Center(
+                        child: AppSkeletonBox(
+                          width: 12,
+                          height: 12,
+                          color: _relleno,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    texto('Lugar', TwText.heroMeta, ancho: ancho * 0.4),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < 3; i++)
+                        Expanded(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              border: i == 0
+                                  ? null
+                                  : const Border(
+                                      left: BorderSide(color: _relleno),
+                                    ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                texto(
+                                  '00',
+                                  TwText.homeStatValue.copyWith(fontSize: 21),
+                                  ancho: 34,
+                                ),
+                                const SizedBox(height: 5),
+                                texto(
+                                  'REGISTRADOS',
+                                  TwText.homeStatLabel,
+                                  ancho: 64,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Row(
+                  children: [
+                    Expanded(
+                      child: AppSkeletonBox(
+                        height: 44,
+                        radio: TwRadii.button,
+                        color: _relleno,
+                      ),
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: AppSkeletonBox(
+                        height: 44,
+                        radio: TwRadii.button,
+                        color: _relleno,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -682,23 +774,20 @@ class _FeaturedSlide extends StatelessWidget {
       child: Stack(
         fit: altoFijo ? StackFit.expand : StackFit.loose,
         children: [
-          if (item.tieneImagen)
+          // Velo solo sobre la foto, y cerrado: las portadas suelen ser
+          // afiches con texto propio, y en la card compacta ese texto caía
+          // detrás de las métricas. Sin foto, el texto blanco ya lee sobre
+          // el degradado navy y la card queda del mismo tono que su esqueleto.
+          if (item.tieneImagen) ...[
             Positioned.fill(
               child: EventoHeroFoto(imagenUrl: item.imagenUrl!, velo: 0),
             ),
-          // Velo sobre foto o degradado: el texto blanco y las métricas leen.
-          // Con foto va más cerrado: las portadas suelen ser afiches con
-          // texto propio, y en la card compacta ese texto caía detrás de las
-          // métricas.
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: item.tieneImagen
-                    ? _veloSobreFoto
-                    : TwGradients.heroScrim,
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(gradient: _veloSobreFoto),
               ),
             ),
-          ),
+          ],
           contenido,
         ],
       ),

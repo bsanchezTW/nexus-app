@@ -67,14 +67,18 @@ class AppColors {
 /// Métricas de la navegación del shell ([TwBottomNavBar] / [TwSideNavRail] /
 /// tab bar nativa iOS).
 ///
-/// En Android, iOS nativo y web móvil el menú va abajo: vidrio flotante de
-/// 68 dp, o `UITabBar` de ~49 dp en iPhone/iPad nativo. En Windows y en la
-/// web de PC el menú pasa a un rail izquierdo del color del contenedor, sin
-/// tapar el contenido.
+/// En Android, iOS nativo y web móvil el menú va abajo: barra estilo
+/// Material 3 de 72 dp anclada al borde, en vidrio esmerilado, o `UITabBar` de ~49 dp en iPhone/iPad nativo. En
+/// Windows y en la web de PC el menú pasa a un rail izquierdo del color del
+/// contenedor, sin tapar el contenido.
 /// Aquí viven las medidas que otras pantallas usan para reservar espacio.
 abstract final class GlassNavTokens {
-  static const height = 68.0;
-  static const radius = 26.0;
+  /// Alto de la barra, sin el inset de la navegación del sistema.
+  static const height = 72.0;
+
+  /// Píldora del ítem activo (64×32, como Material 3).
+  static const indicatorWidth = 64.0;
+  static const indicatorHeight = 32.0;
 
   /// Alto visual del `UITabBar` nativo, sin home indicator.
   static const nativeIosHeight = 49.0;
@@ -111,32 +115,22 @@ abstract final class GlassNavTokens {
   /// Sangría del hairline respecto al padding del rail.
   static const sideRailSeparatorIndent = 14.0;
 
-  static const horizontalMargin = 14.0;
-
-  /// Aire extra bajo el panel, **además** del home indicator / safe area.
-  static const bottomMargin = 8.0;
-
-  /// Anillo alrededor del panel que absorbe los taps. Con `extendBody` el
-  /// contenido pasa por debajo de la navbar; sin esta zona muerta, un dedo
-  /// que apunta al borde del panel y falla activa la fila que quedó detrás.
-  static const deadZone = 10.0;
-
-  /// Holgura extra en PWA (iPhone): separa la navbar de la barra nativa.
+  /// Holgura extra en PWA (iPhone): separa los ítems de la barra nativa.
   static const webBottomExtra = 14.0;
 
   static const iconSize = 24.0;
   static const labelSize = 12.0;
 
-  static const transitionDuration = Duration(milliseconds: 180);
+  static const transitionDuration = Duration(milliseconds: 200);
   static const transitionCurve = Curves.easeOutCubic;
 
-  /// Panel + margen de flotación, sin safe area ni holgura web.
-  static const occupiedHeight = height + bottomMargin;
+  /// Barra sin safe area ni holgura web.
+  static const occupiedHeight = height;
 
   static double webBottomGap() =>
       kIsWeb && !usesSideRailFor() ? webBottomExtra : 0;
 
-  /// Panel + márgenes de flotación (incluye holgura web).
+  /// Barra + holgura web, sin safe area.
   static double occupiedHeightOf() => occupiedHeight + webBottomGap();
 
   /// Plataformas de PC: Windows nativo, y web cuyo UA es windows / macOS /
@@ -169,25 +163,45 @@ abstract final class GlassNavTokens {
   static bool get usesNativeIosTabBar =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
-  /// Espacio al final del contenido para que no quede bajo la barra flotante
-  /// ni bajo su zona muerta. Con rail (Windows / web de PC) el menú no cubre
-  /// el cuerpo. En iOS nativo la barra va pegada al borde y ya cubre el home
-  /// indicator, así que el safe area no se suma aparte.
+  /// Espacio al final del contenido para que no quede bajo la barra
+  /// inferior. Con rail (Windows / web de PC) el menú no cubre el cuerpo. En
+  /// iOS nativo la barra ya cubre el home indicator, así que el safe area no
+  /// se suma aparte.
   static double contentBottomInset(BuildContext context) {
     final safeBottom = MediaQuery.viewPaddingOf(context).bottom + AppSpacing.xl;
     if (usesSideRailOf(context)) return safeBottom;
     if (usesNativeIosTabBar) return nativeIosOccupied + AppSpacing.xl;
-    return occupiedHeightOf() + deadZone + safeBottom;
+    return occupiedHeightOf() + safeBottom;
   }
 
   /// Holgura extra de toasts cuando el shell muestra barra inferior.
   static double shellToastLift() {
     if (usesNativeIosTabBar) return nativeIosHeight + AppSpacing.sm;
-    return occupiedHeightOf() + deadZone + AppSpacing.sm;
+    return occupiedHeightOf() + AppSpacing.sm;
   }
 
-  static double floatingBottomPadding(BuildContext context) =>
-      MediaQuery.viewPaddingOf(context).bottom + bottomMargin + webBottomGap();
+  /// Relleno bajo los ítems: la barra se pinta también detrás de la
+  /// navegación del sistema (gestos o botones), como en Material 3.
+  static double bottomPadding(BuildContext context) =>
+      MediaQuery.viewPaddingOf(context).bottom + webBottomGap();
+
+  /// Píldora del ítem activo: tinte navy más cargado que [AppColors.tintNavy]
+  /// para que se distinga del blanco de la barra.
+  static const indicatorColor = Color(0xFFD3DEF5);
+
+  /// Ítems inactivos: slate oscuro (~9:1 sobre blanco), no el gris `muted`.
+  static const inactiveForeground = Color(0xFF3F4B61);
+
+  /// Velo del vidrio: el fondo de pantalla al 72 %, igual que la cabecera
+  /// colapsable del home.
+  static const glassTint = Color(0xB8F2F5F9);
+
+  /// Posición horizontal (−1…1) del ítem [index] de [count] dentro de su
+  /// celda. Con celdas iguales, esto deja la píldora del primero en el
+  /// margen izquierdo del contenido, la del último en el derecho y el mismo
+  /// hueco entre todas.
+  static double itemAlignmentX(int index, int count) =>
+      count <= 1 ? 0 : -1 + 2 * index / (count - 1);
 
   static Color activeColor(Brightness brightness) =>
       brightness == Brightness.dark ? AppColors.accent : AppColors.primary;
@@ -220,7 +234,7 @@ class AppSpacing {
   static const sectionGap = 22.0;
   static const cardGap = 10.0;
 
-  /// Altura visual del panel de vidrio de la tab bar (sin márgenes ni safe area).
+  /// Altura visual de la barra inferior (sin safe area).
   static const shellTabBarHeight = GlassNavTokens.height;
 
   /// Holgura inferior del FAB en pantallas dentro del shell anidado.

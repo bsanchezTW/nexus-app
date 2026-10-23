@@ -23,10 +23,16 @@ class TwNavItemData {
   final String? sfSymbolActive;
 }
 
-/// Bottom navbar flotante del prototipo: panel de 68 dp, radio 26 y doble
-/// sombra, con el mismo blur de las cabeceras colapsables (sigma 18 y velo
-/// al 30%). El ítem activo se marca con un chip 46×30 de fondo azul tenue,
-/// borde navy de 1.5 y el icono en FILL 1.
+/// Barra inferior estilo Android (Material 3): anclada al borde, en el mismo
+/// vidrio esmerilado que la cabecera colapsable del home, con la píldora
+/// 64×32 bajo el icono activo (en FILL 1) e inactivos en slate oscuro.
+///
+/// Los ítems siguen la columna del contenido: el gutter de pantalla y el
+/// ancho máximo. La píldora del primero cae en el margen izquierdo, la del
+/// último en el derecho, y cada celda completa sigue siendo tocable.
+///
+/// El vidrio baja también detrás de la navegación del sistema; los ítems
+/// quedan por encima de ella.
 ///
 /// La navegación real queda fuera: este widget solo pinta y reporta el índice.
 class TwBottomNavBar extends StatelessWidget {
@@ -41,57 +47,46 @@ class TwBottomNavBar extends StatelessWidget {
   final ValueChanged<int> onItemSelected;
   final List<TwNavItemData> items;
 
-  /// Igual que [CollapsingNavOverlay] / [TwDetailScaffold]: visible sin
-  /// volver a sigma 22 (afectaba el scroll en listas).
-  static const _blurSigma = 18.0;
-
-  /// Tint sobre el blur: el overlay colapsable usa 0.30 de fondo.
-  static const _fillAlpha = 0.30;
-
-  /// `0 -2px 30px rgba(16,35,64,.12)` + `0 8px 24px -10px rgba(16,35,64,.2)`.
-  static const _shadow = [
-    BoxShadow(color: Color(0x1F102340), blurRadius: 30, offset: Offset(0, -2)),
-    BoxShadow(
-      color: Color(0x33102340),
-      blurRadius: 24,
-      offset: Offset(0, 8),
-      spreadRadius: -10,
-    ),
-  ];
-
-  static const _radius = BorderRadius.all(
-    Radius.circular(GlassNavTokens.radius),
-  );
-
   @override
   Widget build(BuildContext context) {
     assert(items.isNotEmpty, 'TwBottomNavBar requiere al menos un ítem');
 
     return RepaintBoundary(
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          borderRadius: _radius,
-          boxShadow: _shadow,
-        ),
-        child: ClipRRect(
-          borderRadius: _radius,
-          child: TwGlassFilter(
-            sigma: _blurSigma,
-            child: ColoredBox(
-              color: TwColors.surface.withValues(alpha: _fillAlpha),
-              child: SizedBox(
-                height: GlassNavTokens.height,
-                child: Row(
-                  children: [
-                    for (var i = 0; i < items.length; i++)
-                      Expanded(
-                        child: _TwNavItem(
-                          item: items[i],
-                          selected: i == selectedIndex,
-                          onTap: () => onItemSelected(i),
+      child: ClipRect(
+        // El velo es opaco al tacto: un toque entre ítems no llega a la fila
+        // del contenido que pasa por debajo (`extendBody`).
+        child: TwFrostedGlass(
+          color: GlassNavTokens.glassTint,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: TwSpacing.screenH,
+              right: TwSpacing.screenH,
+              bottom: GlassNavTokens.bottomPadding(context),
+            ),
+            child: Center(
+              heightFactor: 1,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: AppSpacing.contentMax,
+                ),
+                child: SizedBox(
+                  height: GlassNavTokens.height,
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < items.length; i++)
+                        Expanded(
+                          child: _BottomNavDestination(
+                            item: items[i],
+                            selected: i == selectedIndex,
+                            alignmentX: GlassNavTokens.itemAlignmentX(
+                              i,
+                              items.length,
+                            ),
+                            onTap: () => onItemSelected(i),
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -102,7 +97,123 @@ class TwBottomNavBar extends StatelessWidget {
   }
 }
 
-/// Rail izquierdo de escritorio: mismo ítem que la navbar móvil, sin vidrio
+/// Destino de la barra inferior: píldora + etiqueta. Al presionar, la
+/// píldora muestra la capa de estado de Material 3 aunque el ítem no esté
+/// activo.
+class _BottomNavDestination extends StatefulWidget {
+  const _BottomNavDestination({
+    required this.item,
+    required this.selected,
+    required this.alignmentX,
+    required this.onTap,
+  });
+
+  final TwNavItemData item;
+  final bool selected;
+  final double alignmentX;
+  final VoidCallback onTap;
+
+  @override
+  State<_BottomNavDestination> createState() => _BottomNavDestinationState();
+}
+
+class _BottomNavDestinationState extends State<_BottomNavDestination> {
+  bool _presionado = false;
+
+  void _presionar(bool valor) {
+    if (_presionado != valor) setState(() => _presionado = valor);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      label: widget.item.label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _presionar(true),
+        onTapUp: (_) => _presionar(false),
+        onTapCancel: () => _presionar(false),
+        onTap: widget.onTap,
+        child: Align(
+          alignment: Alignment(widget.alignmentX, 0),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween<double>(end: widget.selected ? 1 : 0),
+            duration: GlassNavTokens.transitionDuration,
+            curve: GlassNavTokens.transitionCurve,
+            builder: (context, t, _) {
+              final fg = Color.lerp(
+                GlassNavTokens.inactiveForeground,
+                AppColors.primaryDeep,
+                t,
+              )!;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: GlassNavTokens.indicatorWidth,
+                    height: GlassNavTokens.indicatorHeight,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // La píldora crece desde el centro, como en M3.
+                        Container(
+                          width: GlassNavTokens.indicatorWidth * (0.5 + t / 2),
+                          decoration: ShapeDecoration(
+                            shape: const StadiumBorder(),
+                            color: GlassNavTokens.indicatorColor.withValues(
+                              alpha: t,
+                            ),
+                          ),
+                        ),
+                        AnimatedOpacity(
+                          opacity: _presionado ? 1 : 0,
+                          duration: AppMotion.press,
+                          child: Container(
+                            decoration: ShapeDecoration(
+                              shape: const StadiumBorder(),
+                              color: AppColors.primary.withValues(alpha: 0.12),
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          widget.item.icon,
+                          size: GlassNavTokens.iconSize,
+                          fill: t,
+                          color: fg,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.visible,
+                    softWrap: false,
+                    style: TwText.navLabel.copyWith(
+                      fontSize: GlassNavTokens.labelSize,
+                      fontWeight: FontWeight.lerp(
+                        FontWeight.w600,
+                        FontWeight.w800,
+                        t,
+                      ),
+                      color: fg,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Rail izquierdo de escritorio: ítem de chip con borde, sin vidrio
 /// flotante, del color del contenedor para calzar con el marco de Windows.
 class TwSideNavRail extends StatelessWidget {
   const TwSideNavRail({

@@ -32,6 +32,42 @@ class TwGlassFilter extends StatelessWidget {
   }
 }
 
+/// Vidrio esmerilado de las barras del shell (cabecera colapsable del home y
+/// barra inferior): blur 20 con la saturación subida a 1.8, como el material
+/// de las barras de iOS, y un velo [color] encima. El padre recorta.
+class TwFrostedGlass extends StatelessWidget {
+  const TwFrostedGlass({super.key, required this.color, this.child});
+
+  final Color color;
+  final Widget? child;
+
+  static final _filtro = ImageFilter.compose(
+    inner: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+    outer: ColorFilter.matrix(_matrizSaturacion(1.8)),
+  );
+
+  static List<double> _matrizSaturacion(double s) {
+    const r = 0.213;
+    const g = 0.715;
+    const b = 0.072;
+    final inv = 1 - s;
+    return [
+      inv * r + s, inv * g, inv * b, 0, 0, //
+      inv * r, inv * g + s, inv * b, 0, 0, //
+      inv * r, inv * g, inv * b + s, 0, 0, //
+      0, 0, 0, 1, 0, //
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BackdropFilter(
+      filter: _filtro,
+      child: ColoredBox(color: color, child: child),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // §3 · Átomos
 // ---------------------------------------------------------------------------

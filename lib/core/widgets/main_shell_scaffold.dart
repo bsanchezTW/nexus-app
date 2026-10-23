@@ -23,7 +23,7 @@ bool shellConfirmsNativeExit({bool? isWeb, TargetPlatform? platform}) {
 }
 
 /// Shell con la navegación del rediseño: `UITabBar` nativo en iOS, barra
-/// flotante en Android y web móvil, y rail izquierdo en Windows y web de PC.
+/// Material 3 en Android y web móvil, y rail izquierdo en Windows y web de PC.
 ///
 /// En Android, un único [PopScope] en el shell (no por rama) evita que el
 /// diálogo de salida deje de aparecer tras cambiar de tab o volver de rutas
@@ -173,30 +173,15 @@ class MainShellNavHost extends StatelessWidget {
       );
     }
 
+    // `extendBody` se mantiene: las pantallas ya reservan el alto de la barra
+    // con [GlassNavTokens.contentBottomInset].
     return Scaffold(
       body: body,
       extendBody: true,
-      // Zona muerta: el anillo alrededor del panel absorbe los taps para
-      // que no lleguen al contenido que pasa por debajo (`extendBody`).
-      bottomNavigationBar: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {},
-        child: Material(
-          type: MaterialType.transparency,
-          child: Padding(
-            padding: EdgeInsets.only(
-              top: GlassNavTokens.deadZone,
-              left: GlassNavTokens.horizontalMargin,
-              right: GlassNavTokens.horizontalMargin,
-              bottom: GlassNavTokens.floatingBottomPadding(context),
-            ),
-            child: TwBottomNavBar(
-              selectedIndex: selectedIndex,
-              onItemSelected: onItemSelected,
-              items: items,
-            ),
-          ),
-        ),
+      bottomNavigationBar: TwBottomNavBar(
+        selectedIndex: selectedIndex,
+        onItemSelected: onItemSelected,
+        items: items,
       ),
     );
   }

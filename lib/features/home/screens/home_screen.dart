@@ -1,6 +1,5 @@
 import 'dart:io' show exit;
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +15,7 @@ import '../../../core/widgets/collapsing_nav.dart';
 import '../../../core/widgets/cuenta_identity_header.dart';
 import '../../../core/widgets/cuenta_settings_sheet.dart';
 import '../../../core/widgets/shell_tab_scroll.dart';
+import '../../../core/widgets/tw_components.dart';
 import '../../../core/widgets/tw_offline_notice_card.dart';
 import '../../../data/models/perfil.dart';
 import '../../../data/offline/offline_read_cache.dart';
@@ -217,6 +217,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             _HomeColumn(
               child: CuentaIdentityHeader(
                 perfil: perfil,
+                cargando: perfil == null && perfilAsync.isLoading,
                 noLeidas: noLeidas,
                 onNotificaciones: () => context.push(RoutePaths.notificaciones),
                 onAjustes: _mostrarAjustes,
@@ -241,10 +242,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   perfilAsync.when(
                     skipLoadingOnReload: true,
                     skipLoadingOnRefresh: true,
-                    loading: () => const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 48),
-                      child: LoadingView(),
-                    ),
+                    loading: () => const HomeDashboardSkeleton(),
                     error: (e, _) => ErrorView(
                       message: 'No se pudo cargar tu perfil.',
                       onRetry: () => ref.invalidate(currentPerfilProvider),
@@ -353,35 +351,6 @@ class _HomeCollapseBar extends StatelessWidget {
   /// Scroll en el que el avatar toca el borde superior (bajo el safe area).
   final double collapseStart;
 
-  static List<double> _saturationMatrix(double s) {
-    const r = 0.213;
-    const g = 0.715;
-    const b = 0.072;
-    final inv = 1 - s;
-    return [
-      inv * r + s,
-      inv * g,
-      inv * b,
-      0,
-      0,
-      inv * r,
-      inv * g + s,
-      inv * b,
-      0,
-      0,
-      inv * r,
-      inv * g,
-      inv * b + s,
-      0,
-      0,
-      0,
-      0,
-      0,
-      1,
-      0,
-    ];
-  }
-
   @override
   Widget build(BuildContext context) {
     final safeTop = MediaQuery.paddingOf(context).top;
@@ -405,14 +374,8 @@ class _HomeCollapseBar extends StatelessWidget {
             if (visible)
               Positioned.fill(
                 child: ClipRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.compose(
-                      inner: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                      outer: ColorFilter.matrix(_saturationMatrix(1.8)),
-                    ),
-                    child: ColoredBox(
-                      color: TwColors.bg.withValues(alpha: 0.72 * opacity),
-                    ),
+                  child: TwFrostedGlass(
+                    color: TwColors.bg.withValues(alpha: 0.72 * opacity),
                   ),
                 ),
               ),

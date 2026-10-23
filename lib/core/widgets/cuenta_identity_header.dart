@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../data/models/perfil.dart';
 import '../theme/tw_tokens.dart';
+import 'app_image_skeleton.dart';
 import 'app_network_image.dart';
 import 'ios_native_chrome.dart';
 import 'nexus_components.dart';
@@ -19,9 +20,14 @@ class CuentaIdentityHeader extends StatelessWidget {
     this.ajustesKey,
     this.onNotificaciones,
     this.noLeidas = 0,
+    this.cargando = false,
   });
 
   final Perfil? perfil;
+
+  /// Perfil aún sin llegar: foto, saludo y rol van como esqueleto (los
+  /// botones de ajustes y notificaciones sí se muestran).
+  final bool cargando;
   final VoidCallback onAjustes;
   final VoidCallback onMiPerfil;
   final Key? ajustesKey;
@@ -42,30 +48,56 @@ class CuentaIdentityHeader extends StatelessWidget {
     final saludo = first.isEmpty ? 'Hola 👋' : 'Hola, $first 👋';
     final rol = perfil?.rol.label ?? '';
 
+    final esqueleto = cargando && perfil == null;
+
     return Row(
       children: [
-        Pressable(
-          scale: 0.94,
-          onTap: onMiPerfil,
-          child: _CuentaAvatar(
-            nombre: perfil?.nombreCompleto ?? '?',
-            fotoUrl: perfil?.fotoUrl,
+        if (esqueleto)
+          const SizedBox.square(
+            dimension: avatarSize,
+            child: ClipOval(child: AppImageSkeleton()),
+          )
+        else
+          Pressable(
+            scale: 0.94,
+            onTap: onMiPerfil,
+            child: _CuentaAvatar(
+              nombre: perfil?.nombreCompleto ?? '?',
+              fotoUrl: perfil?.fotoUrl,
+            ),
           ),
-        ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                saludo,
-                style: TwText.greeting,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (rol.isNotEmpty) ...[
+              if (esqueleto) ...[
+                const AppSkeletonText(
+                  muestra: 'Hola, Nombre',
+                  style: TwText.greeting,
+                  width: 150,
+                ),
                 const SizedBox(height: 6),
-                _RoleChip(label: rol),
+                // Un chip de rol invisible da la medida exacta.
+                const Stack(
+                  children: [
+                    Opacity(opacity: 0, child: _RoleChip(label: 'Staff')),
+                    Positioned.fill(
+                      child: AppImageSkeleton(radio: TwRadii.badge),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                Text(
+                  saludo,
+                  style: TwText.greeting,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (rol.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  _RoleChip(label: rol),
+                ],
               ],
             ],
           ),

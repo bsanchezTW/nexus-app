@@ -165,7 +165,7 @@ void main() {
     }
   });
 
-  testWidgets('contentBottomInset reserva la tab bar flotante en Android', (
+  testWidgets('contentBottomInset reserva la barra inferior en Android', (
     tester,
   ) async {
     final previous = debugDefaultTargetPlatformOverride;
@@ -180,9 +180,7 @@ void main() {
       final context = tester.element(find.byType(SizedBox));
       expect(
         GlassNavTokens.contentBottomInset(context),
-        GlassNavTokens.occupiedHeightOf() +
-            GlassNavTokens.deadZone +
-            AppSpacing.xl,
+        GlassNavTokens.occupiedHeightOf() + AppSpacing.xl,
       );
       expect(
         AppSpacing.shellFabBottomOf(context),

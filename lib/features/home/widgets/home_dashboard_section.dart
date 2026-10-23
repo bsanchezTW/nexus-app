@@ -8,6 +8,7 @@ import '../../../core/constants/duracion_actividad.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tw_tokens.dart';
+import '../../../core/widgets/app_image_skeleton.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../../../data/models/evento.dart';
@@ -23,10 +24,7 @@ class HomeDashboardSection extends ConsumerWidget {
     return dashboardAsync.when(
       skipLoadingOnReload: true,
       skipLoadingOnRefresh: true,
-      loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpacing.xxl),
-        child: LoadingView(message: 'Cargando resumen...'),
-      ),
+      loading: () => const HomeDashboardSkeleton(),
       error: (e, _) => ErrorView(
         message: 'No se pudo cargar el resumen.',
         onRetry: () => ref.invalidate(homeDashboardProvider),
@@ -38,6 +36,184 @@ class HomeDashboardSection extends ConsumerWidget {
           _KpiGrid(data: data),
           const TwSectionLabel('Calendario de eventos'),
           _EventosCalendario(data: data),
+        ],
+      ),
+    );
+  }
+}
+
+/// Esqueleto de Resumen + Calendario mientras cargan el perfil o el
+/// dashboard. Mismas tarjetas y medidas que el contenido real (cuatro KPI y
+/// el mes en curso con sus semanas), con barras en lugar de cifras.
+class HomeDashboardSkeleton extends StatelessWidget {
+  const HomeDashboardSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Cargando resumen',
+      child: const ExcludeSemantics(
+        child: Column(
+          key: Key('home_dashboard_cargando'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TwSectionLabel('Resumen', top: 0),
+            _KpiGridSkeleton(),
+            TwSectionLabel('Calendario de eventos'),
+            _CalendarioSkeleton(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KpiGridSkeleton extends StatelessWidget {
+  const _KpiGridSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tile() => Container(
+      padding: const EdgeInsets.all(12),
+      decoration: const BoxDecoration(
+        color: TwColors.surface,
+        borderRadius: TwRadii.card,
+        border: Border.fromBorderSide(BorderSide(color: TwColors.border07)),
+        boxShadow: TwShadows.card,
+      ),
+      child: Row(
+        children: [
+          const AppSkeletonBox(width: 34, height: 34, radio: TwRadii.field),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppSkeletonText(
+                  muestra: '00',
+                  style: TwText.kpiValue.copyWith(fontSize: 19),
+                  width: 44,
+                ),
+                const SizedBox(height: 3),
+                AppSkeletonText(
+                  muestra: 'Registrados',
+                  style: TwText.kpiLabel.copyWith(fontSize: 12),
+                  width: 76,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    Widget fila() => Row(
+      children: [
+        Expanded(child: tile()),
+        const SizedBox(width: 12),
+        Expanded(child: tile()),
+      ],
+    );
+
+    return Column(children: [fila(), const SizedBox(height: 12), fila()]);
+  }
+}
+
+class _CalendarioSkeleton extends StatelessWidget {
+  const _CalendarioSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final hoy = DateTime.now();
+    final offset = DateTime(hoy.year, hoy.month, 1).weekday - 1;
+    final dias = DateTime(hoy.year, hoy.month + 1, 0).day;
+    final semanas = ((offset + dias) / 7).ceil();
+    final diaStyle = const TextStyle(
+      fontSize: 12.5,
+      height: 1.0,
+      leadingDistribution: TextLeadingDistribution.even,
+    );
+
+    Widget fila(Widget Function() celda, {double alto = 34}) => Row(
+      children: [
+        for (var i = 0; i < 7; i++) ...[
+          if (i > 0) const SizedBox(width: 2),
+          Expanded(
+            child: SizedBox(
+              height: alto,
+              child: Center(child: celda()),
+            ),
+          ),
+        ],
+      ],
+    );
+
+    return TwCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const AppSkeletonBox(
+                width: 32,
+                height: 32,
+                radio: TwRadii.iconSm,
+              ),
+              Expanded(
+                child: Center(
+                  child: AppSkeletonText(
+                    muestra: 'Octubre 2026',
+                    style: TwText.supportTitle.copyWith(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    width: 110,
+                  ),
+                ),
+              ),
+              const AppSkeletonBox(
+                width: 32,
+                height: 32,
+                radio: TwRadii.iconSm,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          fila(
+            () => AppSkeletonText(
+              muestra: 'L',
+              style: TwText.statLabel.copyWith(fontSize: 10.5),
+              width: 10,
+            ),
+            alto: 13,
+          ),
+          const SizedBox(height: 4),
+          for (var s = 0; s < semanas; s++) ...[
+            if (s > 0) const SizedBox(height: 2),
+            fila(
+              () => AppSkeletonText(muestra: '00', style: diaStyle, width: 16),
+            ),
+          ],
+          const Divider(height: AppSpacing.xxl, color: TwColors.border07),
+          AppSkeletonText(
+            muestra: 'Eventos del 23 oct',
+            style: TwText.tileSubtitle.copyWith(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            width: 120,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            child: AppSkeletonText(
+              muestra: 'No hay eventos en esta fecha.',
+              style: TwText.tileSubtitle,
+              width: 190,
+            ),
+          ),
         ],
       ),
     );
