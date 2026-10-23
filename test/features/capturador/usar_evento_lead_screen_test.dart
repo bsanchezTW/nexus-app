@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:transworld_nexus/core/constants/app_role.dart';
 import 'package:transworld_nexus/core/network/connectivity_service.dart';
-import 'package:transworld_nexus/core/theme/tw_tokens.dart';
 import 'package:transworld_nexus/core/widgets/evento_hero_banner.dart';
 import 'package:transworld_nexus/core/widgets/tw_components.dart';
 import 'package:transworld_nexus/data/models/evento_lead.dart';
@@ -133,9 +132,59 @@ void main() {
             (box) =>
                 box.decoration is BoxDecoration &&
                 (box.decoration as BoxDecoration).gradient ==
-                    TwGradients.heroScrim,
+                    TwEventHero.veloFoto,
           ),
       isTrue,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('sin foto el hero no lleva velo', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(preferences),
+          connectivityStreamProvider.overrideWith((ref) => Stream.value(true)),
+          authStateChangesProvider.overrideWith(
+            (ref) => const Stream<AuthState>.empty(),
+          ),
+          currentPerfilProvider.overrideWith((ref) async => perfilUser),
+          eventoLeadByIdProvider.overrideWith(
+            (ref, id) async => EventoLead(
+              id: 'campana-1',
+              nombre: 'Campaña de prueba',
+              fecha: DateTime(2099, 8, 20),
+              pais: 'Chile',
+            ),
+          ),
+          leadsResumenLocalProvider.overrideWith(
+            (ref, id) => const LeadsResumen(total: 12, empresas: 5),
+          ),
+        ],
+        child: const MaterialApp(
+          locale: Locale('es'),
+          home: UsarEventoLeadScreen(eventoId: 'campana-1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(EventoHeroFoto), findsNothing);
+    expect(
+      tester
+          .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+          .any(
+            (box) =>
+                box.decoration is BoxDecoration &&
+                (box.decoration as BoxDecoration).gradient ==
+                    TwEventHero.veloFoto,
+          ),
+      isFalse,
     );
     expect(tester.takeException(), isNull);
   });

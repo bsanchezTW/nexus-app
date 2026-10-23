@@ -88,6 +88,13 @@ class TwColors {
   static const offlineNoticeMuted = Color(0xFF6B3010);
   static const offlineNoticeBorder = Color(0x66C45E12);
 
+  // Aviso de actualización: mismo molde que el de sin conexión, en azul.
+  static const updateNoticeBg = Color(0xFFDCE6FA);
+  static const updateNoticeIconBg = Color(0xFFBFD1F4);
+  static const updateNoticeInk = Color(0xFF0F2A4F);
+  static const updateNoticeMuted = Color(0xFF2E4C78);
+  static const updateNoticeBorder = Color(0x592B62B8);
+
   // ---------- Excel ----------
   static const excel500 = Color(0xFF21A366);
   static const excel700 = Color(0xFF0E7040);

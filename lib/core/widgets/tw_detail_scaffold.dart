@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../theme/tw_tokens.dart';
@@ -26,6 +28,12 @@ abstract final class TwDetailBarMetrics {
 
   static double height(double topInset) =>
       topInset + gapVertical * 2 + rowHeight;
+
+  /// Cuánto se monta la hoja de acciones sobre el hero a sangre.
+  static const double sheetOverlap = 24;
+
+  /// Radio superior de esa hoja.
+  static const double sheetRadius = 28;
 
   /// Inset superior estable para la barra.
   ///
@@ -69,7 +77,14 @@ class TwDetailScaffold extends StatefulWidget {
     this.backTooltip = 'Volver',
     this.backKey,
     this.leading,
+    this.heroBuilder,
   });
+
+  /// Cabecera a sangre (menús de evento): ocupa todo el ancho desde el borde
+  /// superior, la barra flota encima y [children] van en una hoja redondeada
+  /// que se monta sobre su borde inferior. El builder recibe el relleno que
+  /// deja libre la barra arriba y el solape de la hoja abajo.
+  final Widget Function(EdgeInsets padding)? heroBuilder;
 
   /// Rótulo en reposo ("Detalle del evento").
   final String eyebrow;
@@ -103,6 +118,18 @@ class TwDetailScaffold extends StatefulWidget {
 class _TwDetailScaffoldState extends State<TwDetailScaffold> {
   final ScrollController _controller = ScrollController();
   final ValueNotifier<double> _scrollY = ValueNotifier(0);
+
+  /// Alto del hero en el último layout (`null` hasta el primero).
+  double? _altoHero;
+
+  /// Scroll desde el que la barra empieza a colapsar: arriba de todo sin
+  /// hero; con hero, cuando su borde inferior llega a la barra.
+  double _inicioColapso(double headerHeight) {
+    if (widget.heroBuilder == null) return 0;
+    final alto = _altoHero;
+    if (alto == null) return double.infinity;
+    return math.max(0, alto - headerHeight - TwDetailBarMetrics.sheetOverlap);
+  }
 
   @override
   void initState() {
@@ -143,30 +170,82 @@ class _TwDetailScaffoldState extends State<TwDetailScaffold> {
           0.0,
           constraints.maxHeight - headerHeight - bottomPad,
         );
-        Widget scroll = SingleChildScrollView(
-          controller: _controller,
-          physics: const AlwaysScrollableScrollPhysics(
-            parent: ClampingScrollPhysics(),
-          ),
-          padding: EdgeInsets.fromLTRB(
-            TwSpacing.screenH,
-            headerHeight,
-            TwSpacing.screenH,
-            bottomPad,
-          ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: widget.maxContentWidth,
-                minHeight: minBody,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: widget.children,
-              ),
-            ),
-          ),
+        final columna = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: widget.children,
         );
+        final heroBuilder = widget.heroBuilder;
+        Widget scroll = heroBuilder == null
+            ? SingleChildScrollView(
+                controller: _controller,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
+                ),
+                padding: EdgeInsets.fromLTRB(
+                  TwSpacing.screenH,
+                  headerHeight,
+                  TwSpacing.screenH,
+                  bottomPad,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: widget.maxContentWidth,
+                      minHeight: minBody,
+                    ),
+                    child: columna,
+                  ),
+                ),
+              )
+            : SingleChildScrollView(
+                controller: _controller,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
+                ),
+                padding: EdgeInsets.only(bottom: bottomPad),
+                child: Column(
+                  children: [
+                    _MedidorAlto(
+                      onAlto: (alto) => _altoHero = alto,
+                      child: heroBuilder(
+                        EdgeInsets.fromLTRB(
+                          TwSpacing.screenH,
+                          headerHeight + 4,
+                          TwSpacing.screenH,
+                          TwDetailBarMetrics.sheetOverlap + 22,
+                        ),
+                      ),
+                    ),
+                    // La hoja sube sobre el hero; lo que deja abajo es del
+                    // mismo color que el fondo.
+                    Transform.translate(
+                      offset: const Offset(0, -TwDetailBarMetrics.sheetOverlap),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: TwSpacing.screenH,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: TwColors.bg,
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(
+                              TwDetailBarMetrics.sheetRadius,
+                            ),
+                          ),
+                        ),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: widget.maxContentWidth,
+                            ),
+                            child: columna,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
         if (widget.onRefresh != null) {
           scroll = RefreshIndicator(
             color: TwColors.brand700,
@@ -187,7 +266,8 @@ class _TwDetailScaffoldState extends State<TwDetailScaffold> {
                 child: ValueListenableBuilder<double>(
                   valueListenable: _scrollY,
                   builder: (context, scrollY, _) => _TwDetailBar(
-                    scrollOffset: scrollY,
+                    scrollOffset: scrollY - _inicioColapso(headerHeight),
+                    sobreHero: widget.heroBuilder != null,
                     topInset: topInset,
                     eyebrow: widget.eyebrow,
                     title: widget.title,
@@ -211,6 +291,7 @@ class _TwDetailScaffoldState extends State<TwDetailScaffold> {
 class _TwDetailBar extends StatelessWidget {
   const _TwDetailBar({
     required this.scrollOffset,
+    required this.sobreHero,
     required this.topInset,
     required this.eyebrow,
     required this.title,
@@ -223,6 +304,10 @@ class _TwDetailBar extends StatelessWidget {
   });
 
   final double scrollOffset;
+
+  /// Flota sobre un hero oscuro: sin eyebrow y con la barra de estado clara
+  /// hasta colapsar.
+  final bool sobreHero;
   final double topInset;
   final String eyebrow;
   final String title;
@@ -241,7 +326,7 @@ class _TwDetailBar extends StatelessWidget {
     );
     final mostrarFondo = t > 0.01;
 
-    return SizedBox(
+    final barra = SizedBox(
       height: TwDetailBarMetrics.height(topInset),
       child: Stack(
         children: [
@@ -296,7 +381,7 @@ class _TwDetailBar extends StatelessWidget {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Opacity(
-                          opacity: 1 - t,
+                          opacity: sobreHero ? 0 : 1 - t,
                           child: Text(
                             eyebrow.toUpperCase(),
                             style: TwText.eyebrow,
@@ -335,5 +420,43 @@ class _TwDetailBar extends StatelessWidget {
         ],
       ),
     );
+
+    if (!sobreHero) return barra;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: t < 0.5 ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      child: barra,
+    );
+  }
+}
+
+/// Reporta el alto de [child] tras cada layout, sin reconstruir nada: la
+/// barra lo lee recién en el siguiente scroll.
+class _MedidorAlto extends SingleChildRenderObjectWidget {
+  const _MedidorAlto({required this.onAlto, required super.child});
+
+  final ValueChanged<double> onAlto;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderMedidorAlto(onAlto);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderMedidorAlto renderObject,
+  ) {
+    renderObject.onAlto = onAlto;
+  }
+}
+
+class _RenderMedidorAlto extends RenderProxyBox {
+  _RenderMedidorAlto(this.onAlto);
+
+  ValueChanged<double> onAlto;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    onAlto(size.height);
   }
 }

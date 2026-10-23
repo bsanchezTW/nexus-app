@@ -25,10 +25,9 @@ Version? tryParseVersion(String? raw) {
 /// `true` si [remote] es estrictamente mayor que [installed].
 bool isRemoteNewer(Version installed, Version remote) => remote > installed;
 
-/// Detecta actualización obligatoria en el body de la Release.
-bool isForcedUpdate(String? body) => (body ?? '').contains(forceUpdateMarker);
-
-/// Body limpio para mostrar al usuario (sin el marcador de force).
+/// Body limpio para mostrar al usuario. Las releases antiguas traen el
+/// marcador de actualización obligatoria, que ya no se respeta: ninguna
+/// actualización bloquea la app.
 String releaseNotesForDisplay(String? body) {
   if (body == null || body.isEmpty) return '';
   return body

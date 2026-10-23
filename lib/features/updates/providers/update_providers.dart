@@ -39,12 +39,7 @@ class UpdateController extends StateNotifier<UpdateState> {
   UpdateController(this._ref) : super(const UpdateState());
 
   final Ref _ref;
-  bool _dialogVisible = false;
   bool _downloadInFlight = false;
-
-  bool get isDialogVisible => _dialogVisible;
-
-  void markDialogVisible(bool visible) => _dialogVisible = visible;
 
   UpdateService get _service => _ref.read(updateServiceProvider);
 
@@ -98,11 +93,10 @@ class UpdateController extends StateNotifier<UpdateState> {
 
   Future<void> _checkAutomatic({required bool onResume}) async {
     if (!otaUpdatesSupported) return;
-    // Solo con sesión: el modal de update no debe aparecer en login/splash.
+    // Solo con sesión: el aviso de update no debe aparecer en login/splash.
     if (_ref.read(authRepositoryProvider).currentSession == null) return;
     if (!(_ref.read(isOnlineProvider))) return;
     if (state.isBusy) return;
-    if (_dialogVisible) return;
 
     final previous = state;
 
@@ -331,16 +325,10 @@ class UpdateController extends StateNotifier<UpdateState> {
     _service.cancelDownload();
   }
 
-  void dismiss() {
-    if (state.info?.isForced == true) return;
-    state = state.copyWith(status: UpdateStatus.dismissed);
-  }
-
   Future<void> openInstallSettings() => _service.openInstallSettings();
 
   void resetToIdle() {
     state = const UpdateState();
-    _dialogVisible = false;
   }
 }
 

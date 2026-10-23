@@ -3,14 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/repositories/auth_repository.dart';
 import '../providers/update_providers.dart';
-import '../services/update_service.dart';
-import 'update_dialog.dart';
 
 /// Dispara el check OTA al montarse (post-login) y al volver del segundo
-/// plano, y muestra el diálogo cuando hay una actualización disponible.
+/// plano. No interrumpe: si hay versión nueva, el inicio muestra
+/// `UpdateNoticeCard` y la instalación se hace desde Actualizaciones.
 ///
 /// Debe vivir bajo una ruta autenticada (p. ej. [HomeScreen]).
-/// El modal solo se muestra con sesión activa.
 class UpdateChecker extends ConsumerStatefulWidget {
   const UpdateChecker({super.key, required this.child});
 
@@ -64,20 +62,5 @@ class _UpdateCheckerState extends ConsumerState<UpdateChecker>
   }
 
   @override
-  Widget build(BuildContext context) {
-    ref.listen<UpdateState>(updateControllerProvider, (prev, next) {
-      if (!_isLoggedIn) return;
-
-      final becameAvailable =
-          next.status == UpdateStatus.available &&
-          prev?.status != UpdateStatus.available;
-      final controller = ref.read(updateControllerProvider.notifier);
-
-      if (becameAvailable && !controller.isDialogVisible) {
-        showAppUpdateDialog(context, ref);
-      }
-    });
-
-    return widget.child;
-  }
+  Widget build(BuildContext context) => widget.child;
 }

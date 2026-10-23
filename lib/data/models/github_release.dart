@@ -64,8 +64,6 @@ class GitHubRelease {
   final bool prerelease;
   final List<GitHubReleaseAsset> assets;
 
-  bool get isForced => isForcedUpdate(body);
-
   String get notesForDisplay => releaseNotesForDisplay(body);
 
   /// SemVer derivado de [tagName], o `null` si el tag no es parseable.

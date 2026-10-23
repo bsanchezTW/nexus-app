@@ -195,16 +195,18 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
                     onTap: () =>
                         context.push(RoutePaths.editarEvento(widget.eventoId)),
                   ),
+                // Blanco como "Editar": el navy de marca se perdía sobre el
+                // hero.
                 NexusHeaderAction(
                   icon: Symbols.ios_share_rounded,
-                  variant: TwIconButtonStyle.brand,
                   tooltip: 'Compartir enlace de registro',
                   sfSymbol: 'square.and.arrow.up',
                   onTap: () => _compartir(evento.nombre),
                 ),
               ],
+              heroBuilder: (padding) =>
+                  _hero(context, evento, resumen, padding),
               children: [
-                _hero(context, evento, resumen),
                 const TwOfflineNoticeCard(topGap: 20),
                 const TwSectionLabel('Acciones del evento'),
                 TwActionTile(
@@ -314,6 +316,7 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
     BuildContext context,
     Evento evento,
     RegistradosResumen? resumen,
+    EdgeInsets padding,
   ) {
     final lugar = [
       if (evento.lugar != null && evento.lugar!.isNotEmpty) evento.lugar,
@@ -321,14 +324,15 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
     ].join(' · ');
     final imagenUrl = evento.imagenUrl;
 
-    return TwHeroCard(
+    return TwEventHero(
+      padding: padding,
       dateText: formatearFechaActividad(evento.fecha, evento.duracionDias),
       status: evento.yaOcurrio ? TwStatus.finalizado : TwStatus.activo,
       title: evento.nombre,
       location: lugar,
       photo: imagenUrl == null || imagenUrl.isEmpty
           ? null
-          // El velo lo pinta la propia TwHeroCard (heroScrim).
+          // El velo lo pinta TwEventHero, solo cuando hay foto.
           : EventoHeroFoto(imagenUrl: imagenUrl, velo: 0),
       stats: [
         TwStat(

@@ -1189,11 +1189,18 @@ class TwActionTile extends StatelessWidget {
   }
 }
 
-/// Hero de las pantallas de detalle: fecha + estado, título, ubicación,
-/// métricas y CTA. Capas: gradiente base → foto opcional → velo → contenido.
-class TwHeroCard extends StatelessWidget {
-  const TwHeroCard({
+/// Hero a sangre de los menús de evento y de actividad de leads: ocupa la
+/// parte superior de la pantalla, desde el borde, con la foto de portada o el
+/// degradado navy, y el contenido (estado + fecha, título, ubicación,
+/// métricas y CTA) anclado abajo. Va en `TwDetailScaffold.heroBuilder`.
+///
+/// El velo solo se pinta sobre la foto: las portadas suelen ser afiches con
+/// texto propio y la barra de estado y los botones flotan encima. Sin foto,
+/// el degradado navy ya da contraste al texto blanco.
+class TwEventHero extends StatelessWidget {
+  const TwEventHero({
     super.key,
+    required this.padding,
     required this.dateText,
     required this.status,
     required this.title,
@@ -1205,8 +1212,11 @@ class TwHeroCard extends StatelessWidget {
     this.mostrarCta = true,
     this.photo,
     this.titleHeight,
+    this.maxContentWidth = 560,
   });
 
+  /// Lo entrega `TwDetailScaffold`: la barra arriba y el solape de la hoja.
+  final EdgeInsets padding;
   final String dateText;
   final TwStatus status;
   final String title;
@@ -1218,77 +1228,114 @@ class TwHeroCard extends StatelessWidget {
   final bool mostrarCta;
   final Widget? photo;
 
-  /// El evento de leads usa 1.22 en vez del 1.20 por defecto (§9).
+  /// El evento de leads usa 1.22 en vez del 1.15 por defecto (§9).
   final double? titleHeight;
+  final double maxContentWidth;
+
+  /// Alto mínimo respecto de la pantalla: con títulos cortos la foto sigue
+  /// luciendo y el hero no se encoge a una franja.
+  static const _altoMinimo = 0.48;
+
+  /// Oscuro arriba (barra de estado y botones), más abierto al centro para
+  /// que se vea la portada, y cerrado abajo, donde va el texto.
+  static const veloFoto = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0x9908182C),
+      Color(0x4D08182C),
+      Color(0xD9081628),
+      Color(0xF5081628),
+    ],
+    stops: [0.0, 0.3, 0.62, 1.0],
+  );
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: const BoxDecoration(
-        gradient: TwGradients.hero,
-        borderRadius: TwRadii.hero,
-        boxShadow: TwShadows.hero,
-      ),
-      child: Stack(
-        children: [
-          if (photo != null) Positioned.fill(child: photo!),
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(gradient: TwGradients.heroScrim),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(child: TwDatePill(dateText)),
-                    const SizedBox(width: 8),
-                    TwStatusPill(status),
-                  ],
+    final altoMinimo = MediaQuery.sizeOf(context).height * _altoMinimo;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: altoMinimo),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(gradient: TwGradients.hero),
+        child: Stack(
+          fit: StackFit.passthrough,
+          children: [
+            if (photo != null) ...[
+              Positioned.fill(child: photo!),
+              const Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(gradient: veloFoto),
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  title,
-                  style: titleHeight == null
-                      ? TwText.heroTitle
-                      : TwText.heroTitle.copyWith(height: titleHeight),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (location.isNotEmpty) ...[
-                  const SizedBox(height: 7),
-                  Row(
-                    children: [
-                      const Icon(
-                        Symbols.location_on_rounded,
-                        size: 16,
-                        color: TwColors.whiteA66,
-                      ),
-                      const SizedBox(width: 5),
-                      Expanded(
-                        child: Text(
-                          location,
-                          style: TwText.heroMeta,
-                          maxLines: 1,
+              ),
+            ],
+            Padding(
+              padding: padding,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxContentWidth),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            TwStatusPill(status),
+                            const SizedBox(width: 8),
+                            Flexible(child: TwDatePill(dateText)),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          title,
+                          style: TwText.heroTitle.copyWith(
+                            fontSize: 27,
+                            fontWeight: FontWeight.w800,
+                            height: titleHeight ?? 1.15,
+                            letterSpacing: -0.3,
+                          ),
+                          maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
+                        if (location.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Icon(
+                                Symbols.location_on_rounded,
+                                size: 16,
+                                color: TwColors.whiteA66,
+                              ),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  location,
+                                  style: TwText.heroMeta,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        TwStatsRow(stats),
+                        if (mostrarCta)
+                          TwHeroButton(
+                            label: ctaLabel,
+                            icon: ctaIcon,
+                            onTap: onCta,
+                          ),
+                      ],
+                    ),
                   ),
-                ],
-                TwStatsRow(stats),
-                if (mostrarCta)
-                  TwHeroButton(label: ctaLabel, icon: ctaIcon, onTap: onCta),
-              ],
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

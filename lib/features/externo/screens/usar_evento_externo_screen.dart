@@ -30,6 +30,7 @@ import '../../capturador/services/evento_lead_interno_service.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
 import '../../updates/widgets/update_checker.dart';
+import '../../updates/widgets/update_notice_card.dart';
 import '../providers/externo_dashboard_provider.dart';
 
 /// Vista operativa reducida para usuarios externos: hero, resumen propio y QR.
@@ -341,6 +342,7 @@ class _UsarEventoExternoScreenState
                         ),
                       ),
                       const TwOfflineNoticeCard(topGap: 16),
+                      const UpdateNoticeCard(topGap: 16),
                       const TwSectionLabel('Resumen'),
                       _ExternoStatsCards(
                         statsAsync: statsAsync,
@@ -428,15 +430,18 @@ class _EventoExternoHero extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          if (imagenUrl != null && imagenUrl.isNotEmpty)
+          // Velo solo sobre la foto: sin ella el degradado navy ya da
+          // contraste al texto blanco.
+          if (imagenUrl != null && imagenUrl.isNotEmpty) ...[
             Positioned.fill(
               child: EventoHeroFoto(imagenUrl: imagenUrl, velo: 0),
             ),
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(gradient: TwGradients.heroScrim),
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(gradient: TwGradients.heroScrim),
+              ),
             ),
-          ),
+          ],
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
             child: Column(

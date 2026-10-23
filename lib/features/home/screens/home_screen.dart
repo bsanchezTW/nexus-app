@@ -28,6 +28,7 @@ import '../../notificaciones/providers/notificaciones_providers.dart';
 import '../../updates/services/update_platform.dart';
 import '../../updates/services/windows_uninstaller.dart';
 import '../../updates/widgets/update_checker.dart';
+import '../../updates/widgets/update_notice_card.dart';
 import '../models/home_featured_item.dart';
 import '../providers/home_dashboard_providers.dart';
 import '../providers/home_featured_providers.dart';
@@ -239,6 +240,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const TwOfflineNoticeCard(bottomGap: 24),
+                  const UpdateNoticeCard(bottomGap: 24),
                   perfilAsync.when(
                     skipLoadingOnReload: true,
                     skipLoadingOnRefresh: true,

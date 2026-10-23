@@ -123,8 +123,9 @@ class _UsarEventoLeadScreenState extends ConsumerState<UsarEventoLeadScreen>
                     ),
                   ),
               ],
+              heroBuilder: (padding) =>
+                  _hero(context, evento, resumen, padding),
               children: [
-                _hero(context, evento, resumen),
                 const TwOfflineNoticeCard(topGap: 20),
                 const TwSectionLabel('Acciones del evento'),
                 TwActionTile(
@@ -185,14 +186,20 @@ class _UsarEventoLeadScreenState extends ConsumerState<UsarEventoLeadScreen>
     );
   }
 
-  Widget _hero(BuildContext context, EventoLead evento, LeadsResumen? resumen) {
+  Widget _hero(
+    BuildContext context,
+    EventoLead evento,
+    LeadsResumen? resumen,
+    EdgeInsets padding,
+  ) {
     final meta = [
       if (evento.pais != null && evento.pais!.isNotEmpty) evento.pais,
       if (evento.tematica != null && evento.tematica!.isNotEmpty)
         evento.tematica,
     ].join(' · ');
 
-    return TwHeroCard(
+    return TwEventHero(
+      padding: padding,
       dateText: formatearFechaActividad(evento.fecha, evento.duracionDias),
       status: evento.yaOcurrio ? TwStatus.finalizado : TwStatus.activo,
       title: evento.nombre,

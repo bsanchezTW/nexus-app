@@ -37,12 +37,6 @@ void main() {
       expect(tryParseVersion(null), isNull);
     });
 
-    test('isForcedUpdate detecta marcador', () {
-      expect(isForcedUpdate('Notas\n[FORCE_UPDATE]\nMás'), isTrue);
-      expect(isForcedUpdate('solo notas'), isFalse);
-      expect(isForcedUpdate(null), isFalse);
-    });
-
     test('releaseNotesForDisplay limpia marcador', () {
       expect(
         releaseNotesForDisplay('Hola\n[FORCE_UPDATE]\nMundo'),
@@ -114,7 +108,6 @@ void main() {
         ],
       });
 
-      expect(release.isForced, isTrue);
       expect(release.resolveNexusApk()?.name, 'android-regispro-arm64.apk');
     });
 

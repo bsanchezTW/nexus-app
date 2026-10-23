@@ -5,7 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../providers/update_providers.dart';
 import '../services/update_platform.dart';
 import '../services/update_service.dart';
-import 'update_dialog.dart';
+import 'update_progress_view.dart';
 
 /// En Windows, comprueba GitHub al arrancar y muestra un actualizador a
 /// pantalla completa (estilo Discord) antes de entrar a la app.

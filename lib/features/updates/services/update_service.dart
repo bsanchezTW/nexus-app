@@ -20,7 +20,6 @@ class AppUpdateInfo {
     required this.remoteVersion,
     required this.releaseName,
     required this.notes,
-    required this.isForced,
     required this.asset,
     required this.tagName,
   });
@@ -29,7 +28,6 @@ class AppUpdateInfo {
   final String remoteVersion;
   final String releaseName;
   final String notes;
-  final bool isForced;
   final GitHubReleaseAsset asset;
   final String tagName;
 
@@ -46,7 +44,6 @@ enum UpdateStatus {
   verifying,
   installing,
   failed,
-  dismissed,
 }
 
 class UpdateState {
@@ -71,6 +68,14 @@ class UpdateState {
       status == UpdateStatus.downloading ||
       status == UpdateStatus.verifying ||
       status == UpdateStatus.installing;
+
+  /// Hay una versión nueva sin instalar: disponible, bajándose o con un
+  /// intento fallido. Sigue siendo `true` durante un re-check (el `info` se
+  /// conserva), así el aviso del inicio no parpadea al volver a la app.
+  bool get hasPendingUpdate =>
+      info != null &&
+      status != UpdateStatus.idle &&
+      status != UpdateStatus.upToDate;
 
   UpdateState copyWith({
     UpdateStatus? status,
@@ -267,8 +272,8 @@ class UpdateService {
         return const UpdateCheckOutcome.upToDate();
       }
 
-      // Check automático (home/resume): siempre obligatoria.
-      // Check manual: respeta [FORCE_UPDATE] en el body de la Release.
+      // Ninguna actualización es obligatoria: el inicio la avisa con una
+      // tarjeta y se instala desde Actualizaciones cuando el usuario quiera.
       return UpdateCheckOutcome.available(
         AppUpdateInfo(
           installedVersion: installed.toString(),
@@ -277,7 +282,6 @@ class UpdateService {
               ? release.name
               : 'RegisPro v${remote.toString()}',
           notes: release.notesForDisplay,
-          isForced: manual ? release.isForced : true,
           asset: asset,
           tagName: release.tagName,
         ),

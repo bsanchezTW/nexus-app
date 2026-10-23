@@ -6,17 +6,18 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/tw_tokens.dart';
 import '../../../core/utils/version_utils.dart';
+import '../../../core/widgets/app_image_skeleton.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
-import '../../../core/widgets/nexus_components.dart';
-import '../../../core/widgets/pressable.dart';
+import '../../../core/widgets/tw_components.dart';
 import '../../../data/models/github_release.dart';
 import '../../../data/repositories/github_release_repository.dart';
 import '../providers/update_providers.dart';
 import '../services/update_platform.dart';
 import '../services/update_service.dart';
-import '../widgets/update_dialog.dart';
+import '../widgets/update_progress_view.dart';
 
 IconData get _platformVersionIcon {
   final desktop =
@@ -29,6 +30,12 @@ IconData get _platformVersionIcon {
   return Symbols.smartphone_rounded;
 }
 
+/// Actualizaciones: versión instalada, la nueva (si hay) lista para bajar e
+/// instalar ahí mismo, y el historial.
+///
+/// Es el destino del aviso de versión nueva del inicio: las actualizaciones
+/// ya no llegan como modal, así que la descarga, el permiso de instalar y los
+/// reintentos viven en esta pantalla.
 class ActualizacionesScreen extends StatelessWidget {
   const ActualizacionesScreen({super.key});
 
@@ -193,11 +200,17 @@ class _ActualizacionesBodyState extends ConsumerState<_ActualizacionesBody> {
         state.errorMessage ?? 'No se pudo buscar actualizaciones.',
         isError: true,
       );
-      return;
     }
-    if (state.status == UpdateStatus.available ||
-        state.status == UpdateStatus.failed) {
-      await showAppUpdateDialog(context, ref);
+    // Con versión nueva no hay modal: la tarjeta aparece en esta pantalla.
+  }
+
+  void _reintentar() {
+    final controller = ref.read(updateControllerProvider.notifier);
+    final s = ref.read(updateControllerProvider);
+    if (s.needsInstallPermission || s.downloadedFilePath != null) {
+      controller.retryInstall();
+    } else {
+      controller.downloadAndInstall();
     }
   }
 
@@ -209,10 +222,8 @@ class _ActualizacionesBodyState extends ConsumerState<_ActualizacionesBody> {
   @override
   Widget build(BuildContext context) {
     final updateState = ref.watch(updateControllerProvider);
-    final checking = updateState.status == UpdateStatus.checking;
-    final versionLabel = _installedVersion.isEmpty
-        ? '…'
-        : _versionLabel(_installedVersion);
+    final controller = ref.read(updateControllerProvider.notifier);
+    final pendiente = otaUpdatesSupported && updateState.hasPendingUpdate;
 
     return AppScaffold(
       title: otaUpdatesSupported ? 'Actualizaciones' : 'Historial de versiones',
@@ -225,70 +236,70 @@ class _ActualizacionesBodyState extends ConsumerState<_ActualizacionesBody> {
           ),
           padding: AppSpacing.form,
           children: [
-            _CurrentVersionCard(
-              loadingVersion: _loadingVersion,
-              loadingNotes: _loadingNotes,
-              versionLabel: versionLabel,
-              releaseNotes: _releaseNotes,
-              notesError: _notesError,
-              checking: checking,
-              onBuscar: _buscar,
+            _VersionInstalada(
+              cargando: _loadingVersion,
+              version: _installedVersion.isEmpty
+                  ? ''
+                  : _versionLabel(_installedVersion),
+              estado: updateState,
+              pendiente: pendiente,
+              onBuscar: otaUpdatesSupported && !pendiente ? _buscar : null,
             ),
-            const SizedBox(height: AppSpacing.sectionGap),
-            const SectionLabel('Historial de versiones'),
-            const SizedBox(height: 12),
+            if (pendiente) ...[
+              const SizedBox(height: 12),
+              _NuevaVersion(
+                estado: updateState,
+                onDescargar: controller.downloadAndInstall,
+                onCancelar: controller.cancelDownload,
+                onReintentar: _reintentar,
+                onAbrirAjustes: controller.openInstallSettings,
+              ),
+            ],
+            const TwSectionLabel('En esta versión'),
+            _NotasActuales(
+              cargando: _loadingNotes,
+              notas: _releaseNotes,
+              error: _notesError,
+            ),
+            const TwSectionLabel('Versiones anteriores'),
             if (_loadingHistory)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-              )
-            else if (_historyError != null)
-              Text(
-                _historyError!,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                  height: 1.4,
-                ),
-              )
-            else if (_previousReleases.isEmpty)
-              const Text(
-                'No hay versiones anteriores publicadas.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                  height: 1.4,
+              const _HistorialEsqueleto()
+            else if (_historyError != null || _previousReleases.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 3),
+                child: Text(
+                  _historyError ?? 'No hay versiones anteriores publicadas.',
+                  style: TwText.tileSubtitle,
                 ),
               )
             else
-              ...List.generate(_previousReleases.length, (index) {
-                final release = _previousReleases[index];
-                final expanded = _expandedTag == release.tagName;
-                return Padding(
-                  padding: EdgeInsets.only(
-                    bottom: index == _previousReleases.length - 1 ? 0 : 10,
-                  ),
-                  child: _VersionHistoryTile(
-                    versionLabel: _versionLabel(release.tagName),
-                    releaseName: release.name.trim().isEmpty
-                        ? null
-                        : release.name.trim(),
-                    notes: release.notesForDisplay,
-                    expanded: expanded,
-                    onToggle: () {
-                      setState(() {
-                        _expandedTag = expanded ? null : release.tagName;
-                      });
-                    },
-                  ),
-                );
-              }),
+              TwCard(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    for (var i = 0; i < _previousReleases.length; i++) ...[
+                      if (i > 0)
+                        const Divider(
+                          height: 1,
+                          indent: 16,
+                          endIndent: 16,
+                          color: TwColors.border07,
+                        ),
+                      _FilaVersion(
+                        release: _previousReleases[i],
+                        versionLabel: _versionLabel(
+                          _previousReleases[i].tagName,
+                        ),
+                        expandida: _expandedTag == _previousReleases[i].tagName,
+                        onToggle: () => setState(() {
+                          final tag = _previousReleases[i].tagName;
+                          _expandedTag = _expandedTag == tag ? null : tag;
+                        }),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -296,133 +307,109 @@ class _ActualizacionesBodyState extends ConsumerState<_ActualizacionesBody> {
   }
 }
 
-class _CurrentVersionCard extends StatelessWidget {
-  const _CurrentVersionCard({
-    required this.loadingVersion,
-    required this.loadingNotes,
-    required this.versionLabel,
-    required this.releaseNotes,
-    required this.notesError,
-    required this.checking,
+/// Cabecera: icono de la plataforma, versión instalada y una línea de estado.
+class _VersionInstalada extends StatelessWidget {
+  const _VersionInstalada({
+    required this.cargando,
+    required this.version,
+    required this.estado,
+    required this.pendiente,
     required this.onBuscar,
   });
 
-  final bool loadingVersion;
-  final bool loadingNotes;
-  final String versionLabel;
-  final String? releaseNotes;
-  final String? notesError;
-  final bool checking;
-  final VoidCallback onBuscar;
+  final bool cargando;
+  final String version;
+  final UpdateState estado;
+  final bool pendiente;
+
+  /// `null` oculta el botón (sin OTA, o ya hay una versión nueva a la vista).
+  final VoidCallback? onBuscar;
+
+  static final _estiloVersion = TwText.tileTitle.copyWith(
+    fontSize: 19,
+    fontWeight: FontWeight.w800,
+  );
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final buscando = estado.status == UpdateStatus.checking && !pendiente;
+    final (puntoColor, textoEstado) = pendiente
+        ? (TwColors.blueInk, 'Hay una versión nueva')
+        : estado.status == UpdateStatus.upToDate
+        ? (TwColors.greenInk, 'Estás al día')
+        : (TwColors.chevron, 'Versión instalada');
+
+    return TwCard(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.border),
-        boxShadow: AppColors.shadowRest,
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(_platformVersionIcon, color: AppColors.primary),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text(
-                  'Versión instalada',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.ink,
-                  ),
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: TwColors.blueTint,
+                  borderRadius: TwRadii.iconLg,
+                ),
+                child: Icon(
+                  _platformVersionIcon,
+                  size: 24,
+                  color: TwColors.hero700,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (cargando)
+                      AppSkeletonText(
+                        muestra: 'RegisPro v1.0.0',
+                        style: _estiloVersion,
+                        width: 150,
+                      )
+                    else
+                      Text('RegisPro $version', style: _estiloVersion),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: puntoColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          textoEstado,
+                          style: TwText.tileSubtitle.copyWith(
+                            color: TwColors.secondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          if (loadingVersion)
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else
-            Text(
-              versionLabel,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: AppColors.ink,
-              ),
-            ),
-          const SizedBox(height: 14),
-          const Text(
-            'Descripción',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ink,
-            ),
-          ),
-          const SizedBox(height: 6),
-          if (loadingNotes)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
-          else if (releaseNotes != null)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 280),
-              child: SingleChildScrollView(
-                child: Text(
-                  releaseNotes!,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                    height: 1.45,
-                  ),
-                ),
-              ),
-            )
-          else
-            Text(
-              notesError ??
-                  'No se encontró la descripción de esta versión en GitHub.',
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
-            ),
-          if (otaUpdatesSupported) ...[
+          if (onBuscar != null) ...[
             const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: checking ? null : onBuscar,
-              icon: checking
+            OutlinedButton.icon(
+              onPressed: buscando ? null : onBuscar,
+              icon: buscando
                   ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Symbols.search_rounded, size: 20),
-              label: Text(checking ? 'Buscando…' : 'Buscar actualizaciones'),
+                  : const Icon(Symbols.refresh_rounded, size: 20),
+              label: Text(buscando ? 'Buscando…' : 'Buscar actualizaciones'),
             ),
           ],
         ],
@@ -431,123 +418,384 @@ class _CurrentVersionCard extends StatelessWidget {
   }
 }
 
-class _VersionHistoryTile extends StatelessWidget {
-  const _VersionHistoryTile({
+/// La versión nueva, lista para bajar. Aquí se descarga, se concede el
+/// permiso de instalar y se reintenta; nada de esto bloquea el resto de la
+/// app.
+class _NuevaVersion extends StatelessWidget {
+  const _NuevaVersion({
+    required this.estado,
+    required this.onDescargar,
+    required this.onCancelar,
+    required this.onReintentar,
+    required this.onAbrirAjustes,
+  });
+
+  final UpdateState estado;
+  final VoidCallback onDescargar;
+  final VoidCallback onCancelar;
+  final VoidCallback onReintentar;
+  final VoidCallback onAbrirAjustes;
+
+  @override
+  Widget build(BuildContext context) {
+    final info = estado.info!;
+    final status = estado.status;
+    final descargando = status == UpdateStatus.downloading;
+    final verificando = status == UpdateStatus.verifying;
+    final instalando = status == UpdateStatus.installing;
+    final fallo = status == UpdateStatus.failed;
+    final faltaPermiso =
+        status == UpdateStatus.awaitingInstallPermission ||
+        (fallo && estado.needsInstallPermission);
+
+    final Widget acciones;
+    if (descargando || verificando || instalando) {
+      acciones = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          UpdateProgressView(
+            progress: descargando ? estado.progress : 1,
+            label: verificando
+                ? 'Verificando integridad…'
+                : instalando
+                ? otaInstallingLabel
+                : null,
+          ),
+          if (descargando)
+            TextButton(onPressed: onCancelar, child: const Text('Cancelar')),
+        ],
+      );
+    } else if (faltaPermiso) {
+      acciones = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _Aviso(
+            texto:
+                estado.errorMessage ??
+                'Para actualizar RegisPro debes permitir la instalación de '
+                    'aplicaciones. Actívalo en Configuración y vuelve aquí.',
+            color: TwColors.hero700,
+            fondo: TwColors.blueTint,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onAbrirAjustes,
+                  child: const Text('Configuración'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: onReintentar,
+                  child: const Text('Reintentar'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    } else if (fallo) {
+      acciones = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (estado.errorMessage != null) ...[
+            _Aviso(
+              texto: estado.errorMessage!,
+              color: TwColors.danger,
+              fondo: TwColors.dangerTint,
+            ),
+            const SizedBox(height: 12),
+          ],
+          FilledButton.icon(
+            onPressed: onReintentar,
+            icon: const Icon(Symbols.refresh_rounded, size: 20),
+            label: const Text('Reintentar'),
+          ),
+        ],
+      );
+    } else {
+      acciones = FilledButton.icon(
+        key: const Key('actualizaciones_descargar'),
+        onPressed: onDescargar,
+        icon: const Icon(Symbols.download_rounded, size: 20),
+        label: const Text('Descargar e instalar'),
+      );
+    }
+
+    return TwCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'v${info.remoteVersion} disponible',
+                  style: TwText.tileTitle.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(info.formattedSize, style: TwText.tileSubtitle),
+            ],
+          ),
+          if (info.notes.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _NotasPlegables(notas: info.notes),
+          ],
+          const SizedBox(height: 16),
+          acciones,
+        ],
+      ),
+    );
+  }
+}
+
+class _Aviso extends StatelessWidget {
+  const _Aviso({required this.texto, required this.color, required this.fondo});
+
+  final String texto;
+  final Color color;
+  final Color fondo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: fondo, borderRadius: TwRadii.field),
+      child: Text(
+        texto,
+        style: TwText.supportTitle.copyWith(color: color, height: 1.4),
+      ),
+    );
+  }
+}
+
+/// Estilo de las notas de versión: más aire entre líneas que un subtítulo.
+const _estiloNotas = TextStyle(
+  fontSize: 13.5,
+  height: 1.5,
+  fontWeight: FontWeight.w500,
+  color: TwColors.secondary,
+);
+
+/// Notas de una versión recortadas a unas líneas, con "Ver todo".
+class _NotasPlegables extends StatefulWidget {
+  const _NotasPlegables({required this.notas});
+
+  final String notas;
+
+  @override
+  State<_NotasPlegables> createState() => _NotasPlegablesState();
+}
+
+class _NotasPlegablesState extends State<_NotasPlegables> {
+  static const _lineas = 5;
+
+  bool _abiertas = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: widget.notas, style: _estiloNotas),
+          textDirection: TextDirection.ltr,
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: _lineas,
+        )..layout(maxWidth: constraints.maxWidth);
+        final recortadas = painter.didExceedMaxLines;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AnimatedSize(
+              duration: AppMotion.toggle,
+              curve: AppMotion.ease,
+              alignment: Alignment.topCenter,
+              child: Text(
+                widget.notas,
+                style: _estiloNotas,
+                maxLines: _abiertas ? null : _lineas,
+                overflow: _abiertas ? null : TextOverflow.ellipsis,
+              ),
+            ),
+            if (recortadas)
+              TwPressable(
+                onTap: () => setState(() => _abiertas = !_abiertas),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6, bottom: 2),
+                  child: Text(
+                    _abiertas ? 'Ver menos' : 'Ver todo',
+                    style: TwText.supportTitle.copyWith(
+                      color: TwColors.blueInk,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _NotasActuales extends StatelessWidget {
+  const _NotasActuales({
+    required this.cargando,
+    required this.notas,
+    required this.error,
+  });
+
+  final bool cargando;
+  final String? notas;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    if (cargando) {
+      return const TwCard(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AppSkeletonText(muestra: 'Notas', style: _estiloNotas),
+            SizedBox(height: 4),
+            AppSkeletonText(muestra: 'Notas', style: _estiloNotas, width: 180),
+          ],
+        ),
+      );
+    }
+    return TwCard(
+      padding: const EdgeInsets.all(16),
+      child: notas != null
+          ? _NotasPlegables(notas: notas!)
+          : Text(
+              error ??
+                  'No se encontró la descripción de esta versión en GitHub.',
+              style: TwText.tileSubtitle,
+            ),
+    );
+  }
+}
+
+/// Versión anterior: una fila que se despliega con sus notas.
+class _FilaVersion extends StatelessWidget {
+  const _FilaVersion({
+    required this.release,
     required this.versionLabel,
-    required this.releaseName,
-    required this.notes,
-    required this.expanded,
+    required this.expandida,
     required this.onToggle,
   });
 
+  final GitHubRelease release;
   final String versionLabel;
-  final String? releaseName;
-  final String notes;
-  final bool expanded;
+  final bool expandida;
   final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
-    final description = notes.isEmpty
-        ? 'Este release no incluye descripción.'
-        : notes;
+    final nombre = release.name.trim();
+    final notas = release.notesForDisplay;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.border),
-        boxShadow: AppColors.shadowRest,
-      ),
-      clipBehavior: Clip.antiAlias,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onToggle,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Text(versionLabel, style: TwText.supportTitle),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: nombre.isNotEmpty && nombre != versionLabel
+                      ? Text(
+                          nombre,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TwText.tileSubtitle,
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                AnimatedRotation(
+                  turns: expandida ? 0.5 : 0,
+                  duration: AppMotion.toggle,
+                  curve: AppMotion.ease,
+                  child: const Icon(
+                    Symbols.expand_more_rounded,
+                    size: 20,
+                    color: TwColors.chevron,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: AppMotion.toggle,
+          curve: AppMotion.ease,
+          alignment: Alignment.topCenter,
+          child: expandida
+              ? Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                  child: Text(
+                    notas.isEmpty
+                        ? 'Este release no incluye descripción.'
+                        : notas,
+                    style: _estiloNotas,
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
+    );
+  }
+}
+
+class _HistorialEsqueleto extends StatelessWidget {
+  const _HistorialEsqueleto();
+
+  @override
+  Widget build(BuildContext context) {
+    return TwCard(
+      padding: EdgeInsets.zero,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Pressable(
-            onTap: onToggle,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          for (var i = 0; i < 3; i++) ...[
+            if (i > 0)
+              const Divider(
+                height: 1,
+                indent: 16,
+                endIndent: 16,
+                color: TwColors.border07,
+              ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.tintNavy,
-                      borderRadius: BorderRadius.circular(AppRadius.tile),
-                    ),
-                    child: const Icon(
-                      Symbols.history_rounded,
-                      color: AppColors.primary,
-                      size: 22,
-                    ),
+                  AppSkeletonText(
+                    muestra: 'v1.0.0',
+                    style: TwText.supportTitle,
+                    width: 52,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          versionLabel,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.ink,
-                          ),
-                        ),
-                        if (releaseName != null &&
-                            releaseName != versionLabel) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            releaseName!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  AnimatedRotation(
-                    turns: expanded ? 0.5 : 0,
-                    duration: AppMotion.toggle,
-                    curve: AppMotion.ease,
-                    child: const Icon(
-                      Symbols.expand_more_rounded,
-                      color: AppColors.chevronMuted,
-                    ),
+                  SizedBox(width: 8),
+                  AppSkeletonText(
+                    muestra: 'Nombre',
+                    style: TwText.tileSubtitle,
+                    width: 120,
                   ),
                 ],
               ),
             ),
-          ),
-          AnimatedSize(
-            duration: AppMotion.toggle,
-            curve: AppMotion.ease,
-            alignment: Alignment.topCenter,
-            child: expanded
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Divider(height: 1, color: AppColors.divider),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                        child: Text(
-                          description,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                            height: 1.45,
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : const SizedBox.shrink(),
-          ),
+          ],
         ],
       ),
     );
