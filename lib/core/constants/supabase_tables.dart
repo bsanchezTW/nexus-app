@@ -11,7 +11,6 @@ class SupabaseTables {
   static const registrados = 'registrados';
   static const subeventos = 'subeventos';
   static const inscripcionesSubevento = 'inscripciones_subevento';
-  static const enviosQr = 'envios_qr';
 
   static const usuariosEventos = 'usuarios_eventos';
 

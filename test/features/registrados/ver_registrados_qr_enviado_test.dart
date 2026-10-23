@@ -8,12 +8,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:transworld_nexus/core/constants/app_role.dart';
 import 'package:transworld_nexus/core/network/connectivity_service.dart';
 import 'package:transworld_nexus/core/router/route_paths.dart';
-import 'package:transworld_nexus/data/models/envio_qr.dart';
 import 'package:transworld_nexus/data/models/evento.dart';
 import 'package:transworld_nexus/data/models/perfil.dart';
 import 'package:transworld_nexus/data/models/registrado.dart';
 import 'package:transworld_nexus/data/offline/sync_queue_service.dart';
-import 'package:transworld_nexus/data/repositories/envios_qr_repository.dart';
 import 'package:transworld_nexus/features/auth/providers/auth_providers.dart';
 import 'package:transworld_nexus/features/eventos/providers/eventos_providers.dart';
 import 'package:transworld_nexus/features/registrados/providers/registrados_providers.dart';
@@ -21,27 +19,11 @@ import 'package:transworld_nexus/features/registrados/screens/ver_registrados_sc
 import 'package:transworld_nexus/features/subeventos/providers/inscripciones_providers.dart';
 import 'package:transworld_nexus/features/subeventos/providers/subeventos_providers.dart';
 
-/// Historial vacío: el QR se envió antes de que existiera `envios_qr`.
-class _EnviosSinFilas extends EnviosQrRepository {
-  _EnviosSinFilas()
-    : super(
-        SupabaseClient(
-          'http://localhost',
-          'fake-anon-key',
-          authOptions: const AuthClientOptions(autoRefreshToken: false),
-        ),
-      );
-
-  @override
-  Future<List<EnvioQr>> listarPorRegistrado(String registradoId) async =>
-      const [];
-}
-
 void main() {
   setUpAll(() => initializeDateFormatting('es'));
 
   testWidgets(
-    'QR enviado antes del historial: ícono en la tarjeta y fila sin fecha',
+    'QR enviado: ícono en la misma línea del estado, sin agrandar la tarjeta',
     (tester) async {
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(400, 900);
@@ -107,7 +89,6 @@ void main() {
             inscripcionesPorEventoProvider.overrideWith(
               (ref, id) async => const [],
             ),
-            enviosQrRepositoryProvider.overrideWithValue(_EnviosSinFilas()),
           ],
           child: MaterialApp.router(routerConfig: router),
         ),
@@ -121,12 +102,6 @@ void main() {
       final estado = tester.getCenter(find.text('Acreditado'));
       final chip = tester.getCenter(find.byKey(const Key('chip_qr_enviado')));
       expect(chip.dy, moreOrLessEquals(estado.dy, epsilon: 1));
-
-      await tester.tap(find.byTooltip('Código QR de acreditación'));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('envio_sin_historial')), findsOneWidget);
-      expect(find.text('Todavía no se ha enviado el QR.'), findsNothing);
     },
   );
 }
