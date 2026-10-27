@@ -789,7 +789,7 @@ Future<void> refrescarLecturas(
 
   var fallo = false;
   try {
-    await Future.wait(pendientes());
+    await esperarLecturasVigentes(pendientes);
   } catch (_) {
     // La pantalla ya muestra el error de su provider; aquí solo se avisa.
     fallo = true;
@@ -804,6 +804,31 @@ Future<void> refrescarLecturas(
           : kMensajeSinConexion,
       isError: true,
     );
+  }
+}
+
+/// Espera las lecturas de [pendientes] y, si alguna carga fue reemplazada
+/// mientras corría, espera la que la reemplazó.
+///
+/// Al recargar se invalidan a la vez lecturas que dependen unas de otras (el
+/// perfil y los fijados, el resumen y los destacados). La dependiente arranca
+/// con la dependencia todavía recargándose; cuando esta termina, la
+/// dependiente se reconstruye y la primera carga, ya descartada, falla con
+/// [StateError] al usar su `ref`. Esa carga no es la que se ve en pantalla ni
+/// un fallo del servidor: se vuelve a pedir el futuro vigente. Cualquier otro
+/// error se propaga tal cual.
+@visibleForTesting
+Future<void> esperarLecturasVigentes(
+  List<Future<Object?>> Function() pendientes, {
+  int intentos = 3,
+}) async {
+  for (var intento = 1; ; intento++) {
+    try {
+      await Future.wait(pendientes());
+      return;
+    } on StateError {
+      if (intento >= intentos) rethrow;
+    }
   }
 }
 
