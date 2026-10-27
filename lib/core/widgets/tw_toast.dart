@@ -39,10 +39,21 @@ class TwToast {
   }) {
     _timer?.cancel();
     _mount(context);
-    _data.value = _TwToastData(message, kind, ++_seq);
+    _data.value = _TwToastData(sinPuntoFinal(message), kind, ++_seq);
     if (kind != TwToastKind.progress) {
       _timer = Timer(duration, hide);
     }
+  }
+
+  /// Los toasts no llevan punto final (se ven mejor sin él), tampoco los
+  /// mensajes que llegan del servidor. Los puntos suspensivos se mantienen.
+  @visibleForTesting
+  static String sinPuntoFinal(String message) {
+    final texto = message.trimRight();
+    if (texto.endsWith('.') && !texto.endsWith('..')) {
+      return texto.substring(0, texto.length - 1);
+    }
+    return texto;
   }
 
   static void info(BuildContext c, String m) =>

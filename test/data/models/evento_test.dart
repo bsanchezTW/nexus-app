@@ -118,24 +118,50 @@ void main() {
     expect(original.toInsertMap().containsKey('banner_url'), isFalse);
   });
 
-  test('urlMapaEmbebible acepta el enlace o el iframe de Insertar un mapa', () {
-    const embed = 'https://www.google.com/maps/embed?pb=!1m18!2sHotel';
-    expect(urlMapaEmbebible(embed), embed);
+  test('urlGoogleMaps acepta el enlace de Compartir tal como se copia', () {
+    // Mismos casos que googleMapsLink en eventos-web (domain/maps.js).
     expect(
-      urlMapaEmbebible(
+      urlGoogleMaps('Casa Piedra\nhttps://maps.app.goo.gl/AbC123?g_st=iw'),
+      'https://maps.app.goo.gl/AbC123?g_st=iw',
+    );
+    expect(urlGoogleMaps('https://goo.gl/maps/xyz'), 'https://goo.gl/maps/xyz');
+    const lugar =
+        'https://www.google.com/maps/place/Casa+Piedra/@-33.39,-70.59,17z';
+    expect(urlGoogleMaps(lugar), lugar);
+    expect(
+      urlGoogleMaps('https://www.google.cl/maps/@-33.4,-70.6,15z'),
+      isNotNull,
+    );
+    expect(
+      urlGoogleMaps('https://maps.google.com/?q=-12.09,-77.02'),
+      isNotNull,
+    );
+  });
+
+  test('urlGoogleMaps sigue aceptando Insertar un mapa', () {
+    const embed = 'https://www.google.com/maps/embed?pb=!1m18!2sHotel';
+    expect(urlGoogleMaps(embed), embed);
+    expect(
+      urlGoogleMaps(
         '<iframe src="https://www.google.com/maps/embed?pb=!1m1&amp;x=1" '
         'width="600" height="450" loading="lazy"></iframe>',
       ),
       'https://www.google.com/maps/embed?pb=!1m1&x=1',
     );
     expect(
-      urlMapaEmbebible('https://maps.google.com/maps?q=Vitacura&output=embed'),
-      isNotNull,
+      urlGoogleMaps('http://www.google.com/maps/embed?pb=1'),
+      'https://www.google.com/maps/embed?pb=1',
     );
-    expect(urlMapaEmbebible('https://maps.app.goo.gl/abc123'), isNull);
-    // La web solo deja insertar www.google.com y maps.google.com (CSP).
-    expect(urlMapaEmbebible('https://www.google.cl/maps/embed?pb=1'), isNull);
-    expect(urlMapaEmbebible('http://www.google.com/maps/embed?pb=1'), isNull);
-    expect(urlMapaEmbebible('  '), isNull);
+  });
+
+  test('urlGoogleMaps rechaza lo que no es Google Maps', () {
+    expect(urlGoogleMaps('  '), isNull);
+    expect(urlGoogleMaps('Calle Nueva 1890, Huechuraba'), isNull);
+    expect(
+      urlGoogleMaps('https://www.google.com/search?q=casa+piedra'),
+      isNull,
+    );
+    expect(urlGoogleMaps('https://goo.gl/otra-cosa'), isNull);
+    expect(urlGoogleMaps('https://evil.example/maps/embed?pb=1'), isNull);
   });
 }

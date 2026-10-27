@@ -201,25 +201,38 @@ final _srcIframe = RegExp(
   r'''src\s*=\s*["']([^"']+)["']''',
   caseSensitive: false,
 );
-final _mapaEmbebible = RegExp(
-  r'^https://(www\.google\.com/maps/embed\?|maps\.google\.com/maps\?.*output=embed)',
-);
+final _primeraUrl = RegExp(r'''https?://[^\s"'<>]+''', caseSensitive: false);
+final _hostGoogle = RegExp(r'^(www\.|maps\.)?google\.[a-z]{2,3}(\.[a-z]{2})?$');
 
-/// Enlace de Google Maps que la web de eventos puede insertar como mapa.
+/// Enlace de Google Maps limpio a partir de lo que pegó el staff, o null si no
+/// es de Google Maps.
 ///
-/// Misma regla que `embeddableMapUrl` en eventos-web (`domain/maps.js`): la web
-/// solo deja cargar iframes de `www.google.com` y `maps.google.com` (CSP) y lo
-/// muestra en «Cómo llegar» del detalle público (`/eventos/<slug>`).
+/// Basta el enlace que da Google Maps al tocar «Compartir» en un lugar
+/// (`https://maps.app.goo.gl/…`); también sirve el de la barra del navegador
+/// (`google.com/maps/place/…`) o el de «Insertar un mapa» (o su `<iframe>`).
+/// Acepta el texto completo que copia el teléfono ("Casa Piedra\nhttps://…").
 ///
-/// Acepta el enlace de "Insertar un mapa" o el `<iframe>` completo que copia
-/// Google Maps (se toma su `src`). Devuelve null si está vacío o no sirve para
-/// insertar (p. ej. un enlace corto `maps.app.goo.gl`, que no se puede incrustar).
-String? urlMapaEmbebible(String? texto) {
-  var valor = (texto ?? '').trim();
+/// Misma regla que `googleMapsLink` en eventos-web (`domain/maps.js`): con este
+/// enlace la web arma el mapa de «Cómo llegar» en el detalle público
+/// (`/eventos/<slug>`); sin enlace, lo arma con la dirección del evento.
+String? urlGoogleMaps(String? texto) {
+  final valor = (texto ?? '').trim();
   if (valor.isEmpty) return null;
-  final src = _srcIframe.firstMatch(valor);
-  if (src != null) valor = src.group(1)!.replaceAll('&amp;', '&').trim();
-  return _mapaEmbebible.hasMatch(valor) ? valor : null;
+  final crudo =
+      _srcIframe.firstMatch(valor)?.group(1) ??
+      _primeraUrl.firstMatch(valor)?.group(0);
+  final enlace = (crudo ?? '').replaceAll('&amp;', '&').trim();
+  final uri = Uri.tryParse(enlace);
+  if (uri == null || !uri.hasAuthority) return null;
+  final host = uri.host.toLowerCase();
+  final corto =
+      host == 'maps.app.goo.gl' ||
+      (host == 'goo.gl' && uri.path.startsWith('/maps'));
+  final largo =
+      _hostGoogle.hasMatch(host) &&
+      (host.startsWith('maps.') || uri.path.startsWith('/maps'));
+  if (!corto && !largo) return null;
+  return enlace.replaceFirst(RegExp('^http:', caseSensitive: false), 'https:');
 }
 
 TimeOfDay? horaDesdeTexto(String? raw) {

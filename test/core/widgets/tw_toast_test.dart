@@ -66,4 +66,18 @@ void main() {
 
     expect(find.text('Listo'), findsNothing);
   });
+
+  test(
+    'el toast no lleva punto final; los puntos suspensivos se mantienen',
+    () {
+      expect(TwToast.sinPuntoFinal('Evento guardado.'), 'Evento guardado');
+      expect(
+        TwToast.sinPuntoFinal('Sin red. Se guardará después. '),
+        'Sin red. Se guardará después',
+      );
+      expect(TwToast.sinPuntoFinal('Sincronizando...'), 'Sincronizando...');
+      expect(TwToast.sinPuntoFinal('Sincronizando…'), 'Sincronizando…');
+      expect(TwToast.sinPuntoFinal('Listo'), 'Listo');
+    },
+  );
 }

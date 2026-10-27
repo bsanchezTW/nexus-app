@@ -1,10 +1,11 @@
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/errors/rpe_exception.dart';
 import '../../../core/router/refresh_on_visible.dart';
@@ -312,7 +313,7 @@ class _CrearEditarEventoFormState
           horaInicio: _horaInicio,
           horaFin: _horaFin,
           inscripcionesCierre: _cierre,
-          mapaUrl: urlMapaEmbebible(_mapaController.text),
+          mapaUrl: urlGoogleMaps(_mapaController.text),
         );
 
         final repo = ref.read(eventosRepositoryProvider);
@@ -774,34 +775,81 @@ class _CrearEditarEventoFormState
           ),
         ),
         FormLabeledField(
-          label: 'Mapa (Google Maps)',
+          label: 'Ubicación en Google Maps',
           opcional: true,
           ayuda:
-              'En Google Maps: Compartir → Insertar un mapa → Copiar HTML. '
-              'Pega aquí el código o solo el enlace; la web lo muestra en '
-              '«Cómo llegar», en el detalle público del evento.',
-          child: TextFormField(
-            controller: _mapaController,
-            enabled: editable,
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-            maxLines: null,
-            decoration: const InputDecoration(
-              hintText: 'https://www.google.com/maps/embed?pb=…',
-              prefixIcon: Icon(Symbols.map_rounded, size: 20),
-            ),
-            validator: (valor) {
-              final texto = valor?.trim() ?? '';
-              if (texto.isEmpty || urlMapaEmbebible(texto) != null) {
-                return null;
-              }
-              return 'Usa el enlace de "Insertar un mapa" de Google Maps '
-                  '(https://www.google.com/maps/embed?…).';
+              'En Google Maps busca el lugar, toca Compartir y copia el '
+              'enlace; después toca Pegar. La web arma el mapa sola. Si lo '
+              'dejas vacío, usa la dirección del evento.',
+          child: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _mapaController,
+            builder: (context, valor, _) {
+              final enlace = urlGoogleMaps(valor.text);
+              return TextFormField(
+                controller: _mapaController,
+                enabled: editable,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                decoration: InputDecoration(
+                  hintText: 'https://maps.app.goo.gl/…',
+                  prefixIcon: const Icon(Symbols.map_rounded, size: 20),
+                  suffixIcon: !editable
+                      ? null
+                      : enlace != null
+                      ? IconButton(
+                          tooltip: 'Ver el lugar en Google Maps',
+                          icon: const Icon(Symbols.open_in_new_rounded),
+                          onPressed: () => _abrirMapa(enlace),
+                        )
+                      : IconButton(
+                          tooltip: 'Pegar enlace',
+                          icon: const Icon(Symbols.content_paste_rounded),
+                          onPressed: _pegarMapa,
+                        ),
+                ),
+                validator: (valor) {
+                  final texto = valor?.trim() ?? '';
+                  if (texto.isEmpty || urlGoogleMaps(texto) != null) {
+                    return null;
+                  }
+                  return 'Pega el enlace que da Google Maps al tocar Compartir';
+                },
+              );
             },
           ),
         ),
       ],
     );
+  }
+
+  /// Pega el enlace del portapapeles ya limpio: el botón Compartir del teléfono
+  /// copia también el nombre del lugar ("Casa Piedra\nhttps://…").
+  Future<void> _pegarMapa() async {
+    final datos = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+    final texto = datos?.text?.trim() ?? '';
+    final enlace = urlGoogleMaps(texto);
+    if (enlace == null) {
+      showAppSnackBar(
+        context,
+        texto.isEmpty
+            ? 'No hay nada copiado. En Google Maps toca Compartir y copia el enlace'
+            : 'Lo copiado no es un enlace de Google Maps',
+        isError: true,
+      );
+      return;
+    }
+    _mapaController.text = enlace;
+  }
+
+  Future<void> _abrirMapa(String enlace) async {
+    final ok = await launchUrl(
+      Uri.parse(enlace),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok && mounted) {
+      showAppSnackBar(context, 'No se pudo abrir Google Maps', isError: true);
+    }
   }
 
   Widget _seccionTalleres() {
