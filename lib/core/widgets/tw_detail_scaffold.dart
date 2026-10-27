@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
@@ -119,18 +118,6 @@ class _TwDetailScaffoldState extends State<TwDetailScaffold> {
   final ScrollController _controller = ScrollController();
   final ValueNotifier<double> _scrollY = ValueNotifier(0);
 
-  /// Alto del hero en el último layout (`null` hasta el primero).
-  double? _altoHero;
-
-  /// Scroll desde el que la barra empieza a colapsar: arriba de todo sin
-  /// hero; con hero, cuando su borde inferior llega a la barra.
-  double _inicioColapso(double headerHeight) {
-    if (widget.heroBuilder == null) return 0;
-    final alto = _altoHero;
-    if (alto == null) return double.infinity;
-    return math.max(0, alto - headerHeight - TwDetailBarMetrics.sheetOverlap);
-  }
-
   @override
   void initState() {
     super.initState();
@@ -205,15 +192,12 @@ class _TwDetailScaffoldState extends State<TwDetailScaffold> {
                 padding: EdgeInsets.only(bottom: bottomPad),
                 child: Column(
                   children: [
-                    _MedidorAlto(
-                      onAlto: (alto) => _altoHero = alto,
-                      child: heroBuilder(
-                        EdgeInsets.fromLTRB(
-                          TwSpacing.screenH,
-                          headerHeight + 4,
-                          TwSpacing.screenH,
-                          TwDetailBarMetrics.sheetOverlap + 22,
-                        ),
+                    heroBuilder(
+                      EdgeInsets.fromLTRB(
+                        TwSpacing.screenH,
+                        headerHeight + 4,
+                        TwSpacing.screenH,
+                        TwDetailBarMetrics.sheetOverlap + 22,
                       ),
                     ),
                     // La hoja sube sobre el hero; lo que deja abajo es del
@@ -266,7 +250,7 @@ class _TwDetailScaffoldState extends State<TwDetailScaffold> {
                 child: ValueListenableBuilder<double>(
                   valueListenable: _scrollY,
                   builder: (context, scrollY, _) => _TwDetailBar(
-                    scrollOffset: scrollY - _inicioColapso(headerHeight),
+                    scrollOffset: scrollY,
                     sobreHero: widget.heroBuilder != null,
                     topInset: topInset,
                     eyebrow: widget.eyebrow,
@@ -306,7 +290,9 @@ class _TwDetailBar extends StatelessWidget {
   final double scrollOffset;
 
   /// Flota sobre un hero oscuro: sin eyebrow y con la barra de estado clara
-  /// hasta colapsar.
+  /// hasta colapsar. El contenido del hero arranca justo bajo los botones,
+  /// así que colapsa apenas se desplaza, con el mismo vidrio que la cabecera
+  /// del inicio.
   final bool sobreHero;
   final double topInset;
   final String eyebrow;
@@ -337,21 +323,25 @@ class _TwDetailBar extends StatelessWidget {
             Positioned.fill(
               child: IgnorePointer(
                 child: ClipRect(
-                  child: TwGlassFilter(
-                    sigma: 18,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: TwColors.bg.withValues(alpha: 0.72 * t),
-                        border: Border(
-                          bottom: BorderSide(
-                            color: TwColors.border07.withValues(
-                              alpha: TwColors.border07.a * t,
+                  child: sobreHero
+                      ? TwFrostedGlass(
+                          color: TwColors.bg.withValues(alpha: 0.72 * t),
+                        )
+                      : TwGlassFilter(
+                          sigma: 18,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: TwColors.bg.withValues(alpha: 0.72 * t),
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: TwColors.border07.withValues(
+                                    alpha: TwColors.border07.a * t,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                  ),
                 ),
               ),
             ),
@@ -426,37 +416,5 @@ class _TwDetailBar extends StatelessWidget {
       value: t < 0.5 ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: barra,
     );
-  }
-}
-
-/// Reporta el alto de [child] tras cada layout, sin reconstruir nada: la
-/// barra lo lee recién en el siguiente scroll.
-class _MedidorAlto extends SingleChildRenderObjectWidget {
-  const _MedidorAlto({required this.onAlto, required super.child});
-
-  final ValueChanged<double> onAlto;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderMedidorAlto(onAlto);
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    _RenderMedidorAlto renderObject,
-  ) {
-    renderObject.onAlto = onAlto;
-  }
-}
-
-class _RenderMedidorAlto extends RenderProxyBox {
-  _RenderMedidorAlto(this.onAlto);
-
-  ValueChanged<double> onAlto;
-
-  @override
-  void performLayout() {
-    super.performLayout();
-    onAlto(size.height);
   }
 }
