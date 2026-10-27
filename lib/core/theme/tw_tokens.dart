@@ -132,8 +132,11 @@ class TwColors {
   static const whiteA75 = Color(0xBFFFFFFF); // eyebrow sobre hero
 
   // ---------- Toast ----------
-  static const toastBg = Color(0xF20E1E34); // 95%
-  static const toastInfo = Color(0xFF8FB6E8);
+  // Opaco: sobre fotos o listas no se transparenta. Un punto más oscuro que
+  // el degradado de las cards de evento sin foto ([TwGradients.hero]), para
+  // que no se confunda con ellas cuando cae encima.
+  static const toastBg = Color(0xFF091A2F);
+  static const toastInfo = Color(0xFFA9C8F0);
   static const toastSuccess = Color(0xFF5AD696);
   static const toastError = Color(0xFFF3B4B4);
 }

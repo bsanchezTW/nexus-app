@@ -233,4 +233,39 @@ void main() {
     expect(enCurso.yaOcurrio, isFalse);
     expect(proximaActividadVigente([futura, enCurso])?.id, 'curso');
   });
+
+  group('Escanear QR', () {
+    final hoy = DateTime.now();
+    final hoySolo = DateTime(hoy.year, hoy.month, hoy.day);
+
+    Evento evento(DateTime fecha, {int dias = 1}) =>
+        Evento(id: 'e1', nombre: 'Evento', fecha: fecha, duracionDias: dias);
+
+    test('se ofrece en un evento que todavía no termina', () {
+      final item = HomeFeaturedItem.eventoFijado(
+        evento(hoySolo.add(const Duration(days: 10))),
+      );
+
+      expect(item.puedeEscanearQr, isTrue);
+      expect(item.qrRoutePath, '/eventos/e1/acreditar-qr');
+    });
+
+    test('desaparece cuando el evento ya finalizó', () {
+      final item = HomeFeaturedItem.eventoFijado(
+        evento(hoySolo.subtract(const Duration(days: 2))),
+      );
+
+      expect(item.finalizado, isTrue);
+      expect(item.puedeEscanearQr, isFalse);
+    });
+
+    test('sigue en el último día de un evento de varios días', () {
+      final item = HomeFeaturedItem.eventoFijado(
+        evento(hoySolo.subtract(const Duration(days: 2)), dias: 3),
+      );
+
+      expect(item.finalizado, isFalse);
+      expect(item.puedeEscanearQr, isTrue);
+    });
+  });
 }

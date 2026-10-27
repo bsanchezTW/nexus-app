@@ -1,3 +1,4 @@
+import '../../../core/constants/duracion_actividad.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../data/models/evento.dart';
 import '../../../data/models/evento_lead.dart';
@@ -37,7 +38,7 @@ class HomeFeaturedItem {
   /// Empresas distintas entre los leads. Solo actividades de captura.
   final int empresas;
 
-  /// Días que dura la actividad. Solo actividades de captura.
+  /// Días que dura el evento o la actividad.
   final int duracionDias;
   final String? imagenUrl;
 
@@ -71,7 +72,17 @@ class HomeFeaturedItem {
   String? get secondaryRoutePath =>
       esActividadCaptura ? RoutePaths.capturarLead(id) : null;
 
-  bool get puedeEscanearQr => !esActividadCaptura;
+  /// Ya pasó su último día, igual que [Evento.yaOcurrio].
+  bool get finalizado {
+    final hoy = DateTime.now();
+    return fechaTerminoActividad(
+      fecha,
+      duracionDias,
+    ).isBefore(DateTime(hoy.year, hoy.month, hoy.day));
+  }
+
+  /// Todo evento acredita con QR mientras no haya terminado.
+  bool get puedeEscanearQr => !esActividadCaptura && !finalizado;
 
   String? get qrRoutePath =>
       puedeEscanearQr ? RoutePaths.acreditarQr(id) : null;
@@ -155,6 +166,7 @@ class HomeFeaturedItem {
       nombre: evento.nombre,
       fecha: evento.fecha,
       lugar: evento.lugar ?? evento.pais ?? '',
+      duracionDias: evento.duracionDias,
       imagenUrl: evento.imagenUrl,
     );
   }
@@ -166,6 +178,7 @@ class HomeFeaturedItem {
       nombre: evento.nombre,
       fecha: evento.fecha,
       lugar: evento.lugar ?? evento.pais ?? '',
+      duracionDias: evento.duracionDias,
       imagenUrl: evento.imagenUrl,
     );
   }

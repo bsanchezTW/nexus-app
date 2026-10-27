@@ -10,6 +10,7 @@ import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_image_skeleton.dart';
 import '../../../core/widgets/evento_hero_banner.dart';
 import '../../../core/widgets/tw_components.dart';
+import '../../acreditacion/destino_escaneo_sheet.dart';
 import '../models/home_featured_item.dart';
 
 /// Gutter que alinea la card centrada con el resto del home.
@@ -656,13 +657,14 @@ class _FeaturedSlide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final secundario = item.qrRoutePath != null
+    final secundario = item.puedeEscanearQr
+        // Con talleres, antes de la cámara pregunta dónde se acredita.
         ? _HeroCta(
             key: Key('proximo_evento_escanear_qr_${item.id}'),
             label: 'Escanear QR',
             icon: Symbols.qr_code_scanner_rounded,
             filled: false,
-            onTap: () => context.push(item.qrRoutePath!),
+            onTap: () => abrirEscanerQr(context, item.id),
           )
         : item.secondaryRoutePath != null
         ? _HeroCta(

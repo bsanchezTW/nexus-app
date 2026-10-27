@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/constants/supabase_tables.dart';
 import '../../../core/network/connectivity_service.dart';
@@ -28,12 +29,10 @@ import '../../registrados/providers/registrados_providers.dart';
 import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/espera_bloqueante.dart';
-import '../../../core/widgets/tw_toast.dart';
 import '../qr_codigo_parser.dart';
 import '../decidir_accion_escaneo.dart';
 import '../../subeventos/providers/inscripciones_providers.dart';
 import '../../subeventos/providers/subeventos_providers.dart';
-import '../../subeventos/sugerir_subevento_en_curso.dart';
 import '../scanner/qr_scanner_service.dart';
 import '../scanner/scanner_controller.dart';
 import '../scanner/widgets/scanner_view.dart';
@@ -45,7 +44,11 @@ import '../scanner/widgets/scanner_view.dart';
 /// Cada detección consulta al servidor (acreditación y lead), aunque el
 /// mismo QR se lea varias veces con el escáner todavía abierto.
 class AcreditarQrScreen extends ConsumerStatefulWidget {
-  const AcreditarQrScreen({super.key, required this.eventoId, this.subeventoId});
+  const AcreditarQrScreen({
+    super.key,
+    required this.eventoId,
+    this.subeventoId,
+  });
 
   final String eventoId;
   final String? subeventoId;
@@ -57,13 +60,13 @@ class AcreditarQrScreen extends ConsumerStatefulWidget {
 class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     with WidgetsBindingObserver {
   late final ScannerController _scanner;
-  late String? _subeventoId;
-  bool _avisoTaller = false;
+
+  /// Taller donde se acredita, o `null` para la entrada del evento.
+  String? get _subeventoId => widget.subeventoId;
 
   @override
   void initState() {
     super.initState();
-    _subeventoId = widget.subeventoId;
     WidgetsBinding.instance.addObserver(this);
     _scanner = ScannerController(onCodeDetected: _onCodeDetected);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -372,31 +375,64 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     }
   }
 
-  Widget _selectorModo() {
-    final talleres =
-        ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
-        const [];
-    return Material(
-      color: TwColors.cameraScrim,
-      borderRadius: BorderRadius.circular(12),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String?>(
-          isExpanded: true,
-          value: _subeventoId,
-          dropdownColor: TwColors.cameraMenu,
-          style: const TextStyle(color: TwColors.onCamera),
-          items: [
-            const DropdownMenuItem(value: null, child: Text('Entrada')),
-            for (final taller in talleres)
-              DropdownMenuItem(value: taller.id, child: Text(taller.nombre)),
+  /// Dónde acredita este escáner. Se elige antes de abrir la cámara (hoja
+  /// "¿Dónde vas a acreditar?"); aquí solo se recuerda, sin poder cambiarlo.
+  Widget _etiquetaDestino() {
+    final subeventoId = _subeventoId;
+    final String texto;
+    if (subeventoId == null) {
+      texto = 'Entrada del evento';
+    } else {
+      final talleres =
+          ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
+          const [];
+      final nombre = talleres
+          .where((taller) => taller.id == subeventoId)
+          .map((taller) => taller.nombre)
+          .firstOrNull;
+      texto = nombre ?? 'Taller';
+    }
+    return Align(
+      child: Container(
+        key: const Key('escaner_destino'),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: const BoxDecoration(
+          color: TwColors.cameraScrim,
+          borderRadius: TwRadii.pill,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              subeventoId == null
+                  ? Symbols.door_front_rounded
+                  : Symbols.co_present_rounded,
+              size: 17,
+              color: TwColors.onCamera,
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                texto,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: TwColors.onCamera,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ],
-          onChanged: (valor) => setState(() => _subeventoId = valor),
         ),
       ),
     );
   }
 
-  Future<void> _procesarAsistencia(Registrado registrado, String subeventoId) async {
+  Future<void> _procesarAsistencia(
+    Registrado registrado,
+    String subeventoId,
+  ) async {
     final perfil = ref.read(currentPerfilProvider).valueOrNull;
     final inscripcion = await resolverInscripcionParaEscaneo(
       cargar: _listaInscripciones,
@@ -440,7 +476,10 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
           }
         }
       case AccionEscaneoTipo.yaMarcado:
-        _scanner.showFeedback('Ya tenía asistencia en este taller.', isError: false);
+        _scanner.showFeedback(
+          'Ya tenía asistencia en este taller.',
+          isError: false,
+        );
       case AccionEscaneoTipo.soloAviso:
         _scanner.showFeedback(
           'No está inscrito en este taller.',
@@ -489,7 +528,8 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     final talleres =
         ref.read(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
         const [];
-    final nombre = talleres
+    final nombre =
+        talleres
             .where((taller) => taller.id == subeventoId)
             .map((taller) => taller.nombre)
             .firstOrNull ??
@@ -593,7 +633,10 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
       return;
     }
     if (rechazo.motivo != 'superpuesto') {
-      _scanner.showFeedback('No se pudo inscribir en el taller.', isError: true);
+      _scanner.showFeedback(
+        'No se pudo inscribir en el taller.',
+        isError: true,
+      );
       return;
     }
 
@@ -672,29 +715,12 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     }
   }
 
-  void _programarAvisoDeTaller() {
-    if (_avisoTaller || widget.subeventoId != null) return;
-    // El build ya observa los talleres.
-    final talleres = ref
-        .read(subeventosPorEventoProvider(widget.eventoId))
-        .valueOrNull;
-    if (talleres == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _avisoTaller || widget.subeventoId != null) return;
-      _avisoTaller = true;
-      final sugerido = sugerirSubeventoEnCurso(talleres, DateTime.now());
-      if (sugerido == null) return;
-      TwToast.info(context, 'Taller en curso: ${sugerido.nombre}. ¿Cambiar?');
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     // Precarga asistentes, talleres e inscripciones sin reconstruir el preview.
     ref.watch(registradosPorEventoProvider(widget.eventoId));
     ref.watch(subeventosPorEventoProvider(widget.eventoId));
     ref.watch(inscripcionesPorEventoProvider(widget.eventoId));
-    _programarAvisoDeTaller();
 
     return PopScope(
       // El gesto iOS de deslizar atrás exige canPop: el cierre (botón o
@@ -709,7 +735,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
         body: ScannerView(
           controller: _scanner,
           onClose: _cerrarEscaner,
-          modoControl: _selectorModo(),
+          modoControl: _etiquetaDestino(),
         ),
       ),
     );

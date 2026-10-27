@@ -35,7 +35,12 @@ class RoutePaths {
   static String registroPorCliente(String id) =>
       '/eventos/$id/registro-cliente';
   static String acreditarConfirmado(String id) => '/eventos/$id/acreditar';
-  static String acreditarQr(String id) => '/eventos/$id/acreditar-qr';
+
+  /// Con [subeventoId] el escáner acredita ese taller; sin él, la entrada.
+  static String acreditarQr(String id, {String? subeventoId}) =>
+      subeventoId == null
+      ? '/eventos/$id/acreditar-qr'
+      : '/eventos/$id/acreditar-qr?subevento=$subeventoId';
   static String verRegistrados(String id) => '/eventos/$id/registrados';
   static String editarRegistrado(String eventoId, String registradoId) =>
       '/eventos/$eventoId/registrados/$registradoId/editar';

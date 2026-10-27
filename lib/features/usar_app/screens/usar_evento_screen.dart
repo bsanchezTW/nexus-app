@@ -23,11 +23,13 @@ import '../../../core/widgets/tw_offline_notice_card.dart';
 import '../../../core/widgets/tw_toast.dart';
 import '../../../data/models/evento.dart';
 import '../../../data/offline/offline_read_cache.dart';
+import '../../acreditacion/destino_escaneo_sheet.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../capturador/providers/capturador_providers.dart';
 import '../../capturador/services/evento_lead_interno_service.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../../registrados/providers/registrados_providers.dart';
+import '../../subeventos/providers/subeventos_providers.dart';
 
 /// Menú operativo de un evento — rediseño §8 de la guía de componentes.
 ///
@@ -152,6 +154,8 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
     final eventoLead = ref
         .watch(eventoLeadInternoProvider(widget.eventoId))
         .valueOrNull;
+    // Precarga los talleres: la hoja "¿Dónde vas a acreditar?" abre al toque.
+    ref.watch(subeventosPorEventoProvider(widget.eventoId));
 
     final contenido = BrowserThemeColor(
       color: TwColors.bg,
@@ -345,8 +349,9 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
       ],
       ctaLabel: 'Escanear QR',
       ctaIcon: Symbols.qr_code_scanner_rounded,
-      mostrarCta: evento.accesoQr,
-      onCta: () => context.push(RoutePaths.acreditarQr(widget.eventoId)),
+      // Todo evento acredita con QR; se apaga solo cuando ya terminó.
+      mostrarCta: !evento.yaOcurrio,
+      onCta: () => abrirEscanerQr(context, widget.eventoId),
     );
   }
 
