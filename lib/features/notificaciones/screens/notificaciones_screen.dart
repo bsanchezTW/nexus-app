@@ -10,6 +10,7 @@ import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/pressable.dart';
 import '../../../core/widgets/tw_components.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../data/models/notificacion.dart';
 import '../../../data/repositories/notificaciones_repository.dart';
 import '../notificacion_destino.dart';
@@ -203,7 +204,8 @@ class _NotificacionesScreenState extends ConsumerState<NotificacionesScreen> {
       body: inboxAsync.when(
         skipLoadingOnReload: true,
         skipLoadingOnRefresh: true,
-        loading: () => const LoadingView(),
+        loading: () =>
+            const TwListSkeletonView(leading: TwSkeletonLeading.icono, gap: 12),
         error: (e, _) => ErrorView(
           message: 'No se pudieron cargar las notificaciones.',
           onRetry: () => ref.invalidate(notificacionesInboxProvider),

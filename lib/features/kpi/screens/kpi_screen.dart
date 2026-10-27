@@ -4,10 +4,12 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tw_tokens.dart';
+import '../../../core/widgets/app_image_skeleton.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/tw_components.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../data/models/evento.dart';
 import '../../eventos/providers/eventos_providers.dart';
 import '../providers/kpi_providers.dart';
@@ -25,7 +27,26 @@ class KpiScreen extends ConsumerWidget {
     return AppScaffold(
       title: 'KPI del evento',
       body: kpiDataAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => ListView(
+          physics: const NeverScrollableScrollPhysics(),
+          padding: AppSpacing.form,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: AppSkeletonText(
+                muestra: 'Nombre del evento',
+                style: Theme.of(context).textTheme.headlineSmall!,
+                width: 220,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            const TwKpiRowSkeleton(),
+            const SizedBox(height: 12),
+            const TwKpiRowSkeleton(),
+            const SizedBox(height: AppSpacing.xxl),
+            const AppSkeletonBox(height: 10),
+          ],
+        ),
         error: (e, _) =>
             const ErrorView(message: 'No se pudieron cargar los datos.'),
         data: (kpi) {

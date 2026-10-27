@@ -10,7 +10,8 @@ enum HomeFeaturedKind {
   proximaActividad,
 }
 
-/// Botones de la card del home, en orden: el primero va relleno (blanco).
+/// Botones de la card del home, en orden. Va relleno (blanco) Escanear QR si
+/// está; si no, el primero.
 enum HomeCardAccion { verEvento, verActividad, escanearQr, capturarLead }
 
 /// Ítem mostrable en la card/slider del header del home.
@@ -86,8 +87,9 @@ class HomeFeaturedItem {
       puedeEscanearQr ? RoutePaths.acreditarQr(id) : null;
 
   /// Botones de la card. Un evento con actividad de captura cambia "Ver
-  /// evento" por Escanear QR + Capturar lead (el título ya abre el evento);
-  /// terminado el evento, Escanear QR deja su lugar a Ver evento.
+  /// evento" por Capturar lead + Escanear QR (el título ya abre el evento);
+  /// terminado el evento, Escanear QR deja su lugar a Ver evento. Escanear
+  /// QR va siempre a la derecha.
   List<HomeCardAccion> get acciones {
     if (esActividadCaptura) {
       return const [HomeCardAccion.verActividad, HomeCardAccion.capturarLead];
@@ -95,7 +97,7 @@ class HomeFeaturedItem {
     if (actividadId != null) {
       return finalizado
           ? const [HomeCardAccion.verEvento, HomeCardAccion.capturarLead]
-          : const [HomeCardAccion.escanearQr, HomeCardAccion.capturarLead];
+          : const [HomeCardAccion.capturarLead, HomeCardAccion.escanearQr];
     }
     return finalizado
         ? const [HomeCardAccion.verEvento]

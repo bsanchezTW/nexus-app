@@ -13,6 +13,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/registro_asistente.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
 import '../../../core/widgets/tw_toast.dart';
@@ -169,7 +170,7 @@ class _RegistroPorClienteScreenState
     return AppScaffold(
       title: 'Registro por cliente',
       body: eventoAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const TwFormSkeleton(secciones: [4, 2]),
         error: (e, _) =>
             const ErrorView(message: 'No se pudo cargar el evento.'),
         data: (evento) => ListView(

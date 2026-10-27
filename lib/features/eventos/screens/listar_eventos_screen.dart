@@ -33,6 +33,7 @@ import '../widgets/talleres_anidados.dart';
 import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/espera_bloqueante.dart';
 import '../../../core/widgets/tw_components.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 
 class ListarEventosScreen extends ConsumerStatefulWidget {
   const ListarEventosScreen({super.key});
@@ -366,12 +367,7 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
         ),
         ...eventosAsync.when(
           skipLoadingOnReload: true,
-          loading: () => [
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: LoadingView(),
-            ),
-          ],
+          loading: () => [const TwSliverListSkeleton()],
           error: (e, _) => [
             SliverFillRemaining(
               child: ErrorView(

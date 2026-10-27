@@ -14,6 +14,7 @@ import '../../../core/constants/paises_evento.dart';
 import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/campo_pais_evento.dart';
 import '../../../core/widgets/campos_fecha_inicio_termino.dart';
 import '../../../core/widgets/form_sections.dart';
@@ -292,7 +293,7 @@ class _CrearEditarEventoLeadFormState
               onPressed: (_guardando || !hayRed) ? null : _guardar,
             ),
       body: eventoAsync != null && eventoAsync.isLoading && !_cargado
-          ? const LoadingView()
+          ? const TwFormSkeleton(secciones: [3, 3, 2])
           : AbsorbPointer(
               absorbing: _guardando,
               child: SingleChildScrollView(

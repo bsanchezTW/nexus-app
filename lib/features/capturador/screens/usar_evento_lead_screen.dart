@@ -17,6 +17,7 @@ import '../../../core/widgets/sync_conflict_listener.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../../../core/widgets/tw_detail_scaffold.dart';
 import '../../../core/widgets/tw_offline_notice_card.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../data/models/evento_lead.dart';
 import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/offline/sync_queue_service.dart';
@@ -89,7 +90,11 @@ class _UsarEventoLeadScreenState extends ConsumerState<UsarEventoLeadScreen>
           backgroundColor: TwColors.bg,
           body: eventoAsync.when(
             skipLoadingOnReload: true,
-            loading: () => const LoadingView(),
+            loading: () => TwEventMenuSkeleton(
+              eyebrow: 'Detalle de la actividad',
+              onBack: () => volverAtras(context),
+              acciones: const [2, 1],
+            ),
             error: (e, _) =>
                 const ErrorView(message: 'No se pudo cargar la actividad.'),
             data: (evento) => TwDetailScaffold(

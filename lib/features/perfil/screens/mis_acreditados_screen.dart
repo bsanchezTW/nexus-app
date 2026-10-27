@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../data/models/mi_acreditacion.dart';
 import '../../../data/offline/offline_read_cache.dart';
@@ -27,7 +28,8 @@ class MisAcreditadosScreen extends ConsumerWidget {
     return AppScaffold(
       title: 'Mis acreditaciones',
       body: acreditadosAsync.when(
-        loading: () => const LoadingView(message: 'Cargando acreditaciones...'),
+        loading: () =>
+            const TwListSkeletonView(leading: TwSkeletonLeading.avatar),
         error: (e, _) => ErrorView(
           message: 'No se pudieron cargar tus acreditaciones.',
           onRetry: () => ref.invalidate(misAcreditadosProvider),

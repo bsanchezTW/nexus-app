@@ -317,13 +317,13 @@ void main() {
     });
 
     test(
-      'con actividad: Escanear QR + Capturar lead, y Leads abre su lista',
+      'con actividad: Capturar lead + Escanear QR, y Leads abre su lista',
       () {
         final item = evento(actividadId: 'a1');
 
         expect(item.acciones, [
-          HomeCardAccion.escanearQr,
           HomeCardAccion.capturarLead,
+          HomeCardAccion.escanearQr,
         ]);
         expect(
           item.capturarLeadRoutePath,

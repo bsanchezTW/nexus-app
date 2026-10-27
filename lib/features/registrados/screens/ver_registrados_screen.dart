@@ -19,6 +19,7 @@ import '../../../core/widgets/collapsing_nav.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
 import '../../../core/widgets/selector_filtro_sheet.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../data/models/inscripcion_subevento.dart';
 import '../../../data/models/registrado.dart';
 import '../../../data/models/subevento.dart';
@@ -354,9 +355,9 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
         ...registradosAsync.when(
           skipLoadingOnReload: true,
           loading: () => [
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: LoadingView(),
+            const TwSliverListSkeleton(
+              leading: TwSkeletonLeading.avatar,
+              conPildora: true,
             ),
           ],
           error: (e, _) => [

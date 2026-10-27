@@ -10,6 +10,7 @@ import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_modals.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../data/models/lead_comentario.dart';
 import '../../../data/repositories/lead_comentarios_repository.dart';
@@ -227,7 +228,10 @@ class _ComentariosLeadScreenState extends ConsumerState<ComentariosLeadScreen> {
         children: [
           Positioned.fill(
             child: comentariosAsync.when(
-              loading: () => const LoadingView(),
+              loading: () => const TwListSkeletonView(
+                leading: TwSkeletonLeading.avatar,
+                filas: 4,
+              ),
               error: (_, _) => ErrorView(
                 message: 'No se pudieron cargar los comentarios.',
                 onRetry: _recargar,

@@ -658,6 +658,11 @@ class _FeaturedSlide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final acciones = item.acciones;
+    // Escanear QR es la acción que destaca: va en blanco aunque quede a la
+    // derecha. Sin QR, el blanco es para el primer botón.
+    final destacada = acciones.contains(HomeCardAccion.escanearQr)
+        ? HomeCardAccion.escanearQr
+        : acciones.first;
 
     final contenido = Padding(
       padding: const EdgeInsets.all(16),
@@ -748,7 +753,13 @@ class _FeaturedSlide extends StatelessWidget {
             children: [
               for (var i = 0; i < acciones.length; i++) ...[
                 if (i > 0) const SizedBox(width: 10),
-                Expanded(child: _boton(context, acciones[i], filled: i == 0)),
+                Expanded(
+                  child: _boton(
+                    context,
+                    acciones[i],
+                    filled: acciones[i] == destacada,
+                  ),
+                ),
               ],
             ],
           ),

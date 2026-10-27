@@ -20,6 +20,7 @@ import '../../../core/widgets/evento_hero_banner.dart';
 import '../../../core/widgets/permissions_bootstrap.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../../../core/widgets/tw_offline_notice_card.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/tw_toast.dart';
 import '../../../data/models/capturar_lead_route_extra.dart';
 import '../../../data/models/evento.dart';
@@ -289,7 +290,27 @@ class _UsarEventoExternoScreenState
               body: eventoAsync.when(
                 skipLoadingOnReload: true,
                 skipLoadingOnRefresh: true,
-                loading: () => const LoadingView(),
+                loading: () => ListView(
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(
+                    TwSpacing.screenH,
+                    contentTop,
+                    TwSpacing.screenH,
+                    40,
+                  ),
+                  children: [
+                    CuentaIdentityHeader(
+                      perfil: perfil,
+                      ajustesKey: const Key('externo_ajustes_button'),
+                      onAjustes: _mostrarMenuCuenta,
+                      onMiPerfil: _abrirMiPerfil,
+                    ),
+                    const TwSectionLabel('Evento activo'),
+                    const TwHeroCardSkeleton(),
+                    const TwSectionLabel('Resumen'),
+                    const TwKpiRowSkeleton(),
+                  ],
+                ),
                 error: (e, _) =>
                     const ErrorView(message: 'No se pudo cargar el evento.'),
                 data: (evento) => RefreshIndicator(

@@ -16,6 +16,7 @@ import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/require_permission.dart';
 import '../../../core/widgets/tw_components.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../data/models/evento.dart';
 import '../../../data/models/ocupacion_evento.dart';
 import '../../../data/models/subevento.dart';
@@ -65,7 +66,15 @@ class _ListaSubeventos extends ConsumerWidget {
     return AppScaffold(
       title: 'Talleres',
       body: talleres.when(
-        loading: () => const LoadingView(),
+        loading: () => const TwListSkeletonView(
+          filas: 4,
+          padding: EdgeInsets.fromLTRB(
+            TwSpacing.screenH,
+            14,
+            TwSpacing.screenH,
+            28,
+          ),
+        ),
         error: (error, _) => ErrorView(
           message: error.toString(),
           onRetry: () => ref.invalidate(subeventosPorEventoProvider(eventoId)),
@@ -282,14 +291,14 @@ class _SelectorTalleresState extends ConsumerState<_SelectorTalleres> {
       child: SizedBox(
         height: altura,
         child: eventos.when(
-          loading: () => const LoadingView(),
+          loading: () => const TwListSkeletonView(filas: 5),
           error: (error, _) => ErrorView(
             message: error.toString(),
             onRetry: () => ref.invalidate(eventosListProvider),
           ),
           data: (lista) {
             if (subeventos.isLoading && !subeventos.hasValue) {
-              return const LoadingView();
+              return const TwListSkeletonView(filas: 5);
             }
             if (subeventos.hasError && !subeventos.hasValue) {
               return ErrorView(
@@ -785,7 +794,7 @@ class _FormularioSubeventoState extends ConsumerState<_FormularioSubevento> {
               onPressed: editable ? () => _guardar(evento) : null,
             ),
       body: eventoAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const TwFormSkeleton(),
         error: (error, _) => ErrorView(message: error.toString()),
         data: (evento) {
           final dias = _diasDelEvento(evento);

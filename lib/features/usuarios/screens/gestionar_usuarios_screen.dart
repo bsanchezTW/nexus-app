@@ -9,6 +9,7 @@ import '../../../core/router/refresh_on_visible.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/collapsing_nav.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
@@ -209,10 +210,7 @@ class _GestionarUsuariosBodyState extends ConsumerState<_GestionarUsuariosBody>
         ...usuariosAsync.when(
           skipLoadingOnReload: true,
           loading: () => [
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: LoadingView(),
-            ),
+            const TwSliverListSkeleton(leading: TwSkeletonLeading.avatar),
           ],
           error: (e, _) => [
             SliverFillRemaining(

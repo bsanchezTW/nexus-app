@@ -9,6 +9,7 @@ import '../../../core/widgets/app_widgets.dart';
 import '../../../core/widgets/collapsing_nav.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../data/models/inscripcion_subevento.dart';
 import '../../../data/models/registrado.dart';
 import '../../../data/models/subevento.dart';
@@ -298,9 +299,9 @@ class _AcreditarConfirmadoScreenState
         ),
         ...registradosAsync.when(
           loading: () => [
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: LoadingView(),
+            const TwSliverListSkeleton(
+              leading: TwSkeletonLeading.avatar,
+              conPildora: true,
             ),
           ],
           error: (e, _) => [

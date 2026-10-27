@@ -20,6 +20,7 @@ import '../../../core/widgets/evento_hero_banner.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../../../core/widgets/tw_detail_scaffold.dart';
 import '../../../core/widgets/tw_offline_notice_card.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/tw_toast.dart';
 import '../../../data/models/evento.dart';
 import '../../../data/offline/offline_read_cache.dart';
@@ -167,7 +168,11 @@ class _UsarEventoScreenState extends ConsumerState<UsarEventoScreen>
             // Al volver (gesto iOS o atrás) RefreshOnVisible invalida
             // el evento: sin esto el menú se desmonta un frame.
             skipLoadingOnReload: true,
-            loading: () => const LoadingView(),
+            loading: () => TwEventMenuSkeleton(
+              eyebrow: 'Detalle del evento',
+              onBack: () => volverAtras(context),
+              acciones: const [3, 3],
+            ),
             error: (e, _) =>
                 const ErrorView(message: 'No se pudo cargar el evento.'),
             data: (evento) => TwDetailScaffold(

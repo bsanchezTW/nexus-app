@@ -109,6 +109,8 @@ flutter_launcher_icons:
   image_path: "assets/images/icon-app/logo-blanco-1024.png"
   adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/images/icon-app/logo-blanco-1024.png"
+  # Margen del logo dentro del ícono adaptativo (16 por defecto).
+  adaptive_icon_foreground_inset: 20
   web:
     generate: true
     image_path: "assets/images/icon-app/logo-blanco-512.png"

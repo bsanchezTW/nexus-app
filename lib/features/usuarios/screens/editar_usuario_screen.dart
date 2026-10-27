@@ -13,6 +13,7 @@ import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/require_admin.dart';
@@ -418,7 +419,7 @@ class _EditarUsuarioBodyState extends ConsumerState<_EditarUsuarioBody> {
             )
           : null,
       body: usuarioAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const TwFormSkeleton(secciones: [2, 2]),
         error: (e, _) =>
             const ErrorView(message: 'No se pudo cargar el usuario.'),
         data: (usuario) {

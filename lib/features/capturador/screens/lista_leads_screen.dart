@@ -21,6 +21,7 @@ import '../../../core/widgets/collapsing_nav.dart';
 import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/tw_components.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/pressable.dart';
 import '../../../core/widgets/selector_imagen.dart';
@@ -290,10 +291,7 @@ class _ListaLeadsScreenState extends ConsumerState<ListaLeadsScreen>
         ...leadsAsync.when(
           skipLoadingOnReload: true,
           loading: () => [
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: LoadingView(),
-            ),
+            const TwSliverListSkeleton(leading: TwSkeletonLeading.avatar),
           ],
           error: (_, _) => [
             SliverFillRemaining(
@@ -1007,7 +1005,7 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
             )
           : null,
       body: leadsAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const TwFormSkeleton(secciones: [3, 3]),
         error: (_, _) => ErrorView(
           message: 'No se pudo cargar el lead.',
           onRetry: () =>

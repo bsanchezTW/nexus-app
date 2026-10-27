@@ -27,6 +27,7 @@ import '../../home/providers/home_featured_providers.dart';
 import '../providers/capturador_providers.dart';
 import '../../../core/widgets/espera_bloqueante.dart';
 import '../../../core/widgets/tw_components.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 
 class ListarEventosLeadsScreen extends ConsumerStatefulWidget {
   const ListarEventosLeadsScreen({super.key});
@@ -330,12 +331,7 @@ class _ListarEventosLeadsScreenState
         ),
         ...eventosAsync.when(
           skipLoadingOnReload: true,
-          loading: () => [
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: LoadingView(),
-            ),
-          ],
+          loading: () => [const TwSliverListSkeleton()],
           error: (e, _) => [
             SliverFillRemaining(
               child: ErrorView(

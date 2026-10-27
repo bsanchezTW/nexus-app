@@ -8,6 +8,7 @@ import '../../../core/theme/tw_tokens.dart';
 import '../../../core/utils/registro_asistente.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
 import '../../../core/widgets/form_sections.dart';
 import '../../../core/widgets/tw_toast.dart';
@@ -290,7 +291,7 @@ class _RegistrarConfirmadoScreenState
                     ),
             ),
       body: eventoAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const TwFormSkeleton(secciones: [4, 2]),
         error: (e, _) =>
             const ErrorView(message: 'No se pudo cargar el evento.'),
         data: (evento) {

@@ -11,6 +11,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/password_policy.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../../../core/widgets/selector_imagen.dart';
@@ -171,7 +172,22 @@ class _MiPerfilBodyState extends ConsumerState<_MiPerfilBody> {
     return AppScaffold(
       title: 'Mi Perfil',
       body: perfilAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => ListView(
+          physics: const NeverScrollableScrollPhysics(),
+          padding: AppSpacing.form,
+          children: const [
+            TwRowSkeleton(leading: TwSkeletonLeading.avatar, conPildora: true),
+            SizedBox(height: AppSpacing.sectionGap),
+            TwSectionLabelSkeleton(top: 0, ancho: 70),
+            TwKpiRowSkeleton(),
+            SizedBox(height: 12),
+            TwKpiRowSkeleton(),
+            SizedBox(height: AppSpacing.sectionGap),
+            TwActionTileSkeleton(),
+            SizedBox(height: 12),
+            TwActionTileSkeleton(anchoTitulo: 0.5),
+          ],
+        ),
         error: (e, _) => ErrorView(
           message: 'No se pudo cargar tu perfil.',
           onRetry: () => ref.invalidate(currentPerfilProvider),
@@ -371,9 +387,12 @@ class _KpiSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return statsAsync.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 32),
-        child: LoadingView(message: 'Cargando resumen...'),
+      loading: () => const Column(
+        children: [
+          TwKpiRowSkeleton(),
+          SizedBox(height: 12),
+          TwKpiRowSkeleton(),
+        ],
       ),
       error: (e, _) => ErrorView(
         message: 'No se pudieron cargar los indicadores.',
@@ -487,8 +506,8 @@ class _LeadsDetalle extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return leadsAsync.when(
       loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
-        child: LoadingView(),
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: TwListSkeleton(leading: TwSkeletonLeading.avatar, filas: 3),
       ),
       error: (e, _) => ErrorView(
         message: 'No se pudieron cargar tus leads.',

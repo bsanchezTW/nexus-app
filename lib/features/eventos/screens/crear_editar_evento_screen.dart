@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +16,7 @@ import '../../../core/constants/paises_evento.dart';
 import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/campo_pais_evento.dart';
 import '../../../core/widgets/campos_fecha_inicio_termino.dart';
 import '../../../core/widgets/form_sections.dart';
@@ -461,7 +461,7 @@ class _CrearEditarEventoFormState
               onPressed: (_guardando || !hayRed) ? null : _guardar,
             ),
       body: cargando
-          ? const LoadingView()
+          ? const TwFormSkeleton(secciones: [3, 3, 2])
           : AbsorbPointer(
               absorbing: _guardando,
               child: SingleChildScrollView(

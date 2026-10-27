@@ -13,6 +13,7 @@ import '../../../core/utils/mascara_contacto.dart';
 import '../../../core/utils/registro_asistente.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/campos_registro_asistente.dart';
 import '../../../core/theme/tw_tokens.dart';
 import '../../../core/widgets/form_sections.dart';
@@ -383,7 +384,7 @@ class _EditarRegistradoScreenState
             )
           : null,
       body: registradosAsync.when(
-        loading: () => const LoadingView(),
+        loading: () => const TwFormSkeleton(secciones: [4, 2]),
         error: (e, _) => const ErrorView(message: 'No se pudo cargar.'),
         data: (registrados) {
           final registrado = registrados
@@ -573,7 +574,10 @@ class _EditarRegistradoScreenState
                             )
                           else if (inscripcionesAsync.isLoading &&
                               !_talleresCargados)
-                            const SizedBox(height: 88, child: LoadingView())
+                            const TwListSkeleton(
+                              leading: TwSkeletonLeading.icono,
+                              filas: 1,
+                            )
                           else
                             SelectorSubeventos(
                               subeventos: talleres,

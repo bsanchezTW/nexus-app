@@ -7,6 +7,7 @@ import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_widgets.dart';
+import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/event_back_navigation_guard.dart';
 import '../../../core/widgets/nexus_components.dart';
 import '../../../core/widgets/require_admin.dart';
@@ -116,7 +117,7 @@ class _GestionarAccesoEventoBodyState
       child: AppScaffold(
         title: 'Acceso al evento',
         body: cargando
-            ? const LoadingView()
+            ? const TwListSkeletonView(leading: TwSkeletonLeading.avatar)
             : eventoAsync.hasError ||
                   usuariosAsync.hasError ||
                   autorizadosAsync.hasError
