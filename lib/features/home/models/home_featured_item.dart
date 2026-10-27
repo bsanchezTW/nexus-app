@@ -10,7 +10,14 @@ enum HomeFeaturedKind {
   proximaActividad,
 }
 
+/// Botones de la card del home, en orden: el primero va relleno (blanco).
+enum HomeCardAccion { verEvento, verActividad, escanearQr, capturarLead }
+
 /// Ítem mostrable en la card/slider del header del home.
+///
+/// Un evento interno es **una sola** card: su actividad de captura, si la
+/// tiene, viaja dentro ([actividadId]) y suma sus leads y el botón Capturar
+/// lead. Solo las actividades externas (sin evento detrás) tienen card propia.
 class HomeFeaturedItem {
   const HomeFeaturedItem({
     required this.kind,
@@ -24,6 +31,7 @@ class HomeFeaturedItem {
     this.empresas = 0,
     this.duracionDias = 1,
     this.imagenUrl,
+    this.actividadId,
   });
 
   final HomeFeaturedKind kind;
@@ -42,6 +50,9 @@ class HomeFeaturedItem {
   final int duracionDias;
   final String? imagenUrl;
 
+  /// Actividad de captura interna del evento. Solo en cards de evento.
+  final String? actividadId;
+
   bool get tieneImagen => imagenUrl != null && imagenUrl!.isNotEmpty;
 
   bool get esFijado =>
@@ -59,19 +70,6 @@ class HomeFeaturedItem {
     HomeFeaturedKind.proximaActividad => 'PRÓXIMA ACTIVIDAD',
   };
 
-  /// Primario (blanco): hub de la actividad fijada; abrir el evento en el resto.
-  String get ctaLabel => esActividadCaptura ? 'Ver actividad' : 'Ver evento';
-
-  String get ctaRoutePath => esActividadCaptura
-      ? RoutePaths.usarEventoLead(id)
-      : RoutePaths.usarEvento(id);
-
-  /// Capturar lead (ghost). Null en eventos de registro.
-  String? get secondaryCtaLabel => esActividadCaptura ? 'Capturar lead' : null;
-
-  String? get secondaryRoutePath =>
-      esActividadCaptura ? RoutePaths.capturarLead(id) : null;
-
   /// Ya pasó su último día, igual que [Evento.yaOcurrio].
   bool get finalizado {
     final hoy = DateTime.now();
@@ -87,18 +85,56 @@ class HomeFeaturedItem {
   String? get qrRoutePath =>
       puedeEscanearQr ? RoutePaths.acreditarQr(id) : null;
 
+  /// Botones de la card. Un evento con actividad de captura cambia "Ver
+  /// evento" por Escanear QR + Capturar lead (el título ya abre el evento);
+  /// terminado el evento, Escanear QR deja su lugar a Ver evento.
+  List<HomeCardAccion> get acciones {
+    if (esActividadCaptura) {
+      return const [HomeCardAccion.verActividad, HomeCardAccion.capturarLead];
+    }
+    if (actividadId != null) {
+      return finalizado
+          ? const [HomeCardAccion.verEvento, HomeCardAccion.capturarLead]
+          : const [HomeCardAccion.escanearQr, HomeCardAccion.capturarLead];
+    }
+    return finalizado
+        ? const [HomeCardAccion.verEvento]
+        : const [HomeCardAccion.verEvento, HomeCardAccion.escanearQr];
+  }
+
+  /// Destino del título: el evento o el hub de la actividad.
+  String get routePath => esActividadCaptura
+      ? RoutePaths.usarEventoLead(id)
+      : RoutePaths.usarEvento(id);
+
+  /// Formulario manual de lead: el de la actividad externa, o el de la
+  /// interna del evento. `null` si el evento no tiene actividad.
+  String? get capturarLeadRoutePath {
+    if (esActividadCaptura) return RoutePaths.capturarLead(id);
+    final actividad = actividadId;
+    if (actividad == null) return null;
+    return RoutePaths.capturarLead(actividad, desdeEvento: id);
+  }
+
+  /// Lista de leads (número de leads). `null` sin actividad: el 0 no abre nada.
+  String? get leadsRoutePath {
+    if (esActividadCaptura) return RoutePaths.verLeads(id);
+    final actividad = actividadId;
+    if (actividad == null) return null;
+    return RoutePaths.verLeads(actividad, desdeEvento: id);
+  }
+
+  /// Lista de registrados (número de registrados). Solo eventos.
+  String? get registradosRoutePath =>
+      esActividadCaptura ? null : RoutePaths.verRegistrados(id);
+
+  /// KPI del evento (porcentaje de acreditados). Solo eventos.
+  String? get kpiRoutePath => esActividadCaptura ? null : RoutePaths.kpi(id);
+
   String get porcentajeAcreditados {
     if (registrados <= 0) return '0%';
     return '${((acreditados / registrados) * 100).round()}%';
   }
-
-  /// Destino del detalle (evento o hub de actividad), no el CTA primario.
-  String get routePath => switch (kind) {
-    HomeFeaturedKind.proximoEvento ||
-    HomeFeaturedKind.eventoFijado => RoutePaths.usarEvento(id),
-    HomeFeaturedKind.campanaFijada ||
-    HomeFeaturedKind.proximaActividad => RoutePaths.usarEventoLead(id),
-  };
 
   /// Copia serializable para la caché offline.
   ///
@@ -117,6 +153,7 @@ class HomeFeaturedItem {
     'empresas': empresas,
     'duracion_dias': duracionDias,
     'imagen_url': imagenUrl,
+    'actividad_id': actividadId,
   };
 
   factory HomeFeaturedItem.fromCacheMap(Map<String, dynamic> map) {
@@ -135,6 +172,7 @@ class HomeFeaturedItem {
       empresas: (map['empresas'] as num?)?.toInt() ?? 0,
       duracionDias: (map['duracion_dias'] as num?)?.toInt() ?? 1,
       imagenUrl: map['imagen_url'] as String?,
+      actividadId: map['actividad_id'] as String?,
     );
   }
 
@@ -143,6 +181,7 @@ class HomeFeaturedItem {
     int? acreditados,
     int? leads,
     int? empresas,
+    String? actividadId,
   }) {
     return HomeFeaturedItem(
       kind: kind,
@@ -156,6 +195,7 @@ class HomeFeaturedItem {
       empresas: empresas ?? this.empresas,
       duracionDias: duracionDias,
       imagenUrl: imagenUrl,
+      actividadId: actividadId ?? this.actividadId,
     );
   }
 
@@ -210,33 +250,39 @@ class HomeFeaturedItem {
 
 /// Slider del home: fijados primero. Los próximos (evento y actividad) cierran
 /// la lista, salvo los que ya están fijados (se muestran como fijados y no se
-/// duplican).
+/// duplican). Un evento fijado dos veces —él mismo y su actividad interna—
+/// queda una sola vez.
 List<HomeFeaturedItem> ensamblarHomeFeaturedItems({
   required List<HomeFeaturedItem> fijados,
   List<HomeFeaturedItem> proximos = const [],
 }) {
-  final ids = fijados.map((item) => item.id).toSet();
+  final ids = <String>{};
   return [
-    ...fijados,
-    for (final proximo in proximos)
-      if (!ids.contains(proximo.id)) proximo,
+    for (final item in [...fijados, ...proximos])
+      if (ids.add(item.id)) item,
   ];
 }
 
-/// Actividad de captura vigente más cercana, o `null` si todas ya terminaron.
+/// Actividad de captura **externa** vigente más cercana, o `null`. Las
+/// internas no compiten: viajan dentro de la card de su evento.
 EventoLead? proximaActividadVigente(Iterable<EventoLead> actividades) {
-  final lista = actividades.where((actividad) => !actividad.yaOcurrio).toList()
-    ..sort((a, b) => a.fecha.compareTo(b.fecha));
+  final lista =
+      actividades
+          .where(
+            (actividad) =>
+                actividad.eventoOrigenId == null && !actividad.yaOcurrio,
+          )
+          .toList()
+        ..sort((a, b) => a.fecha.compareTo(b.fecha));
   return lista.isEmpty ? null : lista.first;
 }
 
 /// Los slots de próximo del home: el próximo evento de registro y la próxima
-/// actividad de captura, el más cercano primero.
+/// actividad externa, el más cercano primero.
 ///
 /// Antes solo se mostraba el más cercano de los dos: con una actividad en
 /// curso (una feria de varios días), un evento recién creado nunca aparecía
-/// en el inicio. Si la actividad es la interna de ese evento, queda solo el
-/// evento (misma pieza, sin duplicar el hero).
+/// en el inicio.
 List<HomeFeaturedItem> elegirProximosDestacados({
   Evento? evento,
   EventoLead? actividad,

@@ -29,7 +29,7 @@ class Evento {
     this.certificacionCapacitacion = false,
     this.imagenUrl,
     this.slug = '',
-    this.accesoQr = false,
+    this.accesoQr = true,
     this.cupoMaximo,
     this.descripcion,
     this.horaInicio,

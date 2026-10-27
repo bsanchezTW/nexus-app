@@ -73,7 +73,6 @@ class _CrearEditarEventoFormState
   int _duracionDias = 1;
   String _pais = kPaisEventoChile;
   bool _certificacion = false;
-  bool _accesoQr = false;
   TipoEvento _tipo = TipoEvento.evento;
   final _cupoController = TextEditingController();
   final _descripcionController = TextEditingController();
@@ -100,7 +99,6 @@ class _CrearEditarEventoFormState
     'fecha': _fecha,
     'duracion': _duracionDias,
     'certificacion': _certificacion,
-    'accesoQr': _accesoQr,
     'tipo': _tipo,
     'cupo': _cupoController.text,
     'descripcion': _descripcionController.text,
@@ -165,7 +163,6 @@ class _CrearEditarEventoFormState
     _fecha = evento.fecha;
     _duracionDias = evento.duracionDias;
     _certificacion = evento.certificacionCapacitacion;
-    _accesoQr = evento.accesoQr;
     _tipo = evento.tipo;
     _cupoController.text = evento.cupoMaximo?.toString() ?? '';
     _descripcionController.text = evento.descripcion ?? '';
@@ -305,7 +302,8 @@ class _CrearEditarEventoFormState
           lugar: _lugarController.text.trim(),
           certificacionCapacitacion: _certificacion,
           imagenUrl: imagenUrl,
-          accesoQr: _accesoQr,
+          // El acceso con QR es obligatorio: ya no es una opción del evento.
+          accesoQr: true,
           tipo: _tipo,
           cupoMaximo: int.tryParse(_cupoController.text.trim()),
           descripcion: _descripcionController.text.trim().isEmpty
@@ -736,14 +734,6 @@ class _CrearEditarEventoFormState
               return null;
             },
           ),
-        ),
-        const FormDivider(),
-        FormToggleRow(
-          icon: Symbols.qr_code_2_rounded,
-          title: 'Acceso con QR',
-          subtitle: 'Cada asistente recibe un código para entrar.',
-          value: _accesoQr,
-          onChanged: editable ? (v) => setState(() => _accesoQr = v) : null,
         ),
         const FormDivider(),
         FormToggleRow(

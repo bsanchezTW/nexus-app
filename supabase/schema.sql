@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS public.eventos (
   certificacion_capacitacion  boolean NOT NULL DEFAULT false,
   imagen_url                  text,
   slug                        text,
-  acceso_qr                   boolean NOT NULL DEFAULT false,
+  acceso_qr                   boolean NOT NULL DEFAULT true,
   cupo_maximo                 int,
   descripcion                 text,
   hora_inicio                 time,
@@ -3680,7 +3680,7 @@ $$;
 -- ----------------------------------------------------------------
 ALTER TABLE public.eventos
   ADD COLUMN IF NOT EXISTS slug text,
-  ADD COLUMN IF NOT EXISTS acceso_qr boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS acceso_qr boolean NOT NULL DEFAULT true,
   ADD COLUMN IF NOT EXISTS cupo_maximo int,
   ADD COLUMN IF NOT EXISTS descripcion text,
   ADD COLUMN IF NOT EXISTS hora_inicio time,
@@ -3698,6 +3698,11 @@ BEGIN
     UPDATE public.eventos SET acceso_qr = (tipo_registro = 'cliente');
   END IF;
 END $$;
+
+-- Acceso con QR obligatorio (migración 202610271200): todo evento acredita
+-- con QR, también los que venían de tipo_registro.
+ALTER TABLE public.eventos ALTER COLUMN acceso_qr SET DEFAULT true;
+UPDATE public.eventos SET acceso_qr = true WHERE acceso_qr IS DISTINCT FROM true;
 
 CREATE OR REPLACE FUNCTION public.rpe_eventos_slug()
 RETURNS trigger

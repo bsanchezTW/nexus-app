@@ -91,10 +91,14 @@ void main() {
     final item = HomeFeaturedItem.campanaFijada(campana);
 
     expect(item.etiqueta, 'ACTIVIDAD FIJADA');
-    expect(item.ctaLabel, 'Ver actividad');
-    expect(item.ctaRoutePath, '/capturador/c1/usar');
-    expect(item.secondaryCtaLabel, 'Capturar lead');
-    expect(item.secondaryRoutePath, '/capturador/c1/capturar');
+    expect(item.acciones, [
+      HomeCardAccion.verActividad,
+      HomeCardAccion.capturarLead,
+    ]);
+    expect(item.routePath, '/capturador/c1/usar');
+    expect(item.capturarLeadRoutePath, '/capturador/c1/capturar');
+    expect(item.leadsRoutePath, '/capturador/c1/leads');
+    expect(item.registradosRoutePath, isNull);
     expect(item.qrRoutePath, isNull);
     expect(item.tieneImagen, isTrue);
     expect(item.imagenUrl, 'https://cdn.example/feria.jpg');
@@ -112,8 +116,7 @@ void main() {
     expect(item.kind, HomeFeaturedKind.proximaActividad);
     expect(item.id, 'a1');
     expect(item.etiqueta, 'PRÓXIMA ACTIVIDAD');
-    expect(item.ctaLabel, 'Ver actividad');
-    expect(item.ctaRoutePath, '/capturador/a1/usar');
+    expect(item.routePath, '/capturador/a1/usar');
     expect(item.qrRoutePath, isNull);
   });
 
@@ -266,6 +269,96 @@ void main() {
 
       expect(item.finalizado, isFalse);
       expect(item.puedeEscanearQr, isTrue);
+    });
+  });
+
+  group('Card de evento con actividad incluida', () {
+    final hoy = DateTime.now();
+    final hoySolo = DateTime(hoy.year, hoy.month, hoy.day);
+
+    HomeFeaturedItem evento({String? actividadId, int diasDesdeHoy = 5}) =>
+        HomeFeaturedItem.proximoEvento(
+          Evento(
+            id: 'e1',
+            nombre: 'Jornada',
+            fecha: hoySolo.add(Duration(days: diasDesdeHoy)),
+          ),
+        ).copyWith(actividadId: actividadId);
+
+    test('una actividad interna no compite como próxima actividad', () {
+      final interna = EventoLead(
+        id: 'interna',
+        nombre: 'Jornada',
+        fecha: hoySolo.add(const Duration(days: 2)),
+        eventoOrigenId: 'e1',
+        tipo: TipoEventoLead.interno,
+      );
+      final externa = EventoLead(
+        id: 'externa',
+        nombre: 'Feria',
+        fecha: hoySolo.add(const Duration(days: 9)),
+      );
+
+      expect(proximaActividadVigente([interna, externa])?.id, 'externa');
+      expect(proximaActividadVigente([interna]), isNull);
+    });
+
+    test('sin actividad: Ver evento + Escanear QR y Leads no se abre', () {
+      final item = evento();
+
+      expect(item.acciones, [
+        HomeCardAccion.verEvento,
+        HomeCardAccion.escanearQr,
+      ]);
+      expect(item.leadsRoutePath, isNull);
+      expect(item.capturarLeadRoutePath, isNull);
+      expect(item.registradosRoutePath, '/eventos/e1/registrados');
+      expect(item.kpiRoutePath, '/eventos/e1/kpi');
+    });
+
+    test(
+      'con actividad: Escanear QR + Capturar lead, y Leads abre su lista',
+      () {
+        final item = evento(actividadId: 'a1');
+
+        expect(item.acciones, [
+          HomeCardAccion.escanearQr,
+          HomeCardAccion.capturarLead,
+        ]);
+        expect(
+          item.capturarLeadRoutePath,
+          startsWith('/capturador/a1/capturar'),
+        );
+        expect(item.leadsRoutePath, startsWith('/capturador/a1/leads'));
+        expect(item.routePath, '/eventos/e1/usar');
+      },
+    );
+
+    test('finalizado con actividad: Ver evento + Capturar lead', () {
+      final item = evento(actividadId: 'a1', diasDesdeHoy: -3);
+
+      expect(item.acciones, [
+        HomeCardAccion.verEvento,
+        HomeCardAccion.capturarLead,
+      ]);
+    });
+
+    test('un evento fijado dos veces queda una sola vez', () {
+      final fijado = HomeFeaturedItem.eventoFijado(
+        Evento(id: 'e1', nombre: 'Jornada', fecha: hoySolo),
+      );
+
+      final items = ensamblarHomeFeaturedItems(fijados: [fijado, fijado]);
+
+      expect(items.single.id, 'e1');
+    });
+
+    test('la caché conserva la actividad del evento', () {
+      final item = evento(actividadId: 'a1');
+
+      final copia = HomeFeaturedItem.fromCacheMap(item.toCacheMap());
+
+      expect(copia.actividadId, 'a1');
     });
   });
 }

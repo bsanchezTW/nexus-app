@@ -258,7 +258,7 @@ class _ProximoEventoCardState extends State<ProximoEventoCard> {
               ),
             ),
             if (widget.items.length > 1) ...[
-              const SizedBox(height: 2),
+              const SizedBox(height: 12),
               // Fila de viñetas de alto fijo: el botón Ordenar no puede
               // agrandarla, o el aire bajo el carrusel queda mayor que el del
               // resto del inicio.
@@ -507,7 +507,7 @@ class _CargandoProximoEventoCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: texto(
@@ -657,24 +657,7 @@ class _FeaturedSlide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final secundario = item.puedeEscanearQr
-        // Con talleres, antes de la cámara pregunta dónde se acredita.
-        ? _HeroCta(
-            key: Key('proximo_evento_escanear_qr_${item.id}'),
-            label: 'Escanear QR',
-            icon: Symbols.qr_code_scanner_rounded,
-            filled: false,
-            onTap: () => abrirEscanerQr(context, item.id),
-          )
-        : item.secondaryRoutePath != null
-        ? _HeroCta(
-            key: Key('proximo_evento_capturar_lead_${item.id}'),
-            label: item.secondaryCtaLabel!,
-            icon: Symbols.person_add_rounded,
-            filled: false,
-            onTap: () => context.push(item.secondaryRoutePath!),
-          )
-        : null;
+    final acciones = item.acciones;
 
     final contenido = Padding(
       padding: const EdgeInsets.all(16),
@@ -701,11 +684,19 @@ class _FeaturedSlide extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Text(
-            item.nombre,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TwText.homeHeroTitle,
+          // El título abre el evento o la actividad.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TwPressable(
+              key: Key('proximo_evento_titulo_${item.id}'),
+              onTap: () => context.push(item.routePath),
+              child: Text(
+                item.nombre,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TwText.homeHeroTitle,
+              ),
+            ),
           ),
           if (item.lugar.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -730,33 +721,34 @@ class _FeaturedSlide extends StatelessWidget {
           ],
           if (altoFijo) const Spacer() else const SizedBox(height: 14),
           // Una actividad de captura no tiene registrados ni acreditación:
-          // sus métricas son las de leads.
+          // sus métricas son las de leads. Cada número abre su lista.
           _HomeStats(
             columnas: item.esActividadCaptura
                 ? [
-                    ('${item.leads}', 'LEADS'),
-                    ('${item.empresas}', 'EMPRESAS'),
-                    ('${item.duracionDias}', 'DÍAS'),
+                    _Metrica('${item.leads}', 'LEADS', item.leadsRoutePath),
+                    _Metrica('${item.empresas}', 'EMPRESAS'),
+                    _Metrica('${item.duracionDias}', 'DÍAS'),
                   ]
                 : [
-                    ('${item.registrados}', 'REGISTRADOS'),
-                    (item.porcentajeAcreditados, 'ACREDITADOS'),
-                    ('${item.leads}', 'LEADS'),
+                    _Metrica(
+                      '${item.registrados}',
+                      'REGISTRADOS',
+                      item.registradosRoutePath,
+                    ),
+                    _Metrica(
+                      item.porcentajeAcreditados,
+                      'ACREDITADOS',
+                      item.kpiRoutePath,
+                    ),
+                    _Metrica('${item.leads}', 'LEADS', item.leadsRoutePath),
                   ],
           ),
           const SizedBox(height: 14),
           Row(
             children: [
-              Expanded(
-                child: _HeroCta(
-                  label: item.ctaLabel,
-                  filled: true,
-                  onTap: () => context.push(item.ctaRoutePath),
-                ),
-              ),
-              if (secundario != null) ...[
-                const SizedBox(width: 10),
-                Expanded(child: secundario),
+              for (var i = 0; i < acciones.length; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                Expanded(child: _boton(context, acciones[i], filled: i == 0)),
               ],
             ],
           ),
@@ -795,15 +787,56 @@ class _FeaturedSlide extends StatelessWidget {
       ),
     );
   }
+
+  Widget _boton(
+    BuildContext context,
+    HomeCardAccion accion, {
+    required bool filled,
+  }) {
+    return switch (accion) {
+      HomeCardAccion.verEvento || HomeCardAccion.verActividad => _HeroCta(
+        key: Key('proximo_evento_ver_${item.id}'),
+        label: accion == HomeCardAccion.verEvento
+            ? 'Ver evento'
+            : 'Ver actividad',
+        filled: filled,
+        onTap: () => context.push(item.routePath),
+      ),
+      // Con talleres, antes de la cámara pregunta dónde se acredita.
+      HomeCardAccion.escanearQr => _HeroCta(
+        key: Key('proximo_evento_escanear_qr_${item.id}'),
+        label: 'Escanear QR',
+        icon: Symbols.qr_code_scanner_rounded,
+        filled: filled,
+        onTap: () => abrirEscanerQr(context, item.id),
+      ),
+      HomeCardAccion.capturarLead => _HeroCta(
+        key: Key('proximo_evento_capturar_lead_${item.id}'),
+        label: 'Capturar lead',
+        icon: Symbols.person_add_rounded,
+        filled: filled,
+        onTap: () => context.push(item.capturarLeadRoutePath!),
+      ),
+    };
+  }
+}
+
+/// Una columna de [_HomeStats]: valor, etiqueta y, si se puede abrir, la
+/// ruta de su lista.
+class _Metrica {
+  const _Metrica(this.valor, this.etiqueta, [this.ruta]);
+
+  final String valor;
+  final String etiqueta;
+  final String? ruta;
 }
 
 /// Métricas del hero del home: tres columnas de igual ancho separadas por un
-/// hairline al 14 % de blanco.
+/// hairline al 14 % de blanco. Las que tienen ruta se tocan para abrirla.
 class _HomeStats extends StatelessWidget {
   const _HomeStats({required this.columnas});
 
-  /// (valor, etiqueta) de cada columna.
-  final List<(String, String)> columnas;
+  final List<_Metrica> columnas;
 
   @override
   Widget build(BuildContext context) {
@@ -821,32 +854,43 @@ class _HomeStats extends StatelessWidget {
                           left: BorderSide(color: TwColors.whiteA14),
                         ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        columnas[i].$1,
-                        maxLines: 1,
-                        style: TwText.homeStatValue.copyWith(fontSize: 21),
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        columnas[i].$2,
-                        maxLines: 1,
-                        style: TwText.homeStatLabel,
-                      ),
-                    ),
-                  ],
-                ),
+                child: _columna(context, columnas[i]),
               ),
             ),
         ],
       ),
+    );
+  }
+
+  Widget _columna(BuildContext context, _Metrica metrica) {
+    final contenido = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            metrica.valor,
+            maxLines: 1,
+            style: TwText.homeStatValue.copyWith(fontSize: 21),
+          ),
+        ),
+        const SizedBox(height: 5),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            metrica.etiqueta,
+            maxLines: 1,
+            style: TwText.homeStatLabel,
+          ),
+        ),
+      ],
+    );
+    final ruta = metrica.ruta;
+    if (ruta == null) return contenido;
+    return TwPressable(
+      key: Key('proximo_evento_metrica_${metrica.etiqueta.toLowerCase()}'),
+      onTap: () => context.push(ruta),
+      child: contenido,
     );
   }
 }

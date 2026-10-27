@@ -160,8 +160,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     featuredItems = aplicarOrdenCarrusel(
       featuredItems,
       ref.watch(ordenCarruselProvider),
-    );
-    ref.listen<int>(shellTabEpochProvider(ShellTabBranch.inicio), (prev, next) {
+    );    ref.listen<int>(shellTabEpochProvider(ShellTabBranch.inicio), (prev, next) {
       if (prev == next) return;
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(0);
@@ -232,9 +231,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               onOrdenar: () =>
                   showOrdenarCarruselSheet(context, items: featuredItems),
             ),
-            // Con varias tarjetas, la fila de viñetas (24) es parte del aire:
-            // 2 + 24 + 2 deja ~28 hasta Resumen, como entre las secciones.
-            SizedBox(height: featuredItems.length > 1 ? 2 : 24),
+            // Entre bloques del inicio siempre van 24. Con viñetas, su fila es
+            // parte del carrusel: 12 arriba (en la card) + 24 de fila + 12
+            // aquí deja las viñetas centradas entre la card y lo que sigue
+            // (aviso o Resumen).
+            SizedBox(height: featuredItems.length > 1 ? 12 : 24),
             _HomeColumn(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

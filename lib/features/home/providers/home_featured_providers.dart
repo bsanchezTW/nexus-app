@@ -122,10 +122,17 @@ Future<List<HomeFeaturedItem>> _construirDestacados({
           .obtenerPorId(id)
           .then<HomeFeaturedItem?>(HomeFeaturedItem.eventoFijado)
           .catchError((Object _) => null),
+    // Fijar la actividad interna equivale a fijar su evento: una sola card.
     for (final id in campanaIds)
       repos.campanas
           .obtenerPorId(id)
-          .then<HomeFeaturedItem?>(HomeFeaturedItem.campanaFijada)
+          .then<HomeFeaturedItem?>((campana) async {
+            final origen = campana.eventoOrigenId;
+            if (origen == null) return HomeFeaturedItem.campanaFijada(campana);
+            return HomeFeaturedItem.eventoFijado(
+              await repos.eventos.obtenerPorId(origen),
+            );
+          })
           .catchError((Object _) => null),
   ])).whereType<HomeFeaturedItem>().toList();
 
@@ -162,6 +169,7 @@ Future<HomeFeaturedItem> _conMetricas({
 
     final resumen = await registradosRepo.obtenerResumenPorEvento(item.id);
     var leads = 0;
+    String? actividadId;
     try {
       // El homónimo solo cubre los eventos de leads anteriores al vínculo por
       // id, que no tienen `evento_origen_id`.
@@ -169,6 +177,7 @@ Future<HomeFeaturedItem> _conMetricas({
           await campanasRepo.buscarPorEventoOrigen(item.id) ??
           await campanasRepo.buscarPorNombre(item.nombre);
       if (eventoLead != null) {
+        actividadId = eventoLead.id;
         leads = (await leadsRepo.obtenerResumenCampana(eventoLead.id)).total;
       }
     } catch (_) {
@@ -178,6 +187,7 @@ Future<HomeFeaturedItem> _conMetricas({
       registrados: resumen.total,
       acreditados: resumen.acreditados,
       leads: leads,
+      actividadId: actividadId,
     );
   } catch (_) {
     return item;

@@ -651,8 +651,15 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('solo el botón Ver evento navega al evento', (tester) async {
-    String? location;
+  testWidgets('el título, Registrados y Acreditados abren su pantalla', (
+    tester,
+  ) async {
+    final visitadas = <String>[];
+    Widget destino(BuildContext _, GoRouterState state) {
+      visitadas.add(state.uri.path);
+      return const SizedBox.shrink();
+    }
+
     final router = GoRouter(
       initialLocation: '/',
       routes: [
@@ -677,30 +684,71 @@ void main() {
             ),
           ),
         ),
-        GoRoute(
-          path: '/eventos/:id/usar',
-          builder: (_, state) {
-            location = state.uri.path;
-            return const SizedBox.shrink();
-          },
-        ),
+        GoRoute(path: '/eventos/:id/usar', builder: destino),
+        GoRoute(path: '/eventos/:id/registrados', builder: destino),
+        GoRoute(path: '/eventos/:id/kpi', builder: destino),
       ],
     );
 
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pump();
 
-    await tester.tap(find.text('Taller ALTAI: Título por confirmar'));
-    await tester.pump();
-    expect(location, isNull);
+    Future<void> tocarYVolver(Finder finder) async {
+      await tester.tap(finder);
+      await tester.pumpAndSettle();
+      router.go('/');
+      await tester.pumpAndSettle();
+    }
 
+    // El lugar no navega.
     await tester.tap(find.text('Hotel Intercontinental · Santiago'));
-    await tester.pump();
-    expect(location, isNull);
+    await tester.pumpAndSettle();
+    expect(visitadas, isEmpty);
 
-    await tester.tap(find.text('Ver evento'));
+    await tocarYVolver(find.text('Taller ALTAI: Título por confirmar'));
+    await tocarYVolver(find.text('REGISTRADOS'));
+    await tocarYVolver(find.text('ACREDITADOS'));
+    // Sin actividad de captura, el 0 de Leads no abre nada.
+    await tocarYVolver(find.text('LEADS'));
+
+    expect(visitadas, [
+      '/eventos/evento-1/usar',
+      '/eventos/evento-1/registrados',
+      '/eventos/evento-1/kpi',
+    ]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('con actividad, Ver evento deja su lugar a Escanear y Capturar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 320,
+              child: ProximoEventoCard(
+                items: [
+                  HomeFeaturedItem(
+                    kind: HomeFeaturedKind.proximoEvento,
+                    id: 'evento-1',
+                    nombre: 'Jornada',
+                    fecha: DateTime(2099, 8, 25),
+                    actividadId: 'actividad-1',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
     await tester.pump();
-    expect(location, '/eventos/evento-1/usar');
+
+    expect(find.text('Ver evento'), findsNothing);
+    expect(find.text('Escanear QR'), findsOneWidget);
+    expect(find.text('Capturar lead'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
