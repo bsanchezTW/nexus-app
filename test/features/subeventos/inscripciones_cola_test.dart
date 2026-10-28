@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +9,7 @@ import 'package:transworld_nexus/core/network/connectivity_service.dart';
 import 'package:transworld_nexus/data/models/inscripcion_subevento.dart';
 import 'package:transworld_nexus/data/offline/offline_read_cache.dart';
 import 'package:transworld_nexus/data/offline/sync_queue_item.dart';
+import 'package:transworld_nexus/data/offline/sync_queue_service.dart';
 import 'package:transworld_nexus/data/repositories/inscripciones_subevento_repository.dart';
 import 'package:transworld_nexus/features/subeventos/providers/inscripciones_providers.dart';
 
@@ -35,6 +38,17 @@ class _RepoRechaza extends Fake implements InscripcionesSubeventoRepository {
     bool asistio = true,
   }) async {
     return const {'ok': false, 'motivo': 'no_inscrito'};
+  }
+}
+
+class _RepoSinSalida extends Fake implements InscripcionesSubeventoRepository {
+  @override
+  Future<Map<String, dynamic>> marcarAsistencia({
+    required String registradoId,
+    required String subeventoId,
+    bool asistio = true,
+  }) async {
+    throw const SocketException('sin salida');
   }
 }
 
@@ -103,25 +117,25 @@ void main() {
         ],
         child: MaterialApp(
           home: Consumer(
-          builder: (context, ref, _) {
-            return TextButton(
-              onPressed: () async {
-                try {
-                  await persistirAsistenciaSubevento(
-                    ref,
-                    eventoId: 'evento-1',
-                    registradoId: '11111111-1111-1111-1111-111111111111',
-                    subeventoId: 'taller-1',
-                    accion: 'marcar_asistencia',
-                  );
-                } catch (e) {
-                  error = e;
-                }
-              },
-              child: const Text('marcar'),
-            );
-          },
-        ),
+            builder: (context, ref, _) {
+              return TextButton(
+                onPressed: () async {
+                  try {
+                    await persistirAsistenciaSubevento(
+                      ref,
+                      eventoId: 'evento-1',
+                      registradoId: '11111111-1111-1111-1111-111111111111',
+                      subeventoId: 'taller-1',
+                      accion: 'marcar_asistencia',
+                    );
+                  } catch (e) {
+                    error = e;
+                  }
+                },
+                child: const Text('marcar'),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -132,5 +146,61 @@ void main() {
     expect(error, isA<AsistenciaRechazada>());
     expect((error! as AsistenciaRechazada).motivo, 'no_inscrito');
     expect(cache.parches, 0);
+  });
+
+  testWidgets('un fallo de red con interfaz encendida deja la asistencia en '
+      'la cola', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final cache = _CacheEspia(prefs);
+    Object? error;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          syncQueueActiveOwnerIdProvider.overrideWithValue('admin-1'),
+          isOnlineProvider.overrideWith((ref) => true),
+          offlineReadCacheProvider.overrideWithValue(cache),
+          inscripcionesSubeventoRepositoryProvider.overrideWithValue(
+            _RepoSinSalida(),
+          ),
+        ],
+        child: MaterialApp(
+          home: Consumer(
+            builder: (context, ref, _) {
+              return TextButton(
+                onPressed: () async {
+                  try {
+                    await persistirAsistenciaSubevento(
+                      ref,
+                      eventoId: 'evento-1',
+                      registradoId: '11111111-1111-1111-1111-111111111111',
+                      subeventoId: 'taller-1',
+                      accion: 'marcar_asistencia',
+                    );
+                  } catch (e) {
+                    error = e;
+                  }
+                },
+                child: const Text('marcar'),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('marcar'));
+    await tester.pumpAndSettle();
+
+    expect(error, isNull);
+    final cola = ProviderScope.containerOf(
+      tester.element(find.text('marcar')),
+    ).read(syncQueueServiceProvider);
+    expect(cola, hasLength(1));
+    expect(cola.single.table, SupabaseTables.inscripcionesSubevento);
+    expect(cola.single.payload['accion'], 'marcar_asistencia');
+    expect(cache.parches, 1);
   });
 }

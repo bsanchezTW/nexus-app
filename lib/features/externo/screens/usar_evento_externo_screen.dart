@@ -20,6 +20,7 @@ import '../../../core/widgets/evento_hero_banner.dart';
 import '../../../core/widgets/permissions_bootstrap.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../../../core/widgets/tw_offline_notice_card.dart';
+import '../../../core/widgets/tw_sync_notice_card.dart';
 import '../../../core/widgets/tw_skeletons.dart';
 import '../../../core/widgets/tw_toast.dart';
 import '../../../data/models/capturar_lead_route_extra.dart';
@@ -363,6 +364,7 @@ class _UsarEventoExternoScreenState
                         ),
                       ),
                       const TwOfflineNoticeCard(topGap: 16),
+                      const TwSyncNoticeCard(topGap: 16),
                       const UpdateNoticeCard(topGap: 16),
                       const TwSectionLabel('Resumen'),
                       _ExternoStatsCards(

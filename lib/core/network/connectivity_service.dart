@@ -25,6 +25,15 @@ bool isNetworkTransportError(Object error) {
       message.contains('failed to fetch');
 }
 
+/// Tope de una escritura directa al servidor antes de pasarla a la cola.
+///
+/// Con el wifi de un recinto que no deja salir, `connectivity_plus` sigue
+/// diciendo "conectado" y la petición no falla: simplemente no vuelve. Sin
+/// tope, acreditar se quedaba esperando lo que tarde el sistema en cortar la
+/// conexión. Solo vale para escrituras idempotentes —repetirlas desde la cola
+/// no duplica nada si la primera sí había llegado.
+const Duration esperaMaximaEscrituraDirecta = Duration(seconds: 10);
+
 /// Único punto de verdad sobre el estado de conexión.
 ///
 /// El proyecto legado tenía la detección de red repetida y ligeramente

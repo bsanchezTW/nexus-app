@@ -474,6 +474,17 @@ final pendingSyncCountProvider = Provider<int>((ref) {
       .length;
 });
 
+/// `true` mientras la cola está enviando algo al servidor.
+final syncEnCursoProvider = Provider<bool>((ref) {
+  try {
+    return ref
+        .watch(syncQueueServiceProvider)
+        .any((i) => i.status == SyncStatus.syncing);
+  } catch (_) {
+    return false;
+  }
+});
+
 /// Avisos de capturas omitidas por estar ya en el servidor.
 final syncDescartesProvider = Provider<List<String>>((ref) {
   try {

@@ -17,6 +17,7 @@ import '../../../core/widgets/cuenta_settings_sheet.dart';
 import '../../../core/widgets/shell_tab_scroll.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../../../core/widgets/tw_offline_notice_card.dart';
+import '../../../core/widgets/tw_sync_notice_card.dart';
 import '../../../data/models/perfil.dart';
 import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/offline/snapshot_service.dart';
@@ -160,7 +161,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     featuredItems = aplicarOrdenCarrusel(
       featuredItems,
       ref.watch(ordenCarruselProvider),
-    );    ref.listen<int>(shellTabEpochProvider(ShellTabBranch.inicio), (prev, next) {
+    );
+    ref.listen<int>(shellTabEpochProvider(ShellTabBranch.inicio), (prev, next) {
       if (prev == next) return;
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(0);
@@ -241,6 +243,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const TwOfflineNoticeCard(bottomGap: 24),
+                  const TwSyncNoticeCard(bottomGap: 24),
                   const UpdateNoticeCard(bottomGap: 24),
                   perfilAsync.when(
                     skipLoadingOnReload: true,

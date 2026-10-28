@@ -28,7 +28,8 @@ List<InscripcionSubevento> fusionarInscripcionesConCola({
     final subeventoId = item.payload['subevento_id'] as String?;
     if (registradoId == null || subeventoId == null) continue;
     final clave = '$registradoId|$subeventoId';
-    final existente = reemplazos[clave] ??
+    final existente =
+        reemplazos[clave] ??
         servidor
             .where(
               (fila) =>
@@ -122,45 +123,52 @@ Future<Map<String, dynamic>?> persistirAsistenciaSubevento(
   final online = ref.read(isOnlineProvider);
   final cache = ref.read(offlineReadCacheProvider);
   Map<String, dynamic>? resultado;
-  if (online && !esIdSoloLocal(registradoId)) {
+  var enCola = !online || esIdSoloLocal(registradoId);
+  if (!enCola) {
     final repo = ref.read(inscripcionesSubeventoRepositoryProvider);
-    if (accion == 'inscribir_y_marcar') {
-      resultado = await repo.inscribir(
-        registradoId: registradoId,
-        subeventoId: subeventoId,
-        forzarSobrecupo: forzar,
-        marcarAsistencia: true,
-        reemplazarSuperpuestos: reemplazar,
-      );
-      if (resultado['ok'] == false) {
-        throw AsistenciaRechazada(
-          resultado['motivo']?.toString() ?? 'rechazo',
-          conflictos: idsDeConflictos(resultado['conflictos']),
-        );
-      }
-    } else {
-      resultado = await repo.marcarAsistencia(
-        registradoId: registradoId,
-        subeventoId: subeventoId,
-      );
-      if (resultado['ok'] == false) {
-        throw AsistenciaRechazada(
-          resultado['motivo']?.toString() ?? 'rechazo',
-        );
-      }
+    // Sin respuesta a tiempo pasa a la cola, como sin conexión. Ambos RPC son
+    // idempotentes (`ya_inscrito`, `ya_marcado`): si el primer intento sí
+    // llegó, reenviarlo no inscribe dos veces.
+    try {
+      resultado =
+          await (accion == 'inscribir_y_marcar'
+                  ? repo.inscribir(
+                      registradoId: registradoId,
+                      subeventoId: subeventoId,
+                      forzarSobrecupo: forzar,
+                      marcarAsistencia: true,
+                      reemplazarSuperpuestos: reemplazar,
+                    )
+                  : repo.marcarAsistencia(
+                      registradoId: registradoId,
+                      subeventoId: subeventoId,
+                    ))
+              .timeout(esperaMaximaEscrituraDirecta);
+    } catch (error) {
+      if (!isNetworkTransportError(error)) rethrow;
+      enCola = true;
     }
-  } else {
-    await ref.read(syncQueueServiceProvider.notifier).enqueueInsert(
-      table: SupabaseTables.inscripcionesSubevento,
-      payload: {
-        'accion': accion,
-        'evento_id': eventoId,
-        'registrado_id': registradoId,
-        'subevento_id': subeventoId,
-        'forzar': forzar,
-        'reemplazar': reemplazar,
-      },
-    );
+    if (resultado != null && resultado['ok'] == false) {
+      throw AsistenciaRechazada(
+        resultado['motivo']?.toString() ?? 'rechazo',
+        conflictos: idsDeConflictos(resultado['conflictos']),
+      );
+    }
+  }
+  if (enCola) {
+    await ref
+        .read(syncQueueServiceProvider.notifier)
+        .enqueueInsert(
+          table: SupabaseTables.inscripcionesSubevento,
+          payload: {
+            'accion': accion,
+            'evento_id': eventoId,
+            'registrado_id': registradoId,
+            'subevento_id': subeventoId,
+            'forzar': forzar,
+            'reemplazar': reemplazar,
+          },
+        );
   }
 
   await cache.parchearFila(

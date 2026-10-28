@@ -129,6 +129,11 @@ final registradosPorEventoProvider = FutureProvider.autoDispose
     });
 
 /// Acredita o quita la acreditación: servidor o cola, y write-through a caché.
+///
+/// Si el servidor no contesta a tiempo o la red falla a mitad de camino, la
+/// acreditación va a la cola igual que sin conexión: en la puerta de una feria
+/// no se puede dejar a alguien sin acreditar porque el wifi del recinto no
+/// deja salir. El UPDATE es idempotente, así que reenviarlo no duplica nada.
 Future<void> persistirAcreditacion(
   WidgetRef ref, {
   required Registrado registrado,
@@ -137,16 +142,28 @@ Future<void> persistirAcreditacion(
 }) async {
   final isOnline = ref.read(isOnlineProvider);
   final cache = ref.read(offlineReadCacheProvider);
-  await cache.esperarRevalidaciones();
+  // `parchearFila` toma turno, así que una consulta en vuelo ya no puede pisar
+  // el parche. Con un wifi cautivo cada una aguanta hasta 30 s: esperarlas sin
+  // tope dejaba la acreditación colgada antes de intentar nada.
+  await cache.esperarRevalidaciones().timeout(
+    esperaMaximaServidorPorDefecto,
+    onTimeout: () {},
+  );
 
-  if (isOnline && !esIdSoloLocal(registrado.id)) {
+  var enCola = !isOnline || esIdSoloLocal(registrado.id);
+  if (!enCola) {
     final repo = ref.read(registradosRepositoryProvider);
-    if (acreditado) {
-      await repo.acreditar(registrado.id, acreditadoPorId: acreditadoPorId);
-    } else {
-      await repo.desacreditar(registrado.id);
+    try {
+      await (acreditado
+              ? repo.acreditar(registrado.id, acreditadoPorId: acreditadoPorId)
+              : repo.desacreditar(registrado.id))
+          .timeout(esperaMaximaEscrituraDirecta);
+    } catch (error) {
+      if (!isNetworkTransportError(error)) rethrow;
+      enCola = true;
     }
-  } else {
+  }
+  if (enCola) {
     await ref
         .read(syncQueueServiceProvider.notifier)
         .enqueueUpdate(

@@ -17,6 +17,7 @@ import '../../../core/widgets/sync_conflict_listener.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../../../core/widgets/tw_detail_scaffold.dart';
 import '../../../core/widgets/tw_offline_notice_card.dart';
+import '../../../core/widgets/tw_sync_notice_card.dart';
 import '../../../core/widgets/tw_skeletons.dart';
 import '../../../data/models/evento_lead.dart';
 import '../../../data/offline/offline_read_cache.dart';
@@ -132,6 +133,7 @@ class _UsarEventoLeadScreenState extends ConsumerState<UsarEventoLeadScreen>
                   _hero(context, evento, resumen, padding),
               children: [
                 const TwOfflineNoticeCard(topGap: 20),
+                const TwSyncNoticeCard(topGap: 20),
                 const TwSectionLabel('Acciones del evento'),
                 TwActionTile(
                   icon: Symbols.contacts_rounded,

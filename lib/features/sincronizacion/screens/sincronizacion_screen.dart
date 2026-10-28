@@ -177,6 +177,7 @@ class _Estado extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ultimo = snapshot.ultimoExito;
+    final progreso = snapshot.enCurso ? snapshot.progreso : null;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -206,6 +207,22 @@ class _Estado extends StatelessWidget {
                             '${SincronizacionScreen._formatearFecha(ultimo)}',
                   style: TwText.tileSubtitle,
                 ),
+                if (progreso != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Descargando ${progreso.etapa.titulo.toLowerCase()} · '
+                    '${(progreso.fraccion * 100).clamp(0, 100).toStringAsFixed(0)} %',
+                    style: TwText.tileSubtitle,
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: TwRadii.pill,
+                    child: LinearProgressIndicator(
+                      value: progreso.fraccion > 0 ? progreso.fraccion : null,
+                      minHeight: 4,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
