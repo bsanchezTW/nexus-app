@@ -16,8 +16,7 @@ import '../../../core/widgets/evento_hero_banner.dart';
 import '../../../core/widgets/sync_conflict_listener.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../../../core/widgets/tw_detail_scaffold.dart';
-import '../../../core/widgets/tw_offline_notice_card.dart';
-import '../../../core/widgets/tw_sync_notice_card.dart';
+import '../../sincronizacion/widgets/tw_avisos_sistema.dart';
 import '../../../core/widgets/tw_skeletons.dart';
 import '../../../data/models/evento_lead.dart';
 import '../../../data/offline/offline_read_cache.dart';
@@ -132,8 +131,7 @@ class _UsarEventoLeadScreenState extends ConsumerState<UsarEventoLeadScreen>
               heroBuilder: (padding) =>
                   _hero(context, evento, resumen, padding),
               children: [
-                const TwOfflineNoticeCard(topGap: 20),
-                const TwSyncNoticeCard(topGap: 20),
+                const TwAvisosSistema(topGap: 20, incluirActualizacion: false),
                 const TwSectionLabel('Acciones del evento'),
                 TwActionTile(
                   icon: Symbols.contacts_rounded,

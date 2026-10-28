@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/router/route_paths.dart';
-import '../../../core/widgets/tw_offline_notice_card.dart';
+import '../../../core/widgets/tw_notice_card.dart';
 import '../providers/update_providers.dart';
 import '../services/update_platform.dart';
 import '../services/update_service.dart';

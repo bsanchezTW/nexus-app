@@ -32,6 +32,7 @@ import '../../../data/offline/pending_photo_store.dart';
 import '../../../data/offline/sync_queue_service.dart';
 import '../../../data/repositories/leads_repository.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../sincronizacion/widgets/tw_avisos_sistema.dart';
 import '../lead_comentario_flujo.dart';
 import '../permisos_lead.dart';
 import '../providers/capturador_providers.dart';
@@ -259,6 +260,7 @@ class _ListaLeadsScreenState extends ConsumerState<ListaLeadsScreen>
 
     return CollapsingScrollScaffold(
       title: canViewAllLeads ? 'Leads' : 'Mis leads',
+      overlayTrailing: const TwIndicadorConexion(),
       alwaysShowActions: true,
       overlayLeading: CollapsingNavButton(
         icon: Symbols.arrow_back_rounded,

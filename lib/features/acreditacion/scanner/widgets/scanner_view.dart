@@ -19,11 +19,15 @@ class ScannerView extends StatelessWidget {
     required this.controller,
     this.onClose,
     this.modoControl,
+    this.indicadorConexion,
   });
 
   final ScannerController controller;
   final VoidCallback? onClose;
   final Widget? modoControl;
+
+  /// Ver [ScannerOverlay.indicadorConexion].
+  final Widget? indicadorConexion;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +60,7 @@ class ScannerView extends StatelessWidget {
           controller: controller,
           onClose: onClose,
           modoControl: modoControl,
+          indicadorConexion: indicadorConexion,
         );
       },
     );
@@ -68,11 +73,13 @@ class _ScannerCameraLayer extends StatefulWidget {
     required this.controller,
     this.onClose,
     this.modoControl,
+    this.indicadorConexion,
   });
 
   final ScannerController controller;
   final VoidCallback? onClose;
   final Widget? modoControl;
+  final Widget? indicadorConexion;
 
   @override
   State<_ScannerCameraLayer> createState() => _ScannerCameraLayerState();
@@ -153,6 +160,7 @@ class _ScannerCameraLayerState extends State<_ScannerCameraLayer> {
                     onToggleCaptureLead:
                         widget.controller.toggleCaptureLeadMode,
                     modoControl: widget.modoControl,
+                    indicadorConexion: widget.indicadorConexion,
                   );
                 },
               ),

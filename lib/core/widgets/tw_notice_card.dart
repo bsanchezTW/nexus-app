@@ -1,71 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import '../conexion/estado_conexion.dart';
-import '../conexion/monitor_conexion.dart';
-import '../network/connectivity_service.dart';
 import '../theme/tw_tokens.dart';
 import 'tw_components.dart';
-
-const kTwOfflineNoticeTitle = 'Sin conexión a internet';
-const kTwOfflineNoticeSubtitle =
-    'Se han limitado las funciones de la aplicación hasta que recuperes la conexión';
-
-const kTwUnstableNoticeTitle = 'Conexión inestable';
-
-/// Con copia local: la app ya pasó a operar sin conexión.
-const kTwUnstableNoticeSubtitle =
-    'Pasamos a modo sin conexión para que no esperes. Lo que registres se '
-    'subirá cuando la conexión se estabilice';
-
-/// Sin copia local (web): la app sigue en línea, solo más lenta.
-const kTwUnstableNoticeSubtitleOnline =
-    'Algunas acciones pueden tardar más de lo normal';
-
-/// Aviso de modo local: naranjo pálido, sin chevron ni tap.
-///
-/// Aparece cuando la app deja de usar el servidor ([isOnlineProvider] en
-/// `false`) y, en web, también con la conexión inestable aunque siga en
-/// línea. El texto distingue [EstadoConexion.inestable] de "sin Internet".
-/// Pendientes y conflictos no lo disparan.
-class TwOfflineNoticeCard extends ConsumerWidget {
-  const TwOfflineNoticeCard({super.key, this.topGap = 0, this.bottomGap = 0});
-
-  /// Aire sobre la card (p. ej. respecto al hero del menú de acciones).
-  final double topGap;
-
-  /// Espacio bajo la card cuando está visible (0 si el label de sección ya
-  /// aporta aire).
-  final double bottomGap;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final enLinea = ref.watch(isOnlineProvider);
-    final inestable =
-        ref.watch(estadoConexionProvider) == EstadoConexion.inestable;
-    return TwNoticeSlot(
-      visible: !enLinea || inestable,
-      topGap: topGap,
-      bottomGap: bottomGap,
-      child: inestable
-          ? TwNoticeCard(
-              icon: Symbols.network_check_rounded,
-              title: kTwUnstableNoticeTitle,
-              subtitle: enLinea
-                  ? kTwUnstableNoticeSubtitleOnline
-                  : kTwUnstableNoticeSubtitle,
-              palette: TwNoticePalette.offline,
-            )
-          : const TwNoticeCard(
-              icon: Symbols.warning_amber_rounded,
-              title: kTwOfflineNoticeTitle,
-              subtitle: kTwOfflineNoticeSubtitle,
-              palette: TwNoticePalette.offline,
-            ),
-    );
-  }
-}
 
 /// Hueco animado de un aviso: se abre y cierra con [AnimatedSize] y solo
 /// aporta [topGap]/[bottomGap] mientras el aviso está a la vista.

@@ -21,6 +21,7 @@ import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/repositories/leads_repository.dart';
 import '../../../data/repositories/registrados_repository.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../sincronizacion/widgets/tw_avisos_sistema.dart';
 import '../../capturador/lead_comentario_flujo.dart';
 import '../../capturador/providers/capturador_providers.dart';
 import '../../capturador/services/evento_lead_interno_service.dart';
@@ -736,6 +737,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
           controller: _scanner,
           onClose: _cerrarEscaner,
           modoControl: _etiquetaDestino(),
+          indicadorConexion: const TwIndicadorConexion(sobreOscuro: true),
         ),
       ),
     );

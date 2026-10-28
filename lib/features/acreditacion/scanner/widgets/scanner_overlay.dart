@@ -24,6 +24,7 @@ class ScannerOverlay extends StatefulWidget {
     this.showTorch = true,
     this.scanWindowFraction = kScannerScanWindowFraction,
     this.modoControl,
+    this.indicadorConexion,
   });
 
   final bool animateCorners;
@@ -37,6 +38,10 @@ class ScannerOverlay extends StatefulWidget {
   final bool showTorch;
   final double scanWindowFraction;
   final Widget? modoControl;
+
+  /// Estado de la conexión y de los cambios por subir, centrado arriba entre
+  /// cerrar y el flash. Solo ocupa sitio cuando hay algo que avisar.
+  final Widget? indicadorConexion;
 
   @override
   State<ScannerOverlay> createState() => _ScannerOverlayState();
@@ -129,6 +134,13 @@ class _ScannerOverlayState extends State<ScannerOverlay>
                 onPressed: widget.onClose,
               ),
             ),
+            if (widget.indicadorConexion != null)
+              Positioned(
+                top: topInset + _cornerMargin + 4,
+                left: 72,
+                right: 72,
+                child: Center(child: widget.indicadorConexion),
+              ),
             if (widget.modoControl != null)
               Positioned(
                 top: topInset + 72,

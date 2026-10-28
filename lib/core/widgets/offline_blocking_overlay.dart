@@ -17,7 +17,7 @@ import '../theme/tw_tokens.dart';
 /// recuperar contraseña, que deben seguir visibles.
 ///
 /// Solo bloquea [EstadoConexion.sinInternet]: con la conexión inestable la web
-/// sigue funcionando, más lenta, y lo avisa `TwOfflineNoticeCard`.
+/// sigue funcionando, más lenta, y lo avisa `TwAvisosSistema`.
 class OfflineBlockingOverlay extends ConsumerWidget {
   const OfflineBlockingOverlay({
     super.key,

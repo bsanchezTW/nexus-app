@@ -14,6 +14,7 @@ import '../../../data/models/inscripcion_subevento.dart';
 import '../../../data/models/registrado.dart';
 import '../../../data/models/subevento.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../sincronizacion/widgets/tw_avisos_sistema.dart';
 import '../../registrados/providers/registrados_providers.dart';
 import '../../subeventos/providers/inscripciones_providers.dart';
 import '../../subeventos/providers/subeventos_providers.dart';
@@ -231,7 +232,9 @@ class _AcreditarConfirmadoScreenState
         ref.watch(subeventosPorEventoProvider(widget.eventoId)).valueOrNull ??
         const <Subevento>[];
     final inscripciones =
-        ref.watch(inscripcionesPorEventoProvider(widget.eventoId)).valueOrNull ??
+        ref
+            .watch(inscripcionesPorEventoProvider(widget.eventoId))
+            .valueOrNull ??
         const <InscripcionSubevento>[];
     final filtrados = registradosAsync.maybeWhen(
       data: (registrados) {
@@ -240,10 +243,7 @@ class _AcreditarConfirmadoScreenState
           inscripciones: inscripciones,
           subeventoId: _subeventoId,
         );
-        return _filtrarRegistrados(
-          delModo,
-          puedeVerContacto: puedeVerContacto,
-        );
+        return _filtrarRegistrados(delModo, puedeVerContacto: puedeVerContacto);
       },
       orElse: () => const <Registrado>[],
     );
@@ -251,6 +251,7 @@ class _AcreditarConfirmadoScreenState
 
     return CollapsingScrollScaffold(
       title: 'Acreditar asistente',
+      overlayTrailing: const TwIndicadorConexion(),
       alwaysShowActions: true,
       overlayLeading: CollapsingNavButton(
         icon: Symbols.arrow_back_rounded,
@@ -285,7 +286,8 @@ class _AcreditarConfirmadoScreenState
                     : inscripciones
                           .where(
                             (fila) =>
-                                fila.subeventoId == _subeventoId && !fila.asistio,
+                                fila.subeventoId == _subeventoId &&
+                                !fila.asistio,
                           )
                           .length;
                 return _buildHeader(
@@ -413,7 +415,8 @@ class _AcreditarConfirmadoScreenState
     required List<InscripcionSubevento> inscripciones,
   }) {
     final correo = puedeVerContacto ? r.email : enmascararEmail(r.email);
-    final asistio = _subeventoId != null &&
+    final asistio =
+        _subeventoId != null &&
         inscripciones.any(
           (fila) =>
               fila.registradoId == r.id &&

@@ -28,6 +28,7 @@ import '../../../data/offline/sync_queue_service.dart';
 import '../../../data/repositories/registrados_repository.dart';
 import '../../acreditacion/screens/acreditar_confirmado_screen.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../sincronizacion/widgets/tw_avisos_sistema.dart';
 import '../../registrados/providers/registrados_providers.dart';
 import '../../subeventos/providers/inscripciones_providers.dart';
 import '../../subeventos/providers/subeventos_providers.dart';
@@ -326,6 +327,7 @@ class _VerRegistradosScreenState extends ConsumerState<VerRegistradosScreen>
 
     return CollapsingScrollScaffold(
       title: 'Registrados',
+      overlayTrailing: const TwIndicadorConexion(),
       alwaysShowActions: true,
       overlayLeading: CollapsingNavButton(
         icon: Symbols.arrow_back_rounded,

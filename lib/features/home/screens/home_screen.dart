@@ -16,8 +16,7 @@ import '../../../core/widgets/cuenta_identity_header.dart';
 import '../../../core/widgets/cuenta_settings_sheet.dart';
 import '../../../core/widgets/shell_tab_scroll.dart';
 import '../../../core/widgets/tw_components.dart';
-import '../../../core/widgets/tw_offline_notice_card.dart';
-import '../../../core/widgets/tw_sync_notice_card.dart';
+import '../../sincronizacion/widgets/tw_avisos_sistema.dart';
 import '../../../data/models/perfil.dart';
 import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/offline/snapshot_service.dart';
@@ -29,7 +28,6 @@ import '../../notificaciones/providers/notificaciones_providers.dart';
 import '../../updates/services/update_platform.dart';
 import '../../updates/services/windows_uninstaller.dart';
 import '../../updates/widgets/update_checker.dart';
-import '../../updates/widgets/update_notice_card.dart';
 import '../models/home_featured_item.dart';
 import '../providers/home_dashboard_providers.dart';
 import '../providers/home_featured_providers.dart';
@@ -242,9 +240,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const TwOfflineNoticeCard(bottomGap: 24),
-                  const TwSyncNoticeCard(bottomGap: 24),
-                  const UpdateNoticeCard(bottomGap: 24),
+                  const TwAvisosSistema(bottomGap: 24),
                   perfilAsync.when(
                     skipLoadingOnReload: true,
                     skipLoadingOnRefresh: true,
