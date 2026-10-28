@@ -18,9 +18,18 @@ enum EstadoConexion {
   /// local la app pasa a modo sin conexión para no dejar a nadie esperando.
   inestable,
 
-  /// No hay interfaz de red o el backend no contesta.
-  sinInternet;
+  /// No hay interfaz de red, o ni el backend ni Internet contestan.
+  sinInternet,
+
+  /// Hay Internet, pero el backend no contesta o responde con error de
+  /// servidor: Supabase caído, pausado o inalcanzable desde esta red. Para la
+  /// app es lo mismo que [sinInternet], pero el usuario tiene que saber que
+  /// revisar su wifi no lo va a arreglar.
+  sinBackend;
 
   /// La app opera con su copia local (o, en web, avisa del problema).
-  bool get degradado => this == inestable || this == sinInternet;
+  bool get degradado => this != verificando && this != estable;
+
+  /// No hay forma de hablar con el servidor, ni lento.
+  bool get servidorInalcanzable => this == sinInternet || this == sinBackend;
 }

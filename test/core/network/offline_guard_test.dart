@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:transworld_nexus/core/conexion/estado_conexion.dart';
+import 'package:transworld_nexus/core/conexion/monitor_conexion.dart';
 import 'package:transworld_nexus/core/network/connectivity_service.dart';
 import 'package:transworld_nexus/core/network/offline_guard.dart';
 import 'package:transworld_nexus/core/widgets/tw_toast.dart';
@@ -82,5 +84,32 @@ void main() {
 
     expect(find.text(kMensajeSinConexion), findsNothing);
     expect(siguio, isTrue);
+  });
+
+  testWidgets('con la base de datos caída el toast lo dice', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          estadoConexionProvider.overrideWithValue(EstadoConexion.sinBackend),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Consumer(
+              builder: (context, ref, _) => TextButton(
+                onPressed: () => requireOnline(context, ref),
+                child: const Text('Escribir'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Escribir'));
+    await tester.pump();
+
+    expect(find.text(kMensajeSinBaseDeDatos), findsOneWidget);
+    expect(find.text(kMensajeSinConexion), findsNothing);
   });
 }

@@ -16,8 +16,10 @@ import '../theme/tw_tokens.dart';
 /// macOS no aparece nunca —esas sí operan con disco— y tampoco cubre login ni
 /// recuperar contraseña, que deben seguir visibles.
 ///
-/// Solo bloquea [EstadoConexion.sinInternet]: con la conexión inestable la web
-/// sigue funcionando, más lenta, y lo avisa `TwAvisosSistema`.
+/// Solo bloquea cuando no hay forma de llegar al servidor —sin Internet o con
+/// la base de datos sin responder—, y dice cuál de los dos es: con la base de
+/// datos caída, revisar el wifi no sirve de nada. Con la conexión inestable la
+/// web sigue funcionando, más lenta, y lo avisa `TwAvisosSistema`.
 class OfflineBlockingOverlay extends ConsumerWidget {
   const OfflineBlockingOverlay({
     super.key,
@@ -34,7 +36,8 @@ class OfflineBlockingOverlay extends ConsumerWidget {
 
     // `verificando` no bloquea: si no, el overlay parpadea en cada arranque.
     final estado = ref.watch(estadoConexionProvider);
-    if (estado != EstadoConexion.sinInternet) return child;
+    if (!estado.servidorInalcanzable) return child;
+    final sinBackend = estado == EstadoConexion.sinBackend;
 
     return ListenableBuilder(
       listenable: router.routerDelegate,
@@ -44,7 +47,7 @@ class OfflineBlockingOverlay extends ConsumerWidget {
         return Stack(
           children: [
             child,
-            const Positioned.fill(child: _AvisoSinConexion()),
+            Positioned.fill(child: _AvisoSinConexion(sinBackend: sinBackend)),
           ],
         );
       },
@@ -53,7 +56,10 @@ class OfflineBlockingOverlay extends ConsumerWidget {
 }
 
 class _AvisoSinConexion extends StatelessWidget {
-  const _AvisoSinConexion();
+  const _AvisoSinConexion({required this.sinBackend});
+
+  /// Hay Internet, pero la base de datos no responde.
+  final bool sinBackend;
 
   @override
   Widget build(BuildContext context) {
@@ -68,20 +74,28 @@ class _AvisoSinConexion extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Symbols.wifi_off_rounded,
+                Icon(
+                  sinBackend
+                      ? Symbols.database_off_rounded
+                      : Symbols.wifi_off_rounded,
                   size: 56,
                   color: TwColors.danger,
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  'Sin conexión',
+                  sinBackend
+                      ? 'Problemas con la conexión a la base de datos'
+                      : 'Sin conexión',
                   style: TwText.heroTitle.copyWith(color: TwColors.ink),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Revisa tu conexión a Internet para seguir usando RegisPro.',
+                  sinBackend
+                      ? 'Hay Internet, pero el servidor de RegisPro no '
+                            'responde. Inténtalo en unos minutos.'
+                      : 'Revisa tu conexión a Internet para seguir usando '
+                            'RegisPro.',
                   style: TwText.tileSubtitle,
                   textAlign: TextAlign.center,
                 ),

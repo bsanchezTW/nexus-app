@@ -101,6 +101,7 @@ class TarjetaAvisoSistema extends ConsumerWidget {
 
 IconData iconoAviso(TipoAviso tipo) => switch (tipo) {
   TipoAviso.sinInternet => Symbols.cloud_off_rounded,
+  TipoAviso.sinBackend => Symbols.database_off_rounded,
   TipoAviso.inestable => Symbols.network_check_rounded,
   TipoAviso.conflictos => Symbols.sync_problem_rounded,
   TipoAviso.subiendo || TipoAviso.pendientes => Symbols.cloud_upload_rounded,

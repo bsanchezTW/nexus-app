@@ -78,6 +78,21 @@ void main() {
     expect(aviso.esProblema, isFalse);
   });
 
+  test('con la base de datos caída lo dice, y no culpa al wifi', () {
+    final conCopia = avisosDelSistema(
+      _entrada(estado: EstadoConexion.sinBackend),
+    ).single;
+    expect(conCopia.tipo, TipoAviso.sinBackend);
+    expect(conCopia.titulo, 'Problemas con la conexión a la base de datos');
+    expect(conCopia.detalle, startsWith('Hay internet, pero el servidor'));
+    expect(conCopia.detalle, contains('copia local'));
+
+    final web = avisosDelSistema(
+      _entrada(estado: EstadoConexion.sinBackend, soportaCopiaLocal: false),
+    ).single;
+    expect(web.detalle, endsWith('Inténtalo en unos minutos'));
+  });
+
   test('inestable con copia local: ya opera sin conexión', () {
     final aviso = avisosDelSistema(
       _entrada(estado: EstadoConexion.inestable),

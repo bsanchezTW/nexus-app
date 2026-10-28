@@ -114,6 +114,25 @@ void main() {
     monitor.pausar();
   });
 
+  testWidgets('con Internet y el backend caído llega a sin base de datos', (
+    tester,
+  ) async {
+    final reloj = _Reloj();
+    final guion = _Guion(const [_rapido]);
+    final monitor = MonitorConexion(guion.call, reloj: reloj.call);
+    addTearDown(monitor.dispose);
+
+    monitor.iniciar();
+    await tester.pump();
+    guion.despues(const [LecturaSondeo.backendCaido()]);
+
+    await _avanzar(tester, reloj, PoliticaConexion.intervaloEstable);
+    expect(monitor.state, EstadoConexion.inestable);
+    await _avanzar(tester, reloj, PoliticaConexion.intervaloDegradado);
+    expect(monitor.state, EstadoConexion.sinBackend);
+    monitor.pausar();
+  });
+
   testWidgets('perder la interfaz es sin Internet de inmediato', (
     tester,
   ) async {

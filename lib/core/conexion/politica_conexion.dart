@@ -2,13 +2,25 @@ import 'estado_conexion.dart';
 
 /// Resultado de un sondeo al backend.
 class LecturaSondeo {
-  const LecturaSondeo.respondio(this.latencia) : respondio = true;
+  /// El backend contestó.
+  const LecturaSondeo.respondio(this.latencia)
+    : respondio = true,
+      backendCaido = false;
 
+  /// Ni el backend ni Internet contestaron.
   const LecturaSondeo.sinRespuesta()
     : respondio = false,
+      backendCaido = false,
+      latencia = Duration.zero;
+
+  /// Internet contesta, pero el backend no (o respondió con un 5xx).
+  const LecturaSondeo.backendCaido()
+    : respondio = false,
+      backendCaido = true,
       latencia = Duration.zero;
 
   final bool respondio;
+  final bool backendCaido;
   final Duration latencia;
 }
 
@@ -42,7 +54,8 @@ class PoliticaConexion {
   /// Lentos entre los últimos [ventanaSondeos] que bastan para degradar.
   static const sondeosLentosParaDegradar = 2;
 
-  /// Sondeos sin respuesta seguidos que significan "sin Internet".
+  /// Sondeos sin respuesta seguidos que significan "sin Internet" (o "sin
+  /// base de datos", si Internet sí contesta).
   static const fallosParaSinInternet = 2;
 
   /// Sondeos sanos seguidos que exige volver a estable.
@@ -71,9 +84,13 @@ class PoliticaConexion {
       final fallosSeguidos = historial.reversed
           .takeWhile((l) => !l.respondio)
           .length;
-      return fallosSeguidos >= fallosParaSinInternet
-          ? EstadoConexion.sinInternet
-          : EstadoConexion.inestable;
+      if (fallosSeguidos < fallosParaSinInternet) {
+        return EstadoConexion.inestable;
+      }
+      // Manda el último sondeo: es lo más fresco que se sabe de Internet.
+      return historial.last.backendCaido
+          ? EstadoConexion.sinBackend
+          : EstadoConexion.sinInternet;
     }
 
     if (actual.degradado) {
@@ -101,13 +118,13 @@ class PoliticaConexion {
   /// `true` si la app debe hablar con el servidor en este [estado].
   ///
   /// Las plataformas sin copia local (web) no tienen a dónde degradar: con la
-  /// conexión inestable siguen yendo al servidor y solo se detienen sin
-  /// Internet.
+  /// conexión inestable siguen yendo al servidor y solo se detienen cuando no
+  /// hay forma de llegar a él.
   static bool usaServidor(
     EstadoConexion estado, {
     required bool soportaCopiaLocal,
   }) {
-    if (!soportaCopiaLocal) return estado != EstadoConexion.sinInternet;
+    if (!soportaCopiaLocal) return !estado.servidorInalcanzable;
     return !estado.degradado;
   }
 }

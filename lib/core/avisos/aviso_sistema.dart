@@ -3,6 +3,7 @@ import '../conexion/estado_conexion.dart';
 /// Qué se le avisa al usuario sobre la conexión y la copia local.
 enum TipoAviso {
   sinInternet,
+  sinBackend,
   inestable,
   conflictos,
   subiendo,
@@ -41,7 +42,9 @@ class AvisoSistema {
   final int cantidad;
 
   RanuraAviso get ranura => switch (tipo) {
-    TipoAviso.sinInternet || TipoAviso.inestable => RanuraAviso.conexion,
+    TipoAviso.sinInternet ||
+    TipoAviso.sinBackend ||
+    TipoAviso.inestable => RanuraAviso.conexion,
     _ => RanuraAviso.actividad,
   };
 
@@ -102,6 +105,15 @@ AvisoSistema? _avisoConexion(EntradaAvisos e) {
           ? 'Trabajas con la copia local. Lo que registres se subirá al '
                 'volver la conexión'
           : 'Revisa tu conexión para seguir usando RegisPro',
+    ),
+    EstadoConexion.sinBackend => AvisoSistema(
+      tipo: TipoAviso.sinBackend,
+      titulo: 'Problemas con la conexión a la base de datos',
+      detalle: e.soportaCopiaLocal
+          ? 'Hay internet, pero el servidor no responde. Trabajas con la '
+                'copia local y lo que registres se subirá cuando vuelva'
+          : 'Hay internet, pero el servidor no responde. Inténtalo en unos '
+                'minutos',
     ),
     EstadoConexion.inestable => AvisoSistema(
       tipo: TipoAviso.inestable,

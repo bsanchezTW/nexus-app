@@ -6,6 +6,7 @@ const _rapido = LecturaSondeo.respondio(Duration(milliseconds: 300));
 const _lento = LecturaSondeo.respondio(Duration(seconds: 3));
 const _regular = LecturaSondeo.respondio(Duration(seconds: 2));
 const _caido = LecturaSondeo.sinRespuesta();
+const _sinBase = LecturaSondeo.backendCaido();
 
 EstadoConexion _siguiente(
   EstadoConexion actual,
@@ -60,6 +61,36 @@ void main() {
         );
       },
     );
+
+    test('con Internet pero sin backend es un problema de base de datos', () {
+      expect(
+        _siguiente(EstadoConexion.estable, [_rapido, _sinBase]),
+        EstadoConexion.inestable,
+        reason: 'un solo sondeo todavía puede ser un parpadeo',
+      );
+      expect(
+        _siguiente(EstadoConexion.inestable, [_rapido, _sinBase, _sinBase]),
+        EstadoConexion.sinBackend,
+      );
+    });
+
+    test('entre fallos mixtos manda el último sondeo', () {
+      expect(
+        _siguiente(EstadoConexion.inestable, [_rapido, _sinBase, _caido]),
+        EstadoConexion.sinInternet,
+      );
+      expect(
+        _siguiente(EstadoConexion.sinInternet, [_caido, _caido, _sinBase]),
+        EstadoConexion.sinBackend,
+      );
+    });
+
+    test('la base de datos que vuelve también debe ganarse estable', () {
+      expect(
+        _siguiente(EstadoConexion.sinBackend, [_sinBase, _sinBase, _rapido]),
+        EstadoConexion.inestable,
+      );
+    });
 
     test('dos sondeos lentos de tres degradan; uno solo no', () {
       expect(
@@ -155,6 +186,13 @@ void main() {
       expect(
         PoliticaConexion.usaServidor(
           EstadoConexion.sinInternet,
+          soportaCopiaLocal: false,
+        ),
+        isFalse,
+      );
+      expect(
+        PoliticaConexion.usaServidor(
+          EstadoConexion.sinBackend,
           soportaCopiaLocal: false,
         ),
         isFalse,

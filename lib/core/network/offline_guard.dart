@@ -14,6 +14,10 @@ const kMensajeSinConexion = 'No disponible sin conexión a Internet';
 const kMensajeConexionInestable =
     'No disponible con la conexión inestable. Inténtalo cuando se estabilice';
 
+/// Hay Internet, pero la base de datos no responde.
+const kMensajeSinBaseDeDatos =
+    'No disponible: la base de datos no responde. Inténtalo en unos minutos';
+
 /// `true` si la app opera en línea. Si no, muestra el toast unificado y no
 /// sigue.
 bool requireOnline(BuildContext context, WidgetRef ref) {
@@ -23,13 +27,12 @@ bool requireOnline(BuildContext context, WidgetRef ref) {
 }
 
 /// Toast de "no disponible sin conexión". Con [ref] distingue la conexión
-/// inestable de la falta de Internet.
+/// inestable y la base de datos caída de la falta de Internet.
 void showOfflineUnavailableToast(BuildContext context, {WidgetRef? ref}) {
-  final inestable =
-      ref?.read(estadoConexionProvider) == EstadoConexion.inestable;
-  showAppSnackBar(
-    context,
-    inestable ? kMensajeConexionInestable : kMensajeSinConexion,
-    isError: true,
-  );
+  final mensaje = switch (ref?.read(estadoConexionProvider)) {
+    EstadoConexion.inestable => kMensajeConexionInestable,
+    EstadoConexion.sinBackend => kMensajeSinBaseDeDatos,
+    _ => kMensajeSinConexion,
+  };
+  showAppSnackBar(context, mensaje, isError: true);
 }

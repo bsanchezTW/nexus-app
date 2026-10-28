@@ -212,6 +212,8 @@ class _Estado extends StatelessWidget {
                   EstadoConexion.inestable =>
                     'Conexión inestable · modo sin conexión',
                   EstadoConexion.sinInternet => 'Sin conexión',
+                  EstadoConexion.sinBackend =>
+                    'Base de datos sin respuesta · modo sin conexión',
                 }, style: TwText.tileTitle),
                 const SizedBox(height: 2),
                 Text(
