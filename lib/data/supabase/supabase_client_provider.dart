@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/config/env.dart';
+import 'observar_fallos_de_red_client.dart';
 import 'omitir_api_key_en_bearer_client.dart';
 
 /// Inicializa el SDK de Supabase una sola vez, al arrancar la app
@@ -16,7 +17,9 @@ Future<void> initSupabase() async {
     // El SDK, sin sesión, manda la publishable como Bearer. Eso no es un
     // JWT y el gateway responde Invalid JWT cuando las anon legacy están
     // apagadas (login y formulario público).
-    httpClient: OmitirApiKeyEnBearerClient(),
+    // Los fallos de red de cualquier petición degradan la conexión al
+    // instante (ver `MonitorConexion`).
+    httpClient: ObservarFallosDeRedClient(OmitirApiKeyEnBearerClient()),
     // A diferencia de la web legada, dejamos detectSessionInUrl en true:
     // Flutter Web también necesita procesar el callback de recuperación de
     // contraseña / magic link cuando corre en navegador.

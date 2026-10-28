@@ -8,8 +8,9 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+
+import 'directorio_persistente_io.dart';
 
 const _carpeta = 'leads_pendientes';
 const _uuid = Uuid();
@@ -17,9 +18,7 @@ const _uuid = Uuid();
 bool get almacenamientoDisponible => true;
 
 Future<String> guardarFoto(Uint8List bytes) async {
-  // Documentos y no caché: el sistema puede purgar la caché antes de que haya
-  // red, y una foto capturada en feria puede esperar días a sincronizar.
-  final base = await getApplicationDocumentsDirectory();
+  final base = await directorioPersistente();
   final dir = Directory('${base.path}${Platform.pathSeparator}$_carpeta');
   if (!await dir.exists()) {
     await dir.create(recursive: true);

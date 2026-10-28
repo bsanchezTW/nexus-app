@@ -100,8 +100,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     (_, _) => refreshListenable.refresh(),
   );
   // Varias decisiones del redirect (cerrar sesión, forzar cambio de clave)
-  // ahora dependen de si hay red: al recuperarla hay que re-evaluarlas.
-  ref.listen(connectivityStreamProvider, (_, _) => refreshListenable.refresh());
+  // dependen de si la app opera en línea: al cambiar hay que re-evaluarlas.
+  ref.listen<bool>(isOnlineProvider, (_, _) => refreshListenable.refresh());
 
   final router = GoRouter(
     initialLocation: authClient.currentSession != null

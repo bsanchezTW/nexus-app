@@ -4,11 +4,11 @@ import '../router/route_paths.dart';
 
 /// Qué puede hacer cada plataforma cuando no hay Internet.
 ///
-/// La app es de feria: en el teléfono tiene que seguir operando con la copia
-/// local, pero en escritorio y web no existe modo offline —ahí no se baja el
-/// snapshot— y dejar navegar sin datos solo produce pantallas vacías y
-/// escrituras que se pierden. Por eso esas plataformas se bloquean con un
-/// aviso en vez de degradar.
+/// La app es de feria: en el teléfono y en el notebook de la mesa de
+/// acreditación tiene que seguir operando con la copia local. La web no tiene
+/// dónde guardar fotos ni un snapshot completo, así que sin Internet se
+/// bloquea con un aviso en vez de degradar. Linux no se usa y queda igual que
+/// la web.
 ///
 /// Las decisiones viven como funciones puras, igual que
 /// `external_route_policy.dart` y `user_event_route_policy.dart`, para poder
@@ -22,7 +22,13 @@ class OfflinePolicy {
     required bool isWeb,
   }) {
     if (isWeb) return false;
-    return platform == TargetPlatform.iOS || platform == TargetPlatform.android;
+    return switch (platform) {
+      TargetPlatform.android ||
+      TargetPlatform.iOS ||
+      TargetPlatform.windows ||
+      TargetPlatform.macOS => true,
+      TargetPlatform.linux || TargetPlatform.fuchsia => false,
+    };
   }
 
   /// Plataformas que, sin red real, tapan la app con un aviso a pantalla

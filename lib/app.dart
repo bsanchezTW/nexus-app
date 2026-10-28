@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/conexion/monitor_conexion.dart';
 import 'core/config/app_bootstrap.dart';
 import 'core/desktop/desktop_window.dart';
 import 'core/router/app_router.dart';
@@ -15,6 +16,7 @@ import 'core/widgets/app_widgets.dart';
 import 'core/widgets/offline_blocking_overlay.dart';
 import 'core/widgets/sync_conflict_listener.dart';
 import 'core/widgets/windows_mouse_gestures.dart';
+import 'data/offline/orquestador_reconexion.dart';
 import 'data/offline/snapshot_service.dart';
 import 'data/offline/sync_coordinator.dart';
 import 'features/auth/providers/auth_providers.dart';
@@ -104,8 +106,11 @@ class _ReadyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Mantiene vivo el listener de conectividad -> sincronización offline
-    // durante toda la vida de la app (ver data/offline/sync_coordinator.dart).
+    // Sondeos al backend: deciden si la app opera en línea o con su copia
+    // local (ver core/conexion/monitor_conexion.dart).
+    ref.watch(monitorConexionInitializerProvider);
+    // Al volver a una conexión estable: subir la cola, recargar y respaldar.
+    ref.watch(orquestadorReconexionProvider);
     ref.watch(syncCoordinatorInitializerProvider);
     ref.watch(snapshotAutoStartProvider);
     ref.watch(notificacionesRealtimeSubscriptionProvider);

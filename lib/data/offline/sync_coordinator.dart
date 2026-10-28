@@ -3,7 +3,8 @@ import 'dart:developer' as developer;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/supabase_tables.dart';
-import '../../core/network/connectivity_service.dart';
+import '../../core/conexion/estado_conexion.dart';
+import '../../core/conexion/monitor_conexion.dart';
 import '../repositories/inscripciones_subevento_repository.dart';
 import '../repositories/leads_repository.dart';
 import '../repositories/registrados_repository.dart';
@@ -12,54 +13,29 @@ import '../supabase/supabase_client_provider.dart';
 import 'offline_read_cache.dart';
 import 'sync_queue_service.dart';
 
-/// Punto único donde se registran los [SyncExecutor] de cada dominio y se
-/// dispara `processPending()` automáticamente al recuperar conexión.
+/// Punto único donde se registran los [SyncExecutor] de cada dominio.
 ///
 /// Esto reemplaza los múltiples listeners sueltos que había en el proyecto
 /// legado (`_layout.tsx`, `index.tsx`, `usar-app.tsx`, `ver-registrados.tsx`
 /// llamaban `procesarColaOffline()` cada uno por su cuenta, apuntando a una
 /// cola que además tenía el bug de la clave equivocada — ver Sección 17.3).
-/// Acá hay un solo listener de conectividad para toda la app.
+///
+/// Cuándo vaciar la cola no lo decide este coordinador sino
+/// `orquestadorReconexionProvider`, que lo hace al confirmar una conexión
+/// estable. Aquí solo queda el cambio de sesión: la cola nueva puede traer
+/// pendientes de una sesión anterior de la misma cuenta.
 class SyncCoordinator {
   SyncCoordinator(this._ref) {
-    _ref.listen<AsyncValue<bool>>(connectivityStreamProvider, (_, next) {
-      final online = next.valueOrNull;
-      if (online != null) _observarConexion(online);
-    });
     _ref.listen(syncQueueActiveOwnerIdProvider, (previous, next) {
       if (next != null && next.isNotEmpty && next != previous) {
-        final online = _ref.read(connectivityStreamProvider).valueOrNull;
-        if (online == true) sincronizarAhora();
+        if (_ref.read(estadoConexionProvider) == EstadoConexion.estable) {
+          sincronizarAhora();
+        }
       }
     });
-
-    // Si al construirse el estado de red ya estaba resuelto, el listener no
-    // volvería a dispararse hasta el próximo cambio.
-    final actual = _ref.read(connectivityStreamProvider).valueOrNull;
-    if (actual != null) _observarConexion(actual);
   }
 
   final Ref _ref;
-
-  bool? _ultimoEstadoOnline;
-
-  /// Vacía la cola al recuperar la conexión y también la primera vez que se
-  /// conoce el estado de red.
-  ///
-  /// Ese segundo caso importa: la cola sobrevive al cierre de la app en
-  /// `SharedPreferences`, y si el usuario la reabre ya con señal nunca ocurre
-  /// la transición offline→online. Sin esto, lo capturado sin conexión se
-  /// quedaba esperando indefinidamente — el mismo síntoma que este módulo
-  /// existe para evitar (Sección 17.3).
-  void _observarConexion(bool online) {
-    final esPrimeraLectura = _ultimoEstadoOnline == null;
-    final recuperoConexion = _ultimoEstadoOnline == false;
-    _ultimoEstadoOnline = online;
-
-    if (online && (esPrimeraLectura || recuperoConexion)) {
-      sincronizarAhora();
-    }
-  }
 
   Map<String, SyncExecutor> get _executors => {
     SupabaseTables.registrados: _ref.read(registradosRepositoryProvider),
@@ -108,8 +84,8 @@ final syncCoordinatorProvider = Provider<SyncCoordinator>((ref) {
 });
 
 /// Debe leerse una vez, cerca de la raíz del árbol de widgets (ver
-/// `app.dart`), para que el listener de conectividad quede activo durante
-/// toda la vida de la app.
+/// `app.dart`), para que el listener de sesión quede activo durante toda la
+/// vida de la app.
 final syncCoordinatorInitializerProvider = Provider<void>((ref) {
   ref.watch(syncCoordinatorProvider);
 });

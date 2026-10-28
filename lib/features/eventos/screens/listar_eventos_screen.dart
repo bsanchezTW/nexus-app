@@ -462,7 +462,7 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
                           : null,
                       onTap: () {
                         if (sinCache) {
-                          showOfflineUnavailableToast(context);
+                          showOfflineUnavailableToast(context, ref: ref);
                           return;
                         }
                         context.push(RoutePaths.usarEvento(evento.id));

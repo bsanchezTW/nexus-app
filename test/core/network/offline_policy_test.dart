@@ -5,10 +5,12 @@ import 'package:transworld_nexus/core/router/route_paths.dart';
 
 void main() {
   group('OfflinePolicy.supportsOfflineCache', () {
-    test('iOS y Android operan con caché local', () {
+    test('móvil, Windows y macOS operan con caché local', () {
       for (final plataforma in const [
         TargetPlatform.iOS,
         TargetPlatform.android,
+        TargetPlatform.windows,
+        TargetPlatform.macOS,
       ]) {
         expect(
           OfflinePolicy.supportsOfflineCache(plataforma, isWeb: false),
@@ -18,12 +20,8 @@ void main() {
       }
     });
 
-    test('escritorio no tiene modo offline', () {
-      for (final plataforma in const [
-        TargetPlatform.windows,
-        TargetPlatform.macOS,
-        TargetPlatform.linux,
-      ]) {
+    test('Linux no tiene modo offline', () {
+      for (final plataforma in const [TargetPlatform.linux]) {
         expect(
           OfflinePolicy.supportsOfflineCache(plataforma, isWeb: false),
           isFalse,

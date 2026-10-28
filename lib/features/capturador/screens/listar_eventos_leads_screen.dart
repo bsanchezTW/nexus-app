@@ -394,7 +394,7 @@ class _ListarEventosLeadsScreenState
                       chip: TwOriginPill(interno: evento.esInterno),
                       onTap: () {
                         if (sinCache) {
-                          showOfflineUnavailableToast(context);
+                          showOfflineUnavailableToast(context, ref: ref);
                           return;
                         }
                         context.push(RoutePaths.usarEventoLead(evento.id));

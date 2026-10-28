@@ -20,11 +20,10 @@ const Duration _pausaMinimaParaRecargar = Duration(seconds: 20);
 /// juntos) en una sola recarga.
 const Duration _ventanaCambios = Duration(milliseconds: 800);
 
-/// Mantiene la app alineada con Supabase mientras hay red. Sube la época de
-/// servidor (ver [epocaServidorProvider]) cuando:
+/// Mantiene la app alineada con Supabase mientras la conexión es estable.
+/// Sube la época de servidor (ver [epocaServidorProvider]) cuando:
 ///
 /// - la app vuelve a primer plano tras una pausa real;
-/// - se recupera la conexión;
 /// - Realtime informa un cambio en eventos, actividades de captura o
 ///   asignaciones de eventos, venga de este u otro dispositivo.
 ///
@@ -36,6 +35,11 @@ const Duration _ventanaCambios = Duration(milliseconds: 800);
 /// consulta normal. Requiere las tablas en la publicación `supabase_realtime`
 /// (migración 202610201200); sin ella el canal no recibe nada y quedan los
 /// otros disparadores.
+///
+/// El canal solo vive mientras [isOnlineProvider] es `true`: con la conexión
+/// degradada la app opera con su copia local y no tiene sentido mantener un
+/// socket que se cae a cada rato. Volver a estable ya recarga todo (ver
+/// `orquestadorReconexionProvider`).
 ///
 /// Se lee una vez cerca de la raíz (ver `app.dart`).
 final sincronizacionEnVivoProvider = Provider<void>((ref) {
@@ -100,7 +104,8 @@ final sincronizacionEnVivoProvider = Provider<void>((ref) {
   void sincronizarSuscripcion() {
     final session = ref.read(authStateChangesProvider).valueOrNull?.session;
     final perfil = ref.read(currentPerfilProvider).valueOrNull;
-    if (session != null && perfil != null) {
+    final enLinea = ref.read(isOnlineProvider);
+    if (session != null && perfil != null && enLinea) {
       suscribir();
     } else {
       desuscribir();
@@ -109,11 +114,7 @@ final sincronizacionEnVivoProvider = Provider<void>((ref) {
 
   ref.listen(authStateChangesProvider, (_, _) => sincronizarSuscripcion());
   ref.listen(currentPerfilProvider, (_, _) => sincronizarSuscripcion());
-  ref.listen(connectivityStreamProvider, (previous, next) {
-    if (previous?.valueOrNull == false && next.valueOrNull == true) {
-      exigirServidor();
-    }
-  });
+  ref.listen<bool>(isOnlineProvider, (_, _) => sincronizarSuscripcion());
 
   final ciclo = AppLifecycleListener(
     onPause: () => pausadaDesde = DateTime.now(),

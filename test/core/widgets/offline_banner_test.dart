@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:transworld_nexus/core/conexion/estado_conexion.dart';
+import 'package:transworld_nexus/core/conexion/monitor_conexion.dart';
 import 'package:transworld_nexus/core/network/connectivity_service.dart';
 import 'package:transworld_nexus/core/theme/tw_tokens.dart';
 import 'package:transworld_nexus/core/widgets/app_scaffold.dart';
@@ -59,6 +61,42 @@ void main() {
         .whereType<BoxDecoration>()
         .firstWhere((d) => d.color == TwColors.offlineNoticeBg);
     expect(fondo.color, TwColors.offlineNoticeBg);
+  });
+
+  testWidgets('con la conexión inestable avisa el modo sin conexión', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          estadoConexionProvider.overrideWithValue(EstadoConexion.inestable),
+        ],
+        child: const MaterialApp(home: Scaffold(body: TwOfflineNoticeCard())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(kTwUnstableNoticeTitle), findsOneWidget);
+    expect(find.text(kTwUnstableNoticeSubtitle), findsOneWidget);
+    expect(find.text(kTwOfflineNoticeTitle), findsNothing);
+  });
+
+  testWidgets('sin copia local (web), inestable avisa pero sigue en línea', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          estadoConexionProvider.overrideWithValue(EstadoConexion.inestable),
+          isOnlineProvider.overrideWithValue(true),
+        ],
+        child: const MaterialApp(home: Scaffold(body: TwOfflineNoticeCard())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(kTwUnstableNoticeTitle), findsOneWidget);
+    expect(find.text(kTwUnstableNoticeSubtitleOnline), findsOneWidget);
   });
 
   testWidgets('topGap deja aire entre el contenido y el cartel', (

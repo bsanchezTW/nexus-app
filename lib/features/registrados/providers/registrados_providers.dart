@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/supabase_tables.dart';
+import '../../../core/conexion/senal_fallos_red.dart';
 import '../../../core/network/connectivity_service.dart';
 import '../../../data/models/registrado.dart';
 import '../../../data/offline/offline_read_cache.dart';
@@ -160,6 +161,8 @@ Future<void> persistirAcreditacion(
           .timeout(esperaMaximaEscrituraDirecta);
     } catch (error) {
       if (!isNetworkTransportError(error)) rethrow;
+      // El tope de 10 s no lo ve el cliente HTTP: se avisa aquí.
+      reportarFalloDeRed();
       enCola = true;
     }
   }

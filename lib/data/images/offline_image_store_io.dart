@@ -8,16 +8,14 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:path_provider/path_provider.dart';
+import '../offline/directorio_persistente_io.dart';
 
 const _carpeta = 'imagenes_offline';
 
 bool get almacenamientoDisponible => true;
 
 Future<Directory> _directorio() async {
-  // Documentos y no caché: el sistema puede purgar la caché justo antes de la
-  // feria, que es cuando ya no hay red para volver a bajar las portadas.
-  final base = await getApplicationDocumentsDirectory();
+  final base = await directorioPersistente();
   final dir = Directory('${base.path}${Platform.pathSeparator}$_carpeta');
   if (!await dir.exists()) await dir.create(recursive: true);
   return dir;

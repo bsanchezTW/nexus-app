@@ -3,17 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import '../network/connectivity_service.dart';
+import '../conexion/estado_conexion.dart';
+import '../conexion/monitor_conexion.dart';
 import '../network/offline_policy.dart';
 import '../theme/tw_tokens.dart';
 
 /// Tapa la app cuando no hay Internet en las plataformas que no tienen modo
-/// offline (Windows, macOS y web).
+/// offline (web y Linux).
 ///
 /// Ahí no se baja el snapshot ni existe caché operativa: dejar navegar produce
-/// listas vacías y formularios cuyas escrituras se pierden. En iOS y Android
-/// no aparece nunca —esas sí operan con disco— y tampoco cubre login ni
+/// listas vacías y formularios cuyas escrituras se pierden. En móvil, Windows y
+/// macOS no aparece nunca —esas sí operan con disco— y tampoco cubre login ni
 /// recuperar contraseña, que deben seguir visibles.
+///
+/// Solo bloquea [EstadoConexion.sinInternet]: con la conexión inestable la web
+/// sigue funcionando, más lenta, y lo avisa `TwOfflineNoticeCard`.
 class OfflineBlockingOverlay extends ConsumerWidget {
   const OfflineBlockingOverlay({
     super.key,
@@ -28,10 +32,9 @@ class OfflineBlockingOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (!blocksUiWhenOfflineAqui) return child;
 
-    // Optimista mientras se resuelve el primer intento: si no, el overlay
-    // parpadea en cada arranque.
-    final hayRed = ref.watch(conexionRealProvider).valueOrNull ?? true;
-    if (hayRed) return child;
+    // `verificando` no bloquea: si no, el overlay parpadea en cada arranque.
+    final estado = ref.watch(estadoConexionProvider);
+    if (estado != EstadoConexion.sinInternet) return child;
 
     return ListenableBuilder(
       listenable: router.routerDelegate,

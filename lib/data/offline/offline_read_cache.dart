@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/conexion/senal_fallos_red.dart';
 import '../../core/network/connectivity_service.dart';
 import '../../core/network/offline_guard.dart';
 import '../../core/widgets/app_widgets.dart';
@@ -335,6 +336,9 @@ class OfflineReadCache {
             ventanaServidorInalcanzable,
           );
           _fallos[clave] = error;
+          // Agotó el presupuesto completo (30 s), no la espera corta de la
+          // UI: eso sí es una red mala y la conexión pasa a inestable.
+          reportarFalloDeRed();
         }
         rethrow;
       }
@@ -797,13 +801,15 @@ Future<void> refrescarLecturas(
   if (cache.consumirFallos() > 0) fallo = true;
 
   if (fallo && context != null && context.mounted) {
-    showAppSnackBar(
-      context,
-      ref.read(isOnlineProvider)
-          ? 'No se pudo actualizar desde el servidor. Revisa tu conexión.'
-          : kMensajeSinConexion,
-      isError: true,
-    );
+    if (ref.read(isOnlineProvider)) {
+      showAppSnackBar(
+        context,
+        'No se pudo actualizar desde el servidor. Revisa tu conexión.',
+        isError: true,
+      );
+    } else {
+      showOfflineUnavailableToast(context, ref: ref);
+    }
   }
 }
 
@@ -879,8 +885,9 @@ final cacheRevisionProvider = StateProvider.family<int, String>(
 ///
 /// Observa [epocaServidorProvider] para volver a consultar cuando sube. No
 /// observa [isOnlineProvider]: un emit de conectividad reiniciaría el
-/// [FutureProvider] y la UI pasaría por `loading`. Al recuperar la red sube la
-/// época (ver `sincronizacionEnVivoProvider`) y las lecturas vuelven a pedir.
+/// [FutureProvider] y la UI pasaría por `loading`. Al volver a una conexión
+/// estable sube la época (ver `orquestadorReconexionProvider`) y las lecturas
+/// vuelven a pedir.
 Future<List<T>> leerCacheFirstConRef<T>({
   required Ref ref,
   required String tabla,

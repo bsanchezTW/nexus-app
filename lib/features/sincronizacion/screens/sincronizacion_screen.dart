@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../../../core/conexion/estado_conexion.dart';
+import '../../../core/conexion/monitor_conexion.dart';
 import '../../../core/network/connectivity_service.dart';
 import '../../../core/network/offline_policy.dart';
 import '../../../core/theme/tw_tokens.dart';
@@ -93,7 +95,11 @@ class SincronizacionScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         children: [
-          _Estado(hayRed: hayRed, snapshot: snapshot),
+          _Estado(
+            hayRed: hayRed,
+            estado: ref.watch(estadoConexionProvider),
+            snapshot: snapshot,
+          ),
           const TwSectionLabel('Pendientes de subir'),
           _Contador(
             icono: Symbols.person_search_rounded,
@@ -146,8 +152,8 @@ class SincronizacionScreen extends ConsumerWidget {
             const Padding(
               padding: EdgeInsets.only(top: 10),
               child: Text(
-                'Necesitas conexión para sincronizar. Lo capturado se sube '
-                'solo en cuanto vuelva la red.',
+                'Necesitas una conexión estable para sincronizar. Lo capturado '
+                'se sube solo en cuanto se estabilice.',
                 style: TwText.tileSubtitle,
                 textAlign: TextAlign.center,
               ),
@@ -169,9 +175,14 @@ class SincronizacionScreen extends ConsumerWidget {
 }
 
 class _Estado extends StatelessWidget {
-  const _Estado({required this.hayRed, required this.snapshot});
+  const _Estado({
+    required this.hayRed,
+    required this.estado,
+    required this.snapshot,
+  });
 
   final bool hayRed;
+  final EstadoConexion estado;
   final SnapshotEstado snapshot;
 
   @override
@@ -195,10 +206,13 @@ class _Estado extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  hayRed ? 'Conectado' : 'Sin conexión',
-                  style: TwText.tileTitle,
-                ),
+                Text(switch (estado) {
+                  EstadoConexion.verificando ||
+                  EstadoConexion.estable => 'Conectado',
+                  EstadoConexion.inestable =>
+                    'Conexión inestable · modo sin conexión',
+                  EstadoConexion.sinInternet => 'Sin conexión',
+                }, style: TwText.tileTitle),
                 const SizedBox(height: 2),
                 Text(
                   ultimo == null

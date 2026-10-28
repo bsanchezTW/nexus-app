@@ -359,6 +359,20 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
     }
   }
 
+  /// Pasada completa de mantenimiento: purga, baja el set activo y drena la
+  /// limpieza de Storage pendiente.
+  ///
+  /// Sin red [ejecutar] sale de inmediato, así que la purga va aparte: la
+  /// decisión solo mira la fecha del catálogo que ya está en disco. El drenaje
+  /// cubre también lo que encolaron otros dispositivos: la cola vive en el
+  /// servidor y nadie más la vacía.
+  Future<void> respaldar() async {
+    if (_ref.read(currentPerfilProvider).valueOrNull == null) return;
+    await purgarConCacheLocal();
+    await ejecutar();
+    await _ref.read(storageCleanupServiceProvider).drenar();
+  }
+
   /// Purga con lo que ya hay en disco, sin pedirle nada al servidor.
   ///
   /// La decisión solo depende de la fecha del catálogo cacheado, así que puede
@@ -565,13 +579,14 @@ const Duration _pausaMinimaParaRespaldar = Duration(seconds: 20);
 
 /// Margen para que, al volver o recuperar la red, las pantallas recarguen
 /// del servidor antes de que el respaldo empiece a consultar.
-const Duration _esperaTrasRecarga = Duration(seconds: 3);
+const Duration esperaRespaldoTrasRecarga = Duration(seconds: 3);
 
 /// Dispara el respaldo local en segundo plano. Se lee una vez cerca de la raíz
 /// (ver `app.dart`).
 ///
 /// - Al abrir la app (perfil resuelto), **después** de que el home cargó.
-/// - Al recuperar la red.
+/// - Al volver a una conexión estable (lo dispara
+///   `orquestadorReconexionProvider`).
 /// - Al volver a la app si el último respaldo tiene más de
 ///   [_respaldoAlVolverTras].
 ///
@@ -584,15 +599,7 @@ final snapshotAutoStartProvider = Provider<void>((ref) {
 
   void lanzar() {
     programado?.cancel();
-    if (ref.read(currentPerfilProvider).valueOrNull == null) return;
-    final servicio = ref.read(snapshotServiceProvider.notifier);
-    // Sin red `ejecutar` sale de inmediato, así que la purga va aparte: la
-    // decisión solo mira la fecha del catálogo que ya está en disco.
-    servicio.purgarConCacheLocal();
-    servicio.ejecutar();
-    // Drena también lo que encolaron otros dispositivos: la cola vive en el
-    // servidor y nadie más la vacía.
-    ref.read(storageCleanupServiceProvider).drenar();
+    ref.read(snapshotServiceProvider.notifier).respaldar();
   }
 
   void programar(Duration espera) {
@@ -630,13 +637,6 @@ final snapshotAutoStartProvider = Provider<void>((ref) {
     if (cargada) lanzarTrasCargaInicial();
   });
 
-  // Al recuperar la red se vuelve a bajar el set activo.
-  ref.listen(connectivityStreamProvider, (previous, next) {
-    if (previous?.valueOrNull == false && next.valueOrNull == true) {
-      programar(_esperaTrasRecarga);
-    }
-  });
-
   final ciclo = AppLifecycleListener(
     onPause: () => pausadaDesde = DateTime.now(),
     onResume: () {
@@ -650,7 +650,7 @@ final snapshotAutoStartProvider = Provider<void>((ref) {
           DateTime.now().difference(ultimo) < _respaldoAlVolverTras) {
         return;
       }
-      programar(_esperaTrasRecarga);
+      programar(esperaRespaldoTrasRecarga);
     },
   );
 
