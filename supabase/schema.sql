@@ -6754,3 +6754,17 @@ CREATE TRIGGER trg_subeventos_en_evento_principal
 
 REVOKE ALL ON FUNCTION public.rpe_eventos_tipo_con_talleres() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rpe_subeventos_en_evento_principal() FROM PUBLIC, anon, authenticated;
+
+-- Sondeo de salud de la base de datos (migración 202610281200). La app lo
+-- consulta cada 15 s; recorre gateway → PostgREST → Postgres sin leer tablas.
+CREATE OR REPLACE FUNCTION public.rpe_ping()
+RETURNS timestamptz
+LANGUAGE sql
+STABLE
+SET search_path = public, pg_temp
+AS $$
+  SELECT now();
+$$;
+
+REVOKE ALL ON FUNCTION public.rpe_ping() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.rpe_ping() TO anon, authenticated;

@@ -38,6 +38,8 @@ class SupabaseTables {
 class SupabaseRpc {
   SupabaseRpc._();
 
+  /// Sondeo de salud de la base de datos (ver `sondearBackend`).
+  static const ping = 'rpe_ping';
   static const marcarRecuperacionPass = 'marcar_recuperacion_pass';
   static const verificarUsuarioRegistrado = 'verificar_usuario_registrado';
   static const actualizarRolUsuario = 'rpe_actualizar_rol_usuario';
