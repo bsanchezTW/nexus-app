@@ -14,6 +14,7 @@ import 'package:transworld_nexus/data/models/ocupacion_evento.dart';
 import 'package:transworld_nexus/data/models/perfil.dart';
 import 'package:transworld_nexus/data/models/registrado.dart';
 import 'package:transworld_nexus/data/models/subevento.dart';
+import 'package:transworld_nexus/data/offline/almacen/almacen_copia_local.dart';
 import 'package:transworld_nexus/data/offline/offline_read_cache.dart';
 import 'package:transworld_nexus/data/offline/sync_queue_service.dart';
 import 'package:transworld_nexus/data/repositories/inscripciones_subevento_repository.dart';
@@ -78,7 +79,10 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    final cache = OfflineReadCache(prefs, ownerId: 'admin-1');
+    final cache = OfflineReadCache(
+      AlmacenCopiaLocal.enMemoria(),
+      ownerId: 'admin-1',
+    );
     const eventoId = 'evento-1';
     const original = Registrado(
       id: 'registrado-1',
@@ -179,9 +183,7 @@ void main() {
     expect(fila.value, isTrue);
 
     await tester.ensureVisible(find.byType(FormActionBar));
-    tester
-        .widget<FormActionBar>(find.byType(FormActionBar))
-        .onPressed!();
+    tester.widget<FormActionBar>(find.byType(FormActionBar)).onPressed!();
     await tester.pumpAndSettle();
 
     expect(inscripciones.inscribirLlamadas, 0);

@@ -11,6 +11,7 @@ import 'package:transworld_nexus/data/models/evento_lead.dart';
 import 'package:transworld_nexus/data/models/lead.dart';
 import 'package:transworld_nexus/data/models/lead_write_result.dart';
 import 'package:transworld_nexus/data/models/perfil.dart';
+import 'package:transworld_nexus/data/offline/almacen/almacen_copia_local.dart';
 import 'package:transworld_nexus/data/offline/offline_read_cache.dart';
 import 'package:transworld_nexus/data/offline/sync_queue_service.dart';
 import 'package:transworld_nexus/data/repositories/leads_repository.dart';
@@ -49,7 +50,10 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    final cache = OfflineReadCache(prefs, ownerId: 'admin-1');
+    final cache = OfflineReadCache(
+      AlmacenCopiaLocal.enMemoria(),
+      ownerId: 'admin-1',
+    );
     const eventoId = 'campana-1';
     const original = Lead(
       id: 'lead-1',
@@ -116,9 +120,7 @@ void main() {
     );
     await tester.ensureVisible(find.byType(FormActionBar));
     await tester.pumpAndSettle();
-    final guardar = tester.widget<FormActionBar>(
-      find.byType(FormActionBar),
-    );
+    final guardar = tester.widget<FormActionBar>(find.byType(FormActionBar));
     expect(guardar.onPressed, isNotNull);
     guardar.onPressed!();
     await tester.pumpAndSettle();

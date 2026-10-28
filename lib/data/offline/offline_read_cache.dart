@@ -1,15 +1,14 @@
-import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/conexion/senal_fallos_red.dart';
 import '../../core/network/connectivity_service.dart';
 import '../../core/network/offline_guard.dart';
 import '../../core/widgets/app_widgets.dart';
+import 'almacen/almacen_copia_local.dart';
 import 'sync_queue_service.dart';
 
 /// `eventoId` reservado para las tablas que no se particionan por evento
@@ -57,11 +56,6 @@ class _Respuesta<T> {
   final Future<bool> respaldo;
 }
 
-const String _prefijoV3 = 'offline_read_cache_v3';
-const String _prefijoV2 = 'offline_read_cache_v2';
-const String _prefijoV1 = 'offline_read_cache_v1_';
-const String _sufijoIndice = '__idx';
-
 /// Última copia conocida de las listas por evento, para poder LEER sin
 /// conexión.
 ///
@@ -76,21 +70,16 @@ const String _sufijoIndice = '__idx';
 /// servidor no contesta a tiempo, o para la reconstrucción inmediata tras un
 /// parche local.
 ///
-/// El almacenamiento es **una clave por `(tabla, evento)`** más un índice de
-/// eventos por tabla. El formato v2 guardaba un único blob por tabla y lo
-/// re-serializaba entero en cada escritura de un evento; con el snapshot
-/// completo (~10 eventos × cientos de filas) eso reescribía megabytes de JSON
-/// por cada evento guardado.
+/// El almacenamiento es [AlmacenCopiaLocal]: una entrada por `(tabla,
+/// evento)` guardada fila por fila en SQLite. Antes vivía en
+/// `SharedPreferences`; `migrarCopiaDesdePreferencias` la traspasa al arrancar.
 class OfflineReadCache {
-  OfflineReadCache(this._prefs, {this.ownerId, DateTime Function()? reloj})
+  OfflineReadCache(this._almacen, {this.ownerId, DateTime Function()? reloj})
     : _ahora = reloj ?? DateTime.now;
 
-  final SharedPreferences _prefs;
+  final AlmacenCopiaLocal _almacen;
   final String? ownerId;
   final DateTime Function() _ahora;
-
-  /// Tablas cuya migración desde v2 ya se comprobó en esta instancia.
-  final Set<String> _tablasMigradas = <String>{};
 
   /// Consultas y respaldos en vuelo. Quien va a escribir (acreditar, editar)
   /// puede esperarlos para que una respuesta vieja no llegue después.
@@ -129,47 +118,11 @@ class OfflineReadCache {
     return owner;
   }
 
-  /// Clave de datos de un evento concreto. `:` separa tabla de evento porque
-  /// ningún nombre de tabla lo contiene; así dos pares distintos no pueden
-  /// producir la misma clave.
-  String? _claveDatos(String tabla, String eventoId) {
-    final owner = _owner;
-    if (owner == null) return null;
-    return '${_prefijoV3}_${owner}_$tabla:$eventoId';
-  }
-
-  /// Índice de eventos guardados de una tabla. Sin él no se puede recorrer la
-  /// tabla para purgar (`retenerEventos`, `retenerFilasPropias`).
-  String? _claveIndice(String tabla) {
-    final owner = _owner;
-    if (owner == null) return null;
-    return '${_prefijoV3}_${owner}_$tabla$_sufijoIndice';
-  }
-
+  /// Eventos con copia local en [tabla] para el perfil en sesión.
   Set<String> _indice(String tabla) {
-    final key = _claveIndice(tabla);
-    if (key == null) return {};
-    final raw = _prefs.getString(key);
-    if (raw == null || raw.isEmpty) return {};
-    try {
-      return (jsonDecode(raw) as List<dynamic>).map((e) => '$e').toSet();
-    } catch (e) {
-      developer.log(
-        'Índice de $tabla corrupto, se descarta: $e',
-        name: 'OfflineReadCache',
-      );
-      return {};
-    }
-  }
-
-  Future<void> _guardarIndice(String tabla, Set<String> eventos) async {
-    final key = _claveIndice(tabla);
-    if (key == null) return;
-    if (eventos.isEmpty) {
-      await _prefs.remove(key);
-      return;
-    }
-    await _prefs.setString(key, jsonEncode(eventos.toList()));
+    final owner = _owner;
+    if (owner == null) return {};
+    return _almacen.eventos(owner, tabla);
   }
 
   /// Copia local sin tocar la red. Null si este evento nunca se cacheó.
@@ -494,28 +447,6 @@ class OfflineReadCache {
     );
   }
 
-  /// La caché v1 mezclaba cuentas. Sus filas no contienen evidencia suficiente
-  /// del lector original, por lo que nunca se adoptan: se mueven en bruto a una
-  /// cuarentena diagnóstica y se quitan de las claves activas.
-  Future<int> quarantineLegacy() async {
-    if (_owner == null) return 0;
-    final keys = _prefs
-        .getKeys()
-        .where((key) => key.startsWith(_prefijoV1))
-        .toList();
-    for (final key in keys) {
-      final raw = _prefs.getString(key);
-      if (raw != null) {
-        await _prefs.setString(
-          '${_prefijoV3}_quarantine_${key.substring(_prefijoV1.length)}',
-          raw,
-        );
-      }
-      await _prefs.remove(key);
-    }
-    return keys.length;
-  }
-
   Future<void> guardar(
     String tabla,
     String eventoId,
@@ -524,24 +455,17 @@ class OfflineReadCache {
 
   /// Escribe solo si el contenido cambió y responde si lo hizo.
   ///
-  /// La comparación es sobre el JSON ya serializado: `toCacheMap` produce las
-  /// claves siempre en el mismo orden, así que dos listas iguales dan el mismo
-  /// texto. Sirve para dos cosas: no reescribir megabytes idénticos en cada
-  /// refresco y saber si la UI tiene algo nuevo que mostrar.
+  /// El almacén compara fila a fila (ver [AlmacenCopiaLocal.guardar]): un
+  /// refresco idéntico no escribe nada, y uno que cambia una fila escribe esa
+  /// fila. La respuesta dice si la UI tiene algo nuevo que mostrar.
   Future<bool> _guardarSiCambia(
     String tabla,
     String eventoId,
     List<Map<String, dynamic>> filas,
   ) async {
-    _migrarV2SiHaceFalta(tabla);
-    final key = _claveDatos(tabla, eventoId);
-    if (key == null) return false;
-    final nuevo = jsonEncode(filas);
-    if (_prefs.getString(key) == nuevo) return false;
-    await _prefs.setString(key, nuevo);
-    final indice = _indice(tabla);
-    if (indice.add(eventoId)) await _guardarIndice(tabla, indice);
-    return true;
+    final owner = _owner;
+    if (owner == null) return false;
+    return _almacen.guardar(owner, tabla, eventoId, filas);
   }
 
   /// Variante de [guardar] para tablas sin partición por evento.
@@ -556,16 +480,13 @@ class OfflineReadCache {
     required String id,
     required Map<String, dynamic> cambios,
   }) async {
-    _migrarV2SiHaceFalta(tabla);
-    final key = _claveDatos(tabla, eventoId);
-    if (key == null) return false;
-    final filas = _filasCrudas(key);
+    final owner = _owner;
+    if (owner == null) return false;
+    final filas = _almacen.leer(owner, tabla, eventoId);
     if (filas == null) return false;
     var encontro = false;
     final actualizadas = <Map<String, dynamic>>[];
-    for (final item in filas) {
-      if (item is! Map) continue;
-      final fila = Map<String, dynamic>.from(item);
+    for (final fila in filas) {
       if (fila['id'] == id) {
         encontro = true;
         actualizadas.add({...fila, ...cambios});
@@ -588,18 +509,14 @@ class OfflineReadCache {
   /// Sin red la UI la usa para distinguir lo que se puede abrir de lo que ya se
   /// purgó: entrar a un evento sin caché solo lleva a una pantalla vacía.
   bool tieneEvento(String tabla, String eventoId) {
-    _migrarV2SiHaceFalta(tabla);
     return _indice(tabla).contains(eventoId);
   }
 
   /// Elimina inmediatamente una copia cuyo acceso fue rechazado por RLS.
   Future<void> eliminarEvento(String tabla, String eventoId) async {
-    _migrarV2SiHaceFalta(tabla);
-    final key = _claveDatos(tabla, eventoId);
-    if (key == null) return;
-    await _prefs.remove(key);
-    final indice = _indice(tabla);
-    if (indice.remove(eventoId)) await _guardarIndice(tabla, indice);
+    final owner = _owner;
+    if (owner == null) return;
+    await _almacen.borrar(owner, tabla, eventoId);
   }
 
   /// Conserva solo eventos que siguen autorizados. Debe llamarse únicamente
@@ -612,39 +529,31 @@ class OfflineReadCache {
     String tabla,
     Set<String> eventosAutorizados,
   ) async {
-    _migrarV2SiHaceFalta(tabla);
-    final indice = _indice(tabla);
-    final sobrantes = indice
-        .where(
-          (eventoId) =>
-              eventoId != cacheAmbitoGlobal &&
-              !eventosAutorizados.contains(eventoId),
-        )
-        .toList();
-    if (sobrantes.isEmpty) return;
-    for (final eventoId in sobrantes) {
-      final key = _claveDatos(tabla, eventoId);
-      if (key != null) await _prefs.remove(key);
-      indice.remove(eventoId);
+    final owner = _owner;
+    if (owner == null) return;
+    final sobrantes = _indice(tabla).where(
+      (eventoId) =>
+          eventoId != cacheAmbitoGlobal &&
+          !eventosAutorizados.contains(eventoId),
+    );
+    for (final eventoId in sobrantes.toList()) {
+      await _almacen.borrar(owner, tabla, eventoId);
     }
-    await _guardarIndice(tabla, indice);
   }
 
   /// Purga filas cacheadas que pertenecen a otros perfiles. Se usa al cargar
   /// un rol con visibilidad privada de leads, incluido un downgrade de rol.
   Future<void> retenerFilasPropias(String tabla, String perfilId) async {
-    _migrarV2SiHaceFalta(tabla);
-    for (final eventoId in _indice(tabla)) {
-      final key = _claveDatos(tabla, eventoId);
-      if (key == null) continue;
-      final filas = _filasCrudas(key);
+    final owner = _owner;
+    if (owner == null) return;
+    for (final eventoId in _indice(tabla).toList()) {
+      final filas = _almacen.leer(owner, tabla, eventoId);
       if (filas == null) continue;
-      final propias = filas.where((fila) {
-        if (fila is! Map) return false;
-        return fila['perfil_id']?.toString() == perfilId;
-      }).toList();
+      final propias = filas
+          .where((fila) => fila['perfil_id']?.toString() == perfilId)
+          .toList();
       if (propias.length != filas.length) {
-        await _prefs.setString(key, jsonEncode(propias));
+        await _almacen.guardar(owner, tabla, eventoId, propias);
       }
     }
   }
@@ -654,15 +563,12 @@ class OfflineReadCache {
     String eventoId,
     T Function(Map<String, dynamic>) desdeFila,
   ) {
-    _migrarV2SiHaceFalta(tabla);
-    final key = _claveDatos(tabla, eventoId);
-    if (key == null) return null;
-    final filas = _filasCrudas(key);
+    final owner = _owner;
+    if (owner == null) return null;
+    final filas = _almacen.leer(owner, tabla, eventoId);
     if (filas == null) return null;
     try {
-      return filas
-          .map((fila) => desdeFila(Map<String, dynamic>.from(fila as Map)))
-          .toList();
+      return filas.map(desdeFila).toList();
     } catch (e) {
       developer.log(
         'Caché de $tabla ilegible, se descarta: $e',
@@ -670,61 +576,6 @@ class OfflineReadCache {
       );
       return null;
     }
-  }
-
-  List<dynamic>? _filasCrudas(String key) {
-    final raw = _prefs.getString(key);
-    if (raw == null || raw.isEmpty) return null;
-    try {
-      return jsonDecode(raw) as List<dynamic>;
-    } catch (e) {
-      developer.log(
-        'Caché corrupta en $key, se descarta: $e',
-        name: 'OfflineReadCache',
-      );
-      return null;
-    }
-  }
-
-  /// Reparte el blob v2 de [tabla] en una clave por evento.
-  ///
-  /// Es perezosa y síncrona a efectos de lectura: `SharedPreferences` publica
-  /// el valor en su mapa en memoria al invocar `setString`, así que la lectura
-  /// inmediatamente posterior ya ve las claves nuevas aunque la escritura en
-  /// disco siga en vuelo. Migrar en el constructor obligaría a que todo lector
-  /// esperara un future que hoy nadie espera.
-  void _migrarV2SiHaceFalta(String tabla) {
-    if (!_tablasMigradas.add(tabla)) return;
-    final owner = _owner;
-    if (owner == null) {
-      // Sin sesión no hay namespace: no marcarla como migrada, para reintentar
-      // cuando el owner exista.
-      _tablasMigradas.remove(tabla);
-      return;
-    }
-
-    final claveV2 = '${_prefijoV2}_${owner}_$tabla';
-    final raw = _prefs.getString(claveV2);
-    if (raw == null || raw.isEmpty) return;
-
-    try {
-      final todo = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-      final indice = _indice(tabla);
-      for (final entry in todo.entries) {
-        if (entry.value is! List) continue;
-        final key = _claveDatos(tabla, entry.key);
-        if (key == null) continue;
-        unawaited(_prefs.setString(key, jsonEncode(entry.value)));
-        indice.add(entry.key);
-      }
-      unawaited(_guardarIndice(tabla, indice));
-    } catch (e) {
-      developer.log(
-        'Caché v2 de $tabla ilegible, se descarta: $e',
-        name: 'OfflineReadCache',
-      );
-    }
-    unawaited(_prefs.remove(claveV2));
   }
 
   /// Denegación que solo puede venir de una respuesta del servidor. Purgar es
@@ -754,12 +605,10 @@ class OfflineReadCache {
 }
 
 final offlineReadCacheProvider = Provider<OfflineReadCache>((ref) {
-  final cache = OfflineReadCache(
-    ref.watch(sharedPreferencesProvider),
+  return OfflineReadCache(
+    ref.watch(almacenCopiaLocalProvider),
     ownerId: ref.watch(syncQueueActiveOwnerIdProvider),
   );
-  unawaited(cache.quarantineLegacy());
-  return cache;
 });
 
 /// Época de servidor. Cada vez que sube, todo provider que lee con

@@ -12,6 +12,7 @@ import 'package:transworld_nexus/data/models/ocupacion_evento.dart';
 import 'package:transworld_nexus/data/models/evento.dart';
 import 'package:transworld_nexus/data/models/perfil.dart';
 import 'package:transworld_nexus/data/models/registrado.dart';
+import 'package:transworld_nexus/data/offline/almacen/almacen_copia_local.dart';
 import 'package:transworld_nexus/data/offline/offline_read_cache.dart';
 import 'package:transworld_nexus/data/offline/sync_queue_service.dart';
 import 'package:transworld_nexus/data/repositories/registrados_repository.dart';
@@ -51,7 +52,10 @@ void main() {
 
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    final cache = OfflineReadCache(prefs, ownerId: 'admin-1');
+    final cache = OfflineReadCache(
+      AlmacenCopiaLocal.enMemoria(),
+      ownerId: 'admin-1',
+    );
     const eventoId = 'evento-1';
     const original = Registrado(
       id: 'registrado-1',
@@ -107,11 +111,17 @@ void main() {
           subeventosPorEventoProvider.overrideWith((ref, id) async => const []),
           ocupacionEventoProvider.overrideWith(
             (ref, id) async => const OcupacionEvento(
-              evento: OcupacionItem(cupoMaximo: null, inscritos: 0, asistentes: 0),
+              evento: OcupacionItem(
+                cupoMaximo: null,
+                inscritos: 0,
+                asistentes: 0,
+              ),
               subeventos: {},
             ),
           ),
-          inscripcionesPorEventoProvider.overrideWith((ref, id) async => const []),
+          inscripcionesPorEventoProvider.overrideWith(
+            (ref, id) async => const [],
+          ),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -126,9 +136,7 @@ void main() {
     );
     await tester.ensureVisible(find.byType(FormActionBar));
     await tester.pumpAndSettle();
-    final guardar = tester.widget<FormActionBar>(
-      find.byType(FormActionBar),
-    );
+    final guardar = tester.widget<FormActionBar>(find.byType(FormActionBar));
     expect(guardar.onPressed, isNotNull);
     guardar.onPressed!();
     await tester.pumpAndSettle();

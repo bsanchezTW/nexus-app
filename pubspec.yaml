@@ -83,6 +83,8 @@ dependencies:
   screen_retriever: ^0.2.2
   # UITabBar nativo con Liquid Glass en iOS 26. Android/web/Windows no lo usan.
   cupertino_native_better: ^1.5.4
+  drift: ^2.35.3
+  drift_flutter: ^0.3.1
 
 # Windows: skip upstream native FFI plugin (ATL + MSVC coroutine).
 # Inbox in-app is unaffected; system toasts are Android/iOS only.
@@ -101,6 +103,8 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  drift_dev: ^2.35.2
+  build_runner: ^2.17.1
 
 flutter_launcher_icons:
   android: "ic_launcher"

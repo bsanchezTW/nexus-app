@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:transworld_nexus/data/models/lead.dart';
+import 'package:transworld_nexus/data/offline/almacen/almacen_copia_local.dart';
+import 'package:transworld_nexus/data/offline/almacen/migracion_preferencias.dart';
 import 'package:transworld_nexus/data/offline/offline_read_cache.dart';
 
 void main() {
@@ -24,9 +26,8 @@ void main() {
   );
 
   Future<OfflineReadCache> nuevaCache() async {
-    SharedPreferences.setMockInitialValues({});
     return OfflineReadCache(
-      await SharedPreferences.getInstance(),
+      AlmacenCopiaLocal.enMemoria(),
       ownerId: 'usuario-a',
     );
   }
@@ -187,9 +188,7 @@ void main() {
     );
 
     test('un rol privado purga filas cacheadas de otros perfiles', () async {
-      SharedPreferences.setMockInitialValues({});
-      final prefs = await SharedPreferences.getInstance();
-      final cache = OfflineReadCache(prefs, ownerId: 'usuario-a');
+      final cache = await nuevaCache();
       await cache.guardar(tabla, eventoId, [
         {...lead.toCacheMap(), 'perfil_id': 'usuario-a'},
         {...lead.toCacheMap(), 'id': 'lead-ajeno', 'perfil_id': 'usuario-b'},
@@ -204,10 +203,9 @@ void main() {
     });
 
     test('cada usuario lee únicamente su namespace', () async {
-      SharedPreferences.setMockInitialValues({});
-      final prefs = await SharedPreferences.getInstance();
-      final cacheA = OfflineReadCache(prefs, ownerId: 'usuario-a');
-      final cacheB = OfflineReadCache(prefs, ownerId: 'usuario-b');
+      final almacen = AlmacenCopiaLocal.enMemoria();
+      final cacheA = OfflineReadCache(almacen, ownerId: 'usuario-a');
+      final cacheB = OfflineReadCache(almacen, ownerId: 'usuario-b');
       await leer(cacheA, desdeServidor: () async => [lead]);
 
       expect(
@@ -355,7 +353,7 @@ void main() {
   });
 
   group('OfflineReadCache migración v2', () {
-    test('el blob por tabla se reparte en una clave por evento', () async {
+    test('el blob por tabla se reparte en una entrada por evento', () async {
       SharedPreferences.setMockInitialValues({
         'offline_read_cache_v2_usuario-a_$tabla': jsonEncode({
           eventoId: [lead.toCacheMap()],
@@ -365,7 +363,9 @@ void main() {
         }),
       });
       final prefs = await SharedPreferences.getInstance();
-      final cache = OfflineReadCache(prefs, ownerId: 'usuario-a');
+      final almacen = AlmacenCopiaLocal.enMemoria();
+      await migrarCopiaDesdePreferencias(prefs, almacen);
+      final cache = OfflineReadCache(almacen, ownerId: 'usuario-a');
 
       expect(
         cache

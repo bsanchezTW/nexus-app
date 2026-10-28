@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:transworld_nexus/core/constants/supabase_tables.dart';
 import 'package:transworld_nexus/core/network/connectivity_service.dart';
 import 'package:transworld_nexus/data/models/inscripcion_subevento.dart';
+import 'package:transworld_nexus/data/offline/almacen/almacen_copia_local.dart';
 import 'package:transworld_nexus/data/offline/offline_read_cache.dart';
 import 'package:transworld_nexus/data/offline/sync_queue_item.dart';
 import 'package:transworld_nexus/data/offline/sync_queue_service.dart';
@@ -14,7 +15,7 @@ import 'package:transworld_nexus/data/repositories/inscripciones_subevento_repos
 import 'package:transworld_nexus/features/subeventos/providers/inscripciones_providers.dart';
 
 class _CacheEspia extends OfflineReadCache {
-  _CacheEspia(super.prefs) : super(ownerId: 'admin-1');
+  _CacheEspia(super.almacen) : super(ownerId: 'admin-1');
 
   int parches = 0;
 
@@ -101,9 +102,7 @@ void main() {
   });
 
   testWidgets('un rechazo online no parchea la caché', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    final cache = _CacheEspia(prefs);
+    final cache = _CacheEspia(AlmacenCopiaLocal.enMemoria());
     Object? error;
 
     await tester.pumpWidget(
@@ -152,7 +151,7 @@ void main() {
       'la cola', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    final cache = _CacheEspia(prefs);
+    final cache = _CacheEspia(AlmacenCopiaLocal.enMemoria());
     Object? error;
 
     await tester.pumpWidget(

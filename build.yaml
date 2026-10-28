@@ -1,0 +1,8 @@
+# Solo la base de la copia local usa generación de código (drift). Acotarla
+# evita que build_runner recorra toda la app en cada `build`.
+targets:
+  $default:
+    builders:
+      drift_dev:
+        generate_for:
+          - lib/data/offline/almacen/**

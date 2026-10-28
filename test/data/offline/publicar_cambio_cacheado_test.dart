@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:transworld_nexus/data/offline/almacen/almacen_copia_local.dart';
 import 'package:transworld_nexus/data/offline/offline_read_cache.dart';
 
 void main() {
@@ -12,9 +12,10 @@ void main() {
     testWidgets(
       'publica el cambio del ${caso.nombre} antes de revalidar la lista',
       (tester) async {
-        SharedPreferences.setMockInitialValues({});
-        final prefs = await SharedPreferences.getInstance();
-        final cache = OfflineReadCache(prefs, ownerId: 'usuario-1');
+        final cache = OfflineReadCache(
+          AlmacenCopiaLocal.enMemoria(),
+          ownerId: 'usuario-1',
+        );
         const eventoId = 'evento-1';
         const filaId = 'persona-1';
         await cache.guardar(caso.tabla, eventoId, const [
