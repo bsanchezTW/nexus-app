@@ -10,6 +10,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'app.dart';
 import 'core/desktop/desktop_window.dart';
 import 'core/widgets/espera_bloqueante.dart';
+import 'features/auth/screens/splash_screen.dart';
 import 'firebase_options.dart';
 
 @pragma('vm:entry-point')
@@ -19,7 +20,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  // El splash nativo se va con el primer cuadro: que ese cuadro ya traiga el
+  // logo del inicio, para que el traspaso no parpadee.
+  retenerPrimerCuadroHastaElLogo(binding);
   // Antes que el router: así el "atrás" se ignora mientras se guarda.
   EsperaBloqueante.instalar();
   if (kIsWeb) usePathUrlStrategy();

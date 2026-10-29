@@ -27,6 +27,29 @@ void main() {
     await tester.pump(const Duration(seconds: 8));
   });
 
+  testWidgets('el logo limpio y la animación comparten la caja del splash '
+      'nativo', (tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(child: MaterialApp(home: SplashScreen())),
+    );
+
+    final logo = find.byWidgetPredicate(
+      (w) =>
+          w is Image &&
+          w.image == const AssetImage('assets/images/splash/logo_inicio.png'),
+    );
+    expect(logo, findsOneWidget);
+    expect(tester.getSize(logo), const Size.square(tamanoLogoInicio));
+    expect(
+      tester.getSize(find.byType(Lottie)),
+      const Size.square(tamanoLogoInicio),
+    );
+    // Mismo centro que el splash nativo: el centro de la pantalla.
+    expect(tester.getCenter(logo), tester.getCenter(find.byType(Scaffold)));
+
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('splashReady is true on first frame, without waiting animation', (
     tester,
   ) async {

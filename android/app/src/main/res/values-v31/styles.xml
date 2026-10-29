@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12+ SplashScreen API: brand color + logo mark.
+    <!-- Android 12+ SplashScreen API: fondo de marca y el logo limpio, sin
+         color de fondo de icono (eso dibujaba un contenedor).
          La animación de salida se corta en MainActivity para no apilarse
          con el Lottie de Flutter. -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowSplashScreenBackground">@color/splash_background</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo_inset</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">@color/splash_background</item>
         <item name="android:windowBackground">@drawable/launch_background</item>
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">

@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Native splash: same background as AppColors.background until Flutter paints. -->
+<!-- Splash nativo (Android 11 o menos): el logo limpio, sin recuadro, al
+     mismo tamaño (208dp) y en el mismo lugar que el primer cuadro de Flutter
+     (ver SplashScreen). Así el paso al Lottie no salta. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_background" />
     <item
-        android:width="112dp"
-        android:height="112dp"
+        android:width="208dp"
+        android:height="208dp"
         android:gravity="center"
         android:drawable="@drawable/splash_logo" />
 </layer-list>

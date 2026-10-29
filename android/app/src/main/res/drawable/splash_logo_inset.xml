@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 12+ SplashScreen API enmascara el icono en un círculo (~⅔ de
-     240dp). El PNG de 1024 va a sangre y se ve enorme; el inset deja el
-     mark en la zona segura, como el adaptive launcher. -->
+<!-- Icono del splash de Android 12+. Sin color de fondo de icono, el sistema
+     lo dibuja en una caja de 288dp y lo recorta a un círculo de 192dp. El
+     inset de 40dp deja el logo a 208dp, igual que el splash de Flutter (ver
+     SplashScreen): el mark cabe holgado en el círculo y no salta de tamaño ni
+     de lugar al pasar al Lottie. -->
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
     android:drawable="@drawable/splash_logo"
-    android:inset="32%" />
+    android:inset="13.89%" />
