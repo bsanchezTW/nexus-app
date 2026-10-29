@@ -3,6 +3,11 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:drift/drift.dart' show DatabaseConnection;
+import 'package:drift/native.dart';
+import 'package:transworld_nexus/data/offline/almacen/almacen_copia_local.dart';
+import 'package:transworld_nexus/data/offline/almacen/almacen_sqlite.dart';
+import 'package:transworld_nexus/data/offline/almacen/copia_local_db.dart';
 import 'package:transworld_nexus/data/offline/sync_queue_item.dart';
 import 'package:transworld_nexus/data/offline/sync_queue_service.dart';
 
@@ -86,22 +91,24 @@ void main() {
     test('cambiar de cuenta no expone ni procesa la cola anterior', () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
-      final queueA = SyncQueueService(prefs, 'usuario-a');
+      final almacen = AlmacenCopiaLocal.enMemoria();
+      final queueA = SyncQueueService(prefs, almacen, 'usuario-a');
       await queueA.enqueueInsert(
         table: 'leads',
         payload: {'perfil_id': 'usuario-a'},
       );
 
-      final queueB = SyncQueueService(prefs, 'usuario-b');
+      final queueB = SyncQueueService(prefs, almacen, 'usuario-b');
       expect(queueB.state, isEmpty);
-      final restoredA = SyncQueueService(prefs, 'usuario-a');
+      final restoredA = SyncQueueService(prefs, almacen, 'usuario-a');
       expect(restoredA.state, hasLength(1));
     });
 
     test('un conflicto es terminal y conserva datos estructurados', () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
-      final queue = SyncQueueService(prefs, 'usuario-a');
+      final almacen = AlmacenCopiaLocal.enMemoria();
+      final queue = SyncQueueService(prefs, almacen, 'usuario-a');
       await queue.enqueueInsert(
         table: 'leads',
         payload: {'perfil_id': 'usuario-a'},
@@ -126,7 +133,8 @@ void main() {
       () async {
         SharedPreferences.setMockInitialValues({});
         final prefs = await SharedPreferences.getInstance();
-        final queue = SyncQueueService(prefs, 'usuario-a');
+        final almacen = AlmacenCopiaLocal.enMemoria();
+        final queue = SyncQueueService(prefs, almacen, 'usuario-a');
         final localId = await queue.enqueueInsert(
           table: 'leads',
           payload: {'perfil_id': 'usuario-a', 'nombre_completo': 'Original'},
@@ -175,7 +183,8 @@ void main() {
           'sync_queue_v1': jsonEncode([propio.toJson(), ambiguo.toJson()]),
         });
         final prefs = await SharedPreferences.getInstance();
-        final queue = SyncQueueService(prefs, 'usuario-a');
+        final almacen = AlmacenCopiaLocal.enMemoria();
+        final queue = SyncQueueService(prefs, almacen, 'usuario-a');
 
         expect(await queue.migrateLegacyIfUnambiguous(), 1);
         expect(queue.state.single.id, 'propio');
@@ -192,7 +201,8 @@ void main() {
     Future<SyncQueueService> colaCon(List<String> nombres) async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
-      final cola = SyncQueueService(prefs, 'usuario-a');
+      final almacen = AlmacenCopiaLocal.enMemoria();
+      final cola = SyncQueueService(prefs, almacen, 'usuario-a');
       for (final nombre in nombres) {
         await cola.enqueueInsert(
           table: 'leads',
@@ -217,27 +227,31 @@ void main() {
       expect(cola.conflicts, isEmpty);
     });
 
-    test('el insert offline conserva foto local y los datos del lead', () async {
-      SharedPreferences.setMockInitialValues({});
-      final prefs = await SharedPreferences.getInstance();
-      final cola = SyncQueueService(prefs, 'usuario-a');
-      await cola.enqueueInsert(
-        table: 'leads',
-        payload: {
-          'nombre_completo': 'María González',
-          'empresa': 'Transworld',
-          'email': 'maria@transworld.cl',
-          'fotos_urls': ['local_foto:///datos/leads_pendientes/a.jpg'],
-        },
-      );
+    test(
+      'el insert offline conserva foto local y los datos del lead',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final almacen = AlmacenCopiaLocal.enMemoria();
+        final cola = SyncQueueService(prefs, almacen, 'usuario-a');
+        await cola.enqueueInsert(
+          table: 'leads',
+          payload: {
+            'nombre_completo': 'María González',
+            'empresa': 'Transworld',
+            'email': 'maria@transworld.cl',
+            'fotos_urls': ['local_foto:///datos/leads_pendientes/a.jpg'],
+          },
+        );
 
-      expect(cola.state.single.payload['fotos_urls'], [
-        'local_foto:///datos/leads_pendientes/a.jpg',
-      ]);
-      expect(cola.state.single.payload['nombre_completo'], 'María González');
-      expect(cola.state.single.payload['empresa'], 'Transworld');
-      expect(cola.state.single.payload['email'], 'maria@transworld.cl');
-    });
+        expect(cola.state.single.payload['fotos_urls'], [
+          'local_foto:///datos/leads_pendientes/a.jpg',
+        ]);
+        expect(cola.state.single.payload['nombre_completo'], 'María González');
+        expect(cola.state.single.payload['empresa'], 'Transworld');
+        expect(cola.state.single.payload['email'], 'maria@transworld.cl');
+      },
+    );
 
     test('el motivo queda disponible para avisar una sola vez', () async {
       final cola = await colaCon(['Duplicada']);
@@ -246,6 +260,74 @@ void main() {
       expect(cola.descartes, ['Este lead ya fue registrado por Ana Pérez']);
       cola.limpiarDescartes();
       expect(cola.descartes, isEmpty);
+    });
+  });
+
+  group('SyncQueueService en SQLite', () {
+    test('lo encolado sobrevive a reabrir la base', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final db = CopiaLocalDb(
+        DatabaseConnection(
+          NativeDatabase.memory(),
+          closeStreamsSynchronously: true,
+        ),
+      );
+      addTearDown(db.close);
+
+      final cola = SyncQueueService(
+        prefs,
+        await AlmacenSqlite.deBase(db),
+        'usuario-a',
+      );
+      final id = await cola.enqueueInsert(
+        table: 'leads',
+        payload: {'nombre_completo': 'Ana'},
+      );
+      await cola.enqueueUpdate(
+        table: 'registrados',
+        entityId: 'persona-1',
+        changes: {'acreditado': true},
+      );
+
+      final reabierta = SyncQueueService(
+        prefs,
+        await AlmacenSqlite.deBase(db),
+        'usuario-a',
+      );
+      expect(reabierta.state.map((i) => i.table), ['leads', 'registrados']);
+      expect(reabierta.state.first.id, id);
+      expect(reabierta.state.last.payload['changes'], {'acreditado': true});
+    });
+
+    test('sincronizar un ítem lo saca también del disco', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final db = CopiaLocalDb(
+        DatabaseConnection(
+          NativeDatabase.memory(),
+          closeStreamsSynchronously: true,
+        ),
+      );
+      addTearDown(db.close);
+
+      final cola = SyncQueueService(
+        prefs,
+        await AlmacenSqlite.deBase(db),
+        'usuario-a',
+      );
+      await cola.enqueueInsert(
+        table: 'leads',
+        payload: {'nombre_completo': 'Ok'},
+      );
+      await cola.processPending({'leads': _DuplicadoLuegoExitoExecutor()});
+
+      final reabierta = SyncQueueService(
+        prefs,
+        await AlmacenSqlite.deBase(db),
+        'usuario-a',
+      );
+      expect(reabierta.state, isEmpty);
     });
   });
 }

@@ -80,14 +80,18 @@ class AlmacenSqlite extends AlmacenCopiaLocal {
   Future<void> persistir(CambioCopiaLocal cambio) {
     final escritura = _cola.then((_) => _escribir(cambio));
     // Un fallo no corta la cadena: la siguiente escritura igual tiene que
-    // llegar. La memoria ya tiene el dato, así que la sesión sigue sirviéndolo.
-    _cola = escritura.catchError((Object e) {
-      developer.log(
-        'No se pudo guardar ${cambio.tabla}/${cambio.evento}: $e',
-        name: 'AlmacenSqlite',
-      );
-    });
-    return _cola;
+    // llegar. Pero sí le llega a quien esperaba esta: la cola de pendientes no
+    // puede decir "guardado" si el ítem no quedó en disco.
+    _cola = escritura.then(
+      (_) {},
+      onError: (Object e) {
+        developer.log(
+          'No se pudo guardar ${cambio.tabla}/${cambio.evento}: $e',
+          name: 'AlmacenSqlite',
+        );
+      },
+    );
+    return escritura;
   }
 
   @override

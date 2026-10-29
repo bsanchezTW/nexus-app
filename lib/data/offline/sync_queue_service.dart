@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/config/app_bootstrap.dart';
 import '../supabase/supabase_client_provider.dart';
+import 'almacen/almacen_copia_local.dart';
 import 'sync_queue_item.dart';
 
 /// Ejecuta un ítem de la cola contra el backend real. Cada feature que
@@ -24,6 +25,15 @@ abstract class SyncExecutor {
 const _legacyPrefsKey = 'sync_queue_v1';
 const _prefsKeyPrefix = 'sync_queue_v2';
 const _uuid = Uuid();
+
+/// Prefijo de la cola en `SharedPreferences` (`sync_queue_v2_<perfil>`), donde
+/// vivió hasta pasar a SQLite. `migrarCopiaDesdePreferencias` la traspasa.
+const prefijoColaEnPreferencias = '${_prefsKeyPrefix}_';
+
+/// Entrada reservada del almacén para la cola de cada perfil. Nombres que
+/// ninguna tabla de la copia usa, así que ninguna purga de la copia la toca.
+const tablaColaPendientes = '__cola_pendientes__';
+const entradaColaPendientes = '__cola__';
 
 /// Prefijo de los ids temporales que [SyncQueueService.enqueueInsert] asigna
 /// a las filas que todavía no existen en el servidor.
@@ -63,11 +73,14 @@ class SyncItemInFlightException implements Exception {
 /// `SharedPreferences` directamente para temas de sincronización: todo pasa
 /// por [enqueueInsert] / [enqueueUpdate] / [processPending].
 class SyncQueueService extends StateNotifier<List<SyncQueueItem>> {
-  SyncQueueService(this._prefs, this.ownerId) : super(const []) {
+  SyncQueueService(this._prefs, this._almacen, this.ownerId) : super(const []) {
     _restore();
   }
 
+  /// Solo para la cola v1 sin dueño y su cuarentena. La cola vive en
+  /// [_almacen].
   final SharedPreferences _prefs;
+  final AlmacenCopiaLocal _almacen;
   final String? ownerId;
   bool _processing = false;
 
@@ -81,10 +94,10 @@ class SyncQueueService extends StateNotifier<List<SyncQueueItem>> {
 
   void limpiarDescartes() => _descartes.clear();
 
-  String? get _prefsKey {
+  String? get _owner {
     final owner = ownerId?.trim();
     if (owner == null || owner.isEmpty) return null;
-    return '${_prefsKeyPrefix}_$owner';
+    return owner;
   }
 
   String _requireOwner() {
@@ -96,28 +109,43 @@ class SyncQueueService extends StateNotifier<List<SyncQueueItem>> {
   }
 
   void _restore() {
-    final key = _prefsKey;
-    if (key == null) return;
-    final raw = _prefs.getString(key);
-    if (raw == null || raw.isEmpty) return;
-    try {
-      final decoded = jsonDecode(raw) as List<dynamic>;
-      state = decoded
-          .map((e) => SyncQueueItem.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } catch (e) {
-      developer.log(
-        'No se pudo restaurar la cola offline: $e',
-        name: 'SyncQueueService',
-      );
+    final owner = _owner;
+    if (owner == null) return;
+    final filas = _almacen.leer(
+      owner,
+      tablaColaPendientes,
+      entradaColaPendientes,
+    );
+    if (filas == null) return;
+    final items = <SyncQueueItem>[];
+    for (final fila in filas) {
+      // Un ítem ilegible no puede llevarse a los demás: se salta y se avisa.
+      try {
+        items.add(SyncQueueItem.fromJson(fila));
+      } catch (e) {
+        developer.log(
+          'Ítem de la cola ilegible, se omite: $e',
+          name: 'SyncQueueService',
+        );
+      }
     }
+    state = items;
   }
 
+  /// Guarda la cola y vuelve cuando ya está en disco.
+  ///
+  /// Cada ítem es una fila: encolar o sacar uno escribe solo esa fila, en una
+  /// transacción de SQLite (ver [AlmacenCopiaLocal.guardar]). Quien encola
+  /// espera esto antes de decir "guardado".
   Future<void> _persist() async {
-    final key = _prefsKey;
-    if (key == null) return;
-    final encoded = jsonEncode(state.map((e) => e.toJson()).toList());
-    await _prefs.setString(key, encoded);
+    final owner = _owner;
+    if (owner == null) return;
+    await _almacen.guardar(
+      owner,
+      tablaColaPendientes,
+      entradaColaPendientes,
+      state.map((e) => e.toJson()).toList(),
+    );
   }
 
   List<SyncQueueItem> pendingFor(String table) => state
@@ -146,11 +174,9 @@ class SyncQueueService extends StateNotifier<List<SyncQueueItem>> {
   /// inequívoca al usuario actual. El resto queda en cuarentena local.
   Future<int> migrateLegacyIfUnambiguous() async {
     final currentOwner = ownerId?.trim();
-    final key = _prefsKey;
     final raw = _prefs.getString(_legacyPrefsKey);
     if (currentOwner == null ||
         currentOwner.isEmpty ||
-        key == null ||
         raw == null ||
         raw.isEmpty) {
       return 0;
@@ -434,6 +460,7 @@ final syncQueueServiceProvider =
       final ownerId = ref.watch(syncQueueActiveOwnerIdProvider);
       final service = SyncQueueService(
         ref.watch(sharedPreferencesProvider),
+        ref.watch(almacenCopiaLocalProvider),
         ownerId,
       );
       service.migrateLegacyIfUnambiguous();

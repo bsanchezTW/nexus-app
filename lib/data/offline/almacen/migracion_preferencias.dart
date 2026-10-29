@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../sync_queue_service.dart';
 import 'almacen_copia_local.dart';
 
 const _prefijoV3 = 'offline_read_cache_v3_';
@@ -14,7 +15,8 @@ const _sufijoIndice = '__idx';
 /// `SharedPreferences` como diagnóstico: nunca se adopta.
 const _prefijoCuarentena = '${_prefijoV3}quarantine_';
 
-/// Lleva la copia local de `SharedPreferences` al [almacen] y la borra de ahí.
+/// Lleva la copia local y la cola de pendientes de `SharedPreferences` al
+/// [almacen] y las borra de ahí.
 ///
 /// Solo borra una clave después de que su contenido llegó al disco: si la app
 /// se cierra a mitad, la próxima vez se repite y [AlmacenCopiaLocal.guardar]
@@ -24,7 +26,9 @@ const _prefijoCuarentena = '${_prefijoV3}quarantine_';
 ///   evento, más un índice `..._<tabla>__idx` que aquí sobra.
 /// - v2: `offline_read_cache_v2_<perfil>_<tabla>`, un mapa evento → filas.
 ///
-/// La v1 se mueve a la cuarentena, como hacía la caché antes.
+/// La v1 se mueve a la cuarentena, como hacía la caché antes. La cola
+/// (`sync_queue_v2_<perfil>`) se fusiona con la del almacén; su cuarentena y la
+/// cola v1 sin dueño se quedan: las maneja `SyncQueueService`.
 ///
 /// Devuelve cuántas entradas migró.
 Future<int> migrarCopiaDesdePreferencias(
@@ -81,6 +85,19 @@ Future<int> migrarCopiaDesdePreferencias(
       continue;
     }
 
+    if (clave.startsWith(prefijoColaEnPreferencias) &&
+        !clave.startsWith('${prefijoColaEnPreferencias}quarantine')) {
+      final owner = clave.substring(prefijoColaEnPreferencias.length);
+      final items = _filas(prefs.getString(clave), clave);
+      // Ilegible: se deja en SharedPreferences. Es lo único que podría
+      // quedar de esos pendientes y no se borra lo que no se pudo copiar.
+      if (owner.isEmpty || items == null) continue;
+      await _fusionarCola(almacen, owner, items);
+      migradas.add(clave);
+      entradas++;
+      continue;
+    }
+
     if (clave.startsWith(_prefijoV1)) {
       final raw = prefs.getString(clave);
       if (raw != null) {
@@ -103,6 +120,26 @@ Future<int> migrarCopiaDesdePreferencias(
     name: 'Migracion',
   );
   return entradas;
+}
+
+/// Suma a la cola del almacén los pendientes que había en SharedPreferences.
+///
+/// Fusiona en vez de reemplazar: si una migración anterior alcanzó a copiar
+/// la cola pero no a borrar la clave, el almacén puede tener pendientes más
+/// nuevos que no se pueden perder. Ante el mismo id gana el del almacén.
+Future<void> _fusionarCola(
+  AlmacenCopiaLocal almacen,
+  String owner,
+  List<Map<String, dynamic>> deSharedPreferences,
+) async {
+  final actuales =
+      almacen.leer(owner, tablaColaPendientes, entradaColaPendientes) ??
+      const <Map<String, dynamic>>[];
+  final ids = {for (final item in actuales) item['id']};
+  await almacen.guardar(owner, tablaColaPendientes, entradaColaPendientes, [
+    ...deSharedPreferences.where((item) => !ids.contains(item['id'])),
+    ...actuales,
+  ]);
 }
 
 /// `<perfil>_<resto>`. El perfil es un UUID y no tiene `_`.
