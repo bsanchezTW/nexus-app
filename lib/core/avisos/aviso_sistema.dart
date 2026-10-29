@@ -5,6 +5,7 @@ enum TipoAviso {
   sinInternet,
   sinBackend,
   inestable,
+  copiaLocal,
   conflictos,
   subiendo,
   pendientes,
@@ -18,7 +19,15 @@ enum TipoAviso {
 enum RanuraAviso { conexion, actividad }
 
 /// Qué pasa al tocar el aviso.
-enum AccionAviso { ninguna, revisarConflictos, reintentar, abrirSincronizacion }
+enum AccionAviso {
+  ninguna,
+  revisarConflictos,
+  reintentar,
+  abrirSincronizacion,
+
+  /// Volver a pedir al servidor lo que la pantalla muestra desde la copia.
+  recargar,
+}
 
 class AvisoSistema {
   const AvisoSistema({
@@ -44,7 +53,8 @@ class AvisoSistema {
   RanuraAviso get ranura => switch (tipo) {
     TipoAviso.sinInternet ||
     TipoAviso.sinBackend ||
-    TipoAviso.inestable => RanuraAviso.conexion,
+    TipoAviso.inestable ||
+    TipoAviso.copiaLocal => RanuraAviso.conexion,
     _ => RanuraAviso.actividad,
   };
 
@@ -68,6 +78,9 @@ class EntradaAvisos {
     this.descargaEtapa,
     this.descargaFraccion = 0,
     this.descargaConErrores = false,
+    this.mostrandoCopia = false,
+    this.copiaActualizadaEn,
+    this.ahora,
   });
 
   final EstadoConexion estado;
@@ -82,6 +95,38 @@ class EntradaAvisos {
   final String? descargaEtapa;
   final double descargaFraccion;
   final bool descargaConErrores;
+
+  /// Alguna pantalla muestra datos de la copia local, no del servidor.
+  final bool mostrandoCopia;
+
+  /// Confirmación más vieja entre las copias que se muestran. `null` si no se
+  /// sabe.
+  final DateTime? copiaActualizadaEn;
+
+  /// Reloj para "hace X". Por defecto, ahora.
+  final DateTime? ahora;
+}
+
+/// "hace 5 min", "hace 2 h", "hace 3 días".
+String haceCuanto(DateTime desde, DateTime ahora) {
+  final d = ahora.difference(desde);
+  if (d.inMinutes < 1) return 'hace un momento';
+  if (d.inHours < 1) return 'hace ${d.inMinutes} min';
+  if (d.inDays < 1) return 'hace ${d.inHours} h';
+  return d.inDays == 1 ? 'hace 1 día' : 'hace ${d.inDays} días';
+}
+
+/// "hace X" de la copia que se muestra, o `null` si no se sabe.
+String? _edadCopia(EntradaAvisos e) {
+  final desde = e.copiaActualizadaEn;
+  if (!e.mostrandoCopia || desde == null) return null;
+  return haceCuanto(desde, e.ahora ?? DateTime.now());
+}
+
+/// Agrega la edad de la copia al detalle de un aviso de conexión degradada.
+String _conEdad(String detalle, EntradaAvisos e) {
+  final edad = _edadCopia(e);
+  return edad == null ? detalle : '$detalle · Copia de $edad';
 }
 
 String _cambios(int n) => n == 1 ? '1 cambio' : '$n cambios';
@@ -102,16 +147,22 @@ AvisoSistema? _avisoConexion(EntradaAvisos e) {
       tipo: TipoAviso.sinInternet,
       titulo: 'Sin conexión a internet',
       detalle: e.soportaCopiaLocal
-          ? 'Trabajas con la copia local. Lo que registres se subirá al '
-                'volver la conexión'
+          ? _conEdad(
+              'Trabajas con la copia local. Lo que registres se subirá al '
+              'volver la conexión',
+              e,
+            )
           : 'Revisa tu conexión para seguir usando RegisPro',
     ),
     EstadoConexion.sinBackend => AvisoSistema(
       tipo: TipoAviso.sinBackend,
       titulo: 'Problemas con la conexión a la base de datos',
       detalle: e.soportaCopiaLocal
-          ? 'Hay internet, pero el servidor no responde. Trabajas con la '
-                'copia local y lo que registres se subirá cuando vuelva'
+          ? _conEdad(
+              'Hay internet, pero el servidor no responde. Trabajas con la '
+              'copia local y lo que registres se subirá cuando vuelva',
+              e,
+            )
           : 'Hay internet, pero el servidor no responde. Inténtalo en unos '
                 'minutos',
     ),
@@ -120,11 +171,31 @@ AvisoSistema? _avisoConexion(EntradaAvisos e) {
       titulo: 'Conexión inestable',
       detalle: e.enLinea
           ? 'Algunas acciones pueden tardar más de lo normal'
-          : 'Pasamos a modo sin conexión para que no esperes. Lo que '
-                'registres se subirá cuando se estabilice',
+          : _conEdad(
+              'Pasamos a modo sin conexión para que no esperes. Lo que '
+              'registres se subirá cuando se estabilice',
+              e,
+            ),
     ),
-    EstadoConexion.verificando || EstadoConexion.estable => null,
+    EstadoConexion.verificando || EstadoConexion.estable => _avisoCopiaLocal(e),
   };
+}
+
+/// Con la conexión en buen estado, una pantalla igual puede estar mostrando
+/// la copia: el servidor no respondió a tiempo o falló esa consulta. Sin este
+/// aviso la lista vieja parecía la verdadera.
+AvisoSistema? _avisoCopiaLocal(EntradaAvisos e) {
+  if (!e.mostrandoCopia) return null;
+  final edad = _edadCopia(e);
+  return AvisoSistema(
+    tipo: TipoAviso.copiaLocal,
+    titulo: 'Mostrando copia local',
+    detalle: edad == null
+        ? 'El servidor no respondió a tiempo. Toca para reintentar'
+        : 'El servidor no respondió a tiempo. Actualizada $edad · Toca para '
+              'reintentar',
+    accion: AccionAviso.recargar,
+  );
 }
 
 AvisoSistema? _avisoActividad(EntradaAvisos e) {

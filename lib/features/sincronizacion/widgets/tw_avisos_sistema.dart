@@ -11,6 +11,7 @@ import '../../../core/widgets/app_modals.dart';
 import '../../../core/widgets/sync_conflict_listener.dart';
 import '../../../core/widgets/tw_components.dart';
 import '../../../core/widgets/tw_notice_card.dart';
+import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/offline/sync_coordinator.dart';
 import '../../updates/widgets/update_notice_card.dart';
 import '../providers/avisos_sistema_provider.dart';
@@ -103,6 +104,7 @@ IconData iconoAviso(TipoAviso tipo) => switch (tipo) {
   TipoAviso.sinInternet => Symbols.cloud_off_rounded,
   TipoAviso.sinBackend => Symbols.database_off_rounded,
   TipoAviso.inestable => Symbols.network_check_rounded,
+  TipoAviso.copiaLocal => Symbols.history_rounded,
   TipoAviso.conflictos => Symbols.sync_problem_rounded,
   TipoAviso.subiendo || TipoAviso.pendientes => Symbols.cloud_upload_rounded,
   TipoAviso.descargando => Symbols.cloud_download_rounded,
@@ -123,6 +125,14 @@ VoidCallback? accionAviso(
     AccionAviso.abrirSincronizacion => () => context.push(
       RoutePaths.sincronizacion,
     ),
+    // Igual que una recarga a mano: no esperar la ventana de "servidor
+    // inalcanzable" y volver a preguntar en todas las lecturas vivas.
+    AccionAviso.recargar => () {
+      ref.read(offlineReadCacheProvider)
+        ..olvidarServidorInalcanzable()
+        ..olvidarCopiasServidas();
+      exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
+    },
   };
 }
 

@@ -1,6 +1,7 @@
 import 'dart:developer' as developer;
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -95,6 +96,52 @@ class OfflineReadCache {
   /// preguntó (ver [consumirFallos]).
   final Map<String, Object> _fallos = <String, Object>{};
 
+  final ValueNotifier<Map<String, DateTime?>> _copiasServidas = ValueNotifier(
+    const {},
+  );
+
+  /// Entradas (`tabla:evento`) que la app está mostrando desde la copia local
+  /// en vez de desde el servidor, con la hora de su última confirmación
+  /// (`null` si no se sabe).
+  ///
+  /// Una entrada entra cuando una lectura cae a la copia —sin red, servidor
+  /// lento, error— y sale en cuanto el servidor vuelve a responderla. Es lo
+  /// que permite avisar "Mostrando copia local · actualizada hace X".
+  ValueListenable<Map<String, DateTime?>> get copiasServidas => _copiasServidas;
+
+  final Map<String, DateTime?> _copias = {};
+  bool _avisoProgramado = false;
+
+  void _marcarCopiaServida(String tabla, String eventoId) {
+    final owner = _owner;
+    if (owner == null) return;
+    final clave = '$tabla:$eventoId';
+    final hora = _almacen.actualizadaEn(owner, tabla, eventoId);
+    if (_copias.containsKey(clave) && _copias[clave] == hora) return;
+    _copias[clave] = hora;
+    _programarAviso();
+  }
+
+  void _desmarcarCopiaServida(String clave) {
+    if (!_copias.containsKey(clave)) return;
+    _copias.remove(clave);
+    _programarAviso();
+  }
+
+  /// Publica el cambio en un microtask: una lectura puede marcar la copia
+  /// mientras un provider se está construyendo, y avisar ahí mismo haría que
+  /// otro provider se invalide en plena construcción.
+  void _programarAviso() {
+    if (_avisoProgramado) return;
+    _avisoProgramado = true;
+    scheduleMicrotask(() {
+      _avisoProgramado = false;
+      if (!mapEquals(_copias, _copiasServidas.value)) {
+        _copiasServidas.value = Map.unmodifiable(_copias);
+      }
+    });
+  }
+
   /// Turno de cada consulta o parche por entrada. Solo se escribe en disco una
   /// respuesta más nueva que lo último escrito: una consulta lenta lanzada
   /// antes no pisa ni a otra posterior ni a un parche local.
@@ -111,6 +158,20 @@ class OfflineReadCache {
   /// La próxima lectura vuelve a esperar al servidor aunque haya fallado hace
   /// poco. Para cuando el usuario pide recargar a mano.
   void olvidarServidorInalcanzable() => _servidorInalcanzableHasta = null;
+
+  /// Olvida qué se está mostrando desde la copia. Al volver la conexión o al
+  /// recargar a mano, cada pantalla viva vuelve a consultar y se marca de
+  /// nuevo solo si su consulta vuelve a fallar; así no queda el aviso pegado
+  /// por una pantalla que ya se cerró.
+  void olvidarCopiasServidas() {
+    if (_copias.isEmpty) return;
+    _copias.clear();
+    _programarAviso();
+  }
+
+  /// La pantalla que leía [tabla]/[eventoId] se cerró.
+  void dejarDeMostrar(String tabla, String eventoId) =>
+      _desmarcarCopiaServida('$tabla:$eventoId');
 
   String? get _owner {
     final owner = ownerId?.trim();
@@ -177,8 +238,11 @@ class OfflineReadCache {
     final omitir = _revisionAutoRefresco.remove(clave) == revision;
 
     if (!isOnline) {
-      if (local != null) return local;
-      throw TimeoutException('Sin conexión', esperaMaximaServidor);
+      if (local == null) {
+        throw TimeoutException('Sin conexión', esperaMaximaServidor);
+      }
+      _marcarCopiaServida(tabla, eventoId);
+      return local;
     }
 
     // Recomposición que ya trae el disco fresco (respuesta tardía entregada o
@@ -195,6 +259,7 @@ class OfflineReadCache {
 
     if (local != null && _servidorInalcanzable) {
       unawaited(_entregarAlTerminar(clave, consulta));
+      _marcarCopiaServida(tabla, eventoId);
       return local;
     }
 
@@ -207,6 +272,7 @@ class OfflineReadCache {
       _fallos[clave] = error;
       unawaited(_entregarAlTerminar(clave, consulta));
       if (local == null) rethrow;
+      _marcarCopiaServida(tabla, eventoId);
       return local;
     } catch (error) {
       // Acceso revocado: la copia ya se borró y la pantalla tiene que saberlo.
@@ -222,6 +288,7 @@ class OfflineReadCache {
         '$clave servido desde la caché por un error del servidor: $error',
         name: 'OfflineReadCache',
       );
+      _marcarCopiaServida(tabla, eventoId);
       return local;
     }
   }
@@ -270,6 +337,7 @@ class OfflineReadCache {
         final frescos = await desdeServidor().timeout(esperaMaximaRevalidacion);
         _servidorInalcanzableHasta = null;
         _fallos.remove(clave);
+        _desmarcarCopiaServida(clave);
         final respaldo = _respaldar(
           clave: clave,
           tabla: tabla,
@@ -284,6 +352,7 @@ class OfflineReadCache {
             _esCredencialInvalidaConServidor(error, isOnline: true)) {
           _turnoEscrito[clave] = turno;
           await eliminarEvento(tabla, eventoId);
+          _desmarcarCopiaServida(clave);
         } else if (isNetworkTransportError(error)) {
           _servidorInalcanzableHasta = _ahora().add(
             ventanaServidorInalcanzable,
@@ -315,7 +384,7 @@ class OfflineReadCache {
     final escritura = Future<bool>(() {
       if (turno <= (_turnoEscrito[clave] ?? 0)) return false;
       _turnoEscrito[clave] = turno;
-      return _guardarSiCambia(tabla, eventoId, filas());
+      return _guardarSiCambia(tabla, eventoId, filas(), confirmada: true);
     });
     _registrarPendiente(escritura);
     return escritura;
@@ -400,13 +469,17 @@ class OfflineReadCache {
   }) async {
     if (!isOnline) {
       final respaldo = _respaldo(tabla, eventoId, desdeFila);
-      if (respaldo != null) return respaldo;
-      throw TimeoutException('Sin conexión', esperaMaximaServidor);
+      if (respaldo == null) {
+        throw TimeoutException('Sin conexión', esperaMaximaServidor);
+      }
+      _marcarCopiaServida(tabla, eventoId);
+      return respaldo;
     }
 
     try {
       final frescos = await desdeServidor().timeout(esperaMaximaServidor);
       await guardar(tabla, eventoId, frescos.map(aFila).toList());
+      _desmarcarCopiaServida('$tabla:$eventoId');
       return frescos;
     } catch (error) {
       if (_esRevocacionConfirmada(error) ||
@@ -423,6 +496,7 @@ class OfflineReadCache {
         '$tabla/$eventoId servido desde la caché offline: $error',
         name: 'OfflineReadCache',
       );
+      _marcarCopiaServida(tabla, eventoId);
       return respaldo;
     }
   }
@@ -447,25 +521,37 @@ class OfflineReadCache {
     );
   }
 
+  /// Guarda lo que acaba de entregar el servidor. Registra la hora como
+  /// confirmación (ver [copiasServidas]).
   Future<void> guardar(
     String tabla,
     String eventoId,
     List<Map<String, dynamic>> filas,
-  ) => _guardarSiCambia(tabla, eventoId, filas);
+  ) => _guardarSiCambia(tabla, eventoId, filas, confirmada: true);
 
   /// Escribe solo si el contenido cambió y responde si lo hizo.
   ///
   /// El almacén compara fila a fila (ver [AlmacenCopiaLocal.guardar]): un
   /// refresco idéntico no escribe nada, y uno que cambia una fila escribe esa
   /// fila. La respuesta dice si la UI tiene algo nuevo que mostrar.
+  ///
+  /// [confirmada] marca que [filas] vienen del servidor; un parche local no lo
+  /// es y no mueve la hora de "actualizada hace X".
   Future<bool> _guardarSiCambia(
     String tabla,
     String eventoId,
-    List<Map<String, dynamic>> filas,
-  ) async {
+    List<Map<String, dynamic>> filas, {
+    bool confirmada = false,
+  }) async {
     final owner = _owner;
     if (owner == null) return false;
-    return _almacen.guardar(owner, tabla, eventoId, filas);
+    return _almacen.guardar(
+      owner,
+      tabla,
+      eventoId,
+      filas,
+      confirmadaEn: confirmada ? _ahora() : null,
+    );
   }
 
   /// Variante de [guardar] para tablas sin partición por evento.
@@ -517,6 +603,7 @@ class OfflineReadCache {
     final owner = _owner;
     if (owner == null) return;
     await _almacen.borrar(owner, tabla, eventoId);
+    _desmarcarCopiaServida('$tabla:$eventoId');
   }
 
   /// Conserva solo eventos que siguen autorizados. Debe llamarse únicamente
@@ -611,6 +698,23 @@ final offlineReadCacheProvider = Provider<OfflineReadCache>((ref) {
   );
 });
 
+/// Entradas que se están mostrando desde la copia local, con la hora de su
+/// última confirmación del servidor (ver [OfflineReadCache.copiasServidas]).
+final copiasServidasProvider = Provider<Map<String, DateTime?>>((ref) {
+  final ValueListenable<Map<String, DateTime?>> copias;
+  try {
+    copias = ref.watch(offlineReadCacheProvider).copiasServidas;
+  } catch (_) {
+    // Igual que `pendingSyncCountProvider`: hay widgets que se prueban sin
+    // Supabase ni bootstrap. En la app real la caché siempre existe.
+    return const {};
+  }
+  void cambio() => ref.invalidateSelf();
+  copias.addListener(cambio);
+  ref.onDispose(() => copias.removeListener(cambio));
+  return copias.value;
+});
+
 /// Época de servidor. Cada vez que sube, todo provider que lee con
 /// [leerCacheFirstConRef] se reconstruye y vuelve a consultar Supabase. Sube
 /// al volver a la app, al recuperar conexión, con cada cambio en vivo y tras
@@ -637,6 +741,7 @@ Future<void> refrescarLecturas(
   cache.consumirFallos();
   // Quien recarga a mano quiere al servidor aunque haya fallado hace poco.
   cache.olvidarServidorInalcanzable();
+  cache.olvidarCopiasServidas();
   exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
   invalidar();
 
@@ -756,7 +861,10 @@ Future<List<T>> leerCacheFirstConRef<T>({
   // así que puede terminar cuando este ya no existe: notificar entonces sería
   // usar un `Ref` muerto.
   var vivo = true;
-  ref.onDispose(() => vivo = false);
+  ref.onDispose(() {
+    vivo = false;
+    cache.dejarDeMostrar(tabla, eventoId);
+  });
 
   return cache.leerCacheFirst<T>(
     tabla: tabla,

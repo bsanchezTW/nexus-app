@@ -4,6 +4,7 @@ import '../../../core/avisos/aviso_sistema.dart';
 import '../../../core/conexion/monitor_conexion.dart';
 import '../../../core/network/connectivity_service.dart';
 import '../../../core/network/offline_policy.dart';
+import '../../../data/offline/offline_read_cache.dart';
 import '../../../data/offline/snapshot_service.dart';
 import '../../../data/offline/sync_queue_service.dart';
 
@@ -14,6 +15,8 @@ import '../../../data/offline/sync_queue_service.dart';
 final avisosSistemaProvider = Provider<List<AvisoSistema>>((ref) {
   final snapshot = ref.watch(snapshotServiceProvider);
   final progreso = snapshot.enCurso ? snapshot.progreso : null;
+  final copias = ref.watch(copiasServidasProvider);
+  final horas = copias.values.whereType<DateTime>();
   return avisosDelSistema(
     EntradaAvisos(
       estado: ref.watch(estadoConexionProvider),
@@ -26,6 +29,11 @@ final avisosSistemaProvider = Provider<List<AvisoSistema>>((ref) {
       descargaEtapa: progreso?.etapa.titulo,
       descargaFraccion: progreso?.fraccion ?? 0,
       descargaConErrores: !snapshot.enCurso && snapshot.errores.isNotEmpty,
+      mostrandoCopia: copias.isNotEmpty,
+      // La más vieja: es la que más puede haber cambiado en el servidor.
+      copiaActualizadaEn: horas.isEmpty
+          ? null
+          : horas.reduce((a, b) => a.isBefore(b) ? a : b),
     ),
   );
 });

@@ -10,6 +10,11 @@ class EntradasCopia extends Table {
   TextColumn get tabla => text()();
   TextColumn get evento => text()();
 
+  /// Última vez que el servidor confirmó esta entrada, cambiara o no. Es lo
+  /// que dice "actualizada hace X" cuando la app muestra la copia. Nula en lo
+  /// que vino de SharedPreferences, que no guardaba esa hora.
+  DateTimeColumn get actualizadaEn => dateTime().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {owner, tabla, evento};
 }
@@ -36,6 +41,16 @@ class FilasCopia extends Table {
 class CopiaLocalDb extends _$CopiaLocalDb {
   CopiaLocalDb(super.executor);
 
+  /// 1: entradas y filas. 2: hora de confirmación de cada entrada.
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (m, desde, hasta) async {
+      if (desde < 2) {
+        await m.addColumn(entradasCopia, entradasCopia.actualizadaEn);
+      }
+    },
+  );
 }

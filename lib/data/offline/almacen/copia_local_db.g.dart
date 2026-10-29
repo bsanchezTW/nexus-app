@@ -36,8 +36,20 @@ class $EntradasCopiaTable extends EntradasCopia
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _actualizadaEnMeta = const VerificationMeta(
+    'actualizadaEn',
+  );
   @override
-  List<GeneratedColumn> get $columns => [owner, tabla, evento];
+  late final GeneratedColumn<DateTime> actualizadaEn =
+      GeneratedColumn<DateTime>(
+        'actualizada_en',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [owner, tabla, evento, actualizadaEn];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -74,6 +86,15 @@ class $EntradasCopiaTable extends EntradasCopia
     } else if (isInserting) {
       context.missing(_eventoMeta);
     }
+    if (data.containsKey('actualizada_en')) {
+      context.handle(
+        _actualizadaEnMeta,
+        actualizadaEn.isAcceptableOrUnknown(
+          data['actualizada_en']!,
+          _actualizadaEnMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -95,6 +116,10 @@ class $EntradasCopiaTable extends EntradasCopia
         DriftSqlType.string,
         data['${effectivePrefix}evento'],
       )!,
+      actualizadaEn: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}actualizada_en'],
+      ),
     );
   }
 
@@ -108,10 +133,16 @@ class EntradaCopia extends DataClass implements Insertable<EntradaCopia> {
   final String owner;
   final String tabla;
   final String evento;
+
+  /// Última vez que el servidor confirmó esta entrada, cambiara o no. Es lo
+  /// que dice "actualizada hace X" cuando la app muestra la copia. Nula en lo
+  /// que vino de SharedPreferences, que no guardaba esa hora.
+  final DateTime? actualizadaEn;
   const EntradaCopia({
     required this.owner,
     required this.tabla,
     required this.evento,
+    this.actualizadaEn,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -119,6 +150,9 @@ class EntradaCopia extends DataClass implements Insertable<EntradaCopia> {
     map['owner'] = Variable<String>(owner);
     map['tabla'] = Variable<String>(tabla);
     map['evento'] = Variable<String>(evento);
+    if (!nullToAbsent || actualizadaEn != null) {
+      map['actualizada_en'] = Variable<DateTime>(actualizadaEn);
+    }
     return map;
   }
 
@@ -127,6 +161,9 @@ class EntradaCopia extends DataClass implements Insertable<EntradaCopia> {
       owner: Value(owner),
       tabla: Value(tabla),
       evento: Value(evento),
+      actualizadaEn: actualizadaEn == null && nullToAbsent
+          ? const Value.absent()
+          : Value(actualizadaEn),
     );
   }
 
@@ -139,6 +176,7 @@ class EntradaCopia extends DataClass implements Insertable<EntradaCopia> {
       owner: serializer.fromJson<String>(json['owner']),
       tabla: serializer.fromJson<String>(json['tabla']),
       evento: serializer.fromJson<String>(json['evento']),
+      actualizadaEn: serializer.fromJson<DateTime?>(json['actualizadaEn']),
     );
   }
   @override
@@ -148,20 +186,31 @@ class EntradaCopia extends DataClass implements Insertable<EntradaCopia> {
       'owner': serializer.toJson<String>(owner),
       'tabla': serializer.toJson<String>(tabla),
       'evento': serializer.toJson<String>(evento),
+      'actualizadaEn': serializer.toJson<DateTime?>(actualizadaEn),
     };
   }
 
-  EntradaCopia copyWith({String? owner, String? tabla, String? evento}) =>
-      EntradaCopia(
-        owner: owner ?? this.owner,
-        tabla: tabla ?? this.tabla,
-        evento: evento ?? this.evento,
-      );
+  EntradaCopia copyWith({
+    String? owner,
+    String? tabla,
+    String? evento,
+    Value<DateTime?> actualizadaEn = const Value.absent(),
+  }) => EntradaCopia(
+    owner: owner ?? this.owner,
+    tabla: tabla ?? this.tabla,
+    evento: evento ?? this.evento,
+    actualizadaEn: actualizadaEn.present
+        ? actualizadaEn.value
+        : this.actualizadaEn,
+  );
   EntradaCopia copyWithCompanion(EntradasCopiaCompanion data) {
     return EntradaCopia(
       owner: data.owner.present ? data.owner.value : this.owner,
       tabla: data.tabla.present ? data.tabla.value : this.tabla,
       evento: data.evento.present ? data.evento.value : this.evento,
+      actualizadaEn: data.actualizadaEn.present
+          ? data.actualizadaEn.value
+          : this.actualizadaEn,
     );
   }
 
@@ -170,37 +219,42 @@ class EntradaCopia extends DataClass implements Insertable<EntradaCopia> {
     return (StringBuffer('EntradaCopia(')
           ..write('owner: $owner, ')
           ..write('tabla: $tabla, ')
-          ..write('evento: $evento')
+          ..write('evento: $evento, ')
+          ..write('actualizadaEn: $actualizadaEn')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(owner, tabla, evento);
+  int get hashCode => Object.hash(owner, tabla, evento, actualizadaEn);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is EntradaCopia &&
           other.owner == this.owner &&
           other.tabla == this.tabla &&
-          other.evento == this.evento);
+          other.evento == this.evento &&
+          other.actualizadaEn == this.actualizadaEn);
 }
 
 class EntradasCopiaCompanion extends UpdateCompanion<EntradaCopia> {
   final Value<String> owner;
   final Value<String> tabla;
   final Value<String> evento;
+  final Value<DateTime?> actualizadaEn;
   final Value<int> rowid;
   const EntradasCopiaCompanion({
     this.owner = const Value.absent(),
     this.tabla = const Value.absent(),
     this.evento = const Value.absent(),
+    this.actualizadaEn = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   EntradasCopiaCompanion.insert({
     required String owner,
     required String tabla,
     required String evento,
+    this.actualizadaEn = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : owner = Value(owner),
        tabla = Value(tabla),
@@ -209,12 +263,14 @@ class EntradasCopiaCompanion extends UpdateCompanion<EntradaCopia> {
     Expression<String>? owner,
     Expression<String>? tabla,
     Expression<String>? evento,
+    Expression<DateTime>? actualizadaEn,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (owner != null) 'owner': owner,
       if (tabla != null) 'tabla': tabla,
       if (evento != null) 'evento': evento,
+      if (actualizadaEn != null) 'actualizada_en': actualizadaEn,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -223,12 +279,14 @@ class EntradasCopiaCompanion extends UpdateCompanion<EntradaCopia> {
     Value<String>? owner,
     Value<String>? tabla,
     Value<String>? evento,
+    Value<DateTime?>? actualizadaEn,
     Value<int>? rowid,
   }) {
     return EntradasCopiaCompanion(
       owner: owner ?? this.owner,
       tabla: tabla ?? this.tabla,
       evento: evento ?? this.evento,
+      actualizadaEn: actualizadaEn ?? this.actualizadaEn,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -245,6 +303,9 @@ class EntradasCopiaCompanion extends UpdateCompanion<EntradaCopia> {
     if (evento.present) {
       map['evento'] = Variable<String>(evento.value);
     }
+    if (actualizadaEn.present) {
+      map['actualizada_en'] = Variable<DateTime>(actualizadaEn.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -257,6 +318,7 @@ class EntradasCopiaCompanion extends UpdateCompanion<EntradaCopia> {
           ..write('owner: $owner, ')
           ..write('tabla: $tabla, ')
           ..write('evento: $evento, ')
+          ..write('actualizadaEn: $actualizadaEn, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -687,6 +749,7 @@ typedef $$EntradasCopiaTableCreateCompanionBuilder =
       required String owner,
       required String tabla,
       required String evento,
+      Value<DateTime?> actualizadaEn,
       Value<int> rowid,
     });
 typedef $$EntradasCopiaTableUpdateCompanionBuilder =
@@ -694,6 +757,7 @@ typedef $$EntradasCopiaTableUpdateCompanionBuilder =
       Value<String> owner,
       Value<String> tabla,
       Value<String> evento,
+      Value<DateTime?> actualizadaEn,
       Value<int> rowid,
     });
 
@@ -718,6 +782,11 @@ class $$EntradasCopiaTableFilterComposer
 
   ColumnFilters<String> get evento => $composableBuilder(
     column: $table.evento,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get actualizadaEn => $composableBuilder(
+    column: $table.actualizadaEn,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -745,6 +814,11 @@ class $$EntradasCopiaTableOrderingComposer
     column: $table.evento,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<DateTime> get actualizadaEn => $composableBuilder(
+    column: $table.actualizadaEn,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$EntradasCopiaTableAnnotationComposer
@@ -764,6 +838,11 @@ class $$EntradasCopiaTableAnnotationComposer
 
   GeneratedColumn<String> get evento =>
       $composableBuilder(column: $table.evento, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get actualizadaEn => $composableBuilder(
+    column: $table.actualizadaEn,
+    builder: (column) => column,
+  );
 }
 
 class $$EntradasCopiaTableTableManager
@@ -800,11 +879,13 @@ class $$EntradasCopiaTableTableManager
                 Value<String> owner = const Value.absent(),
                 Value<String> tabla = const Value.absent(),
                 Value<String> evento = const Value.absent(),
+                Value<DateTime?> actualizadaEn = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => EntradasCopiaCompanion(
                 owner: owner,
                 tabla: tabla,
                 evento: evento,
+                actualizadaEn: actualizadaEn,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -812,11 +893,13 @@ class $$EntradasCopiaTableTableManager
                 required String owner,
                 required String tabla,
                 required String evento,
+                Value<DateTime?> actualizadaEn = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => EntradasCopiaCompanion.insert(
                 owner: owner,
                 tabla: tabla,
                 evento: evento,
+                actualizadaEn: actualizadaEn,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

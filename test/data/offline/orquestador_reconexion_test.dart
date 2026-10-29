@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:transworld_nexus/core/conexion/estado_conexion.dart';
 import 'package:transworld_nexus/core/conexion/monitor_conexion.dart';
+import 'package:transworld_nexus/data/offline/almacen/almacen_copia_local.dart';
 import 'package:transworld_nexus/data/offline/offline_read_cache.dart';
 import 'package:transworld_nexus/data/offline/orquestador_reconexion.dart';
 import 'package:transworld_nexus/data/offline/snapshot_service.dart';
@@ -55,6 +56,9 @@ void _poner(ProviderContainer container, EstadoConexion estado) {
         (ref) => _SnapshotFalso(ref, bitacora),
       ),
       pendingSyncCountProvider.overrideWithValue(pendientes),
+      offlineReadCacheProvider.overrideWithValue(
+        OfflineReadCache(AlmacenCopiaLocal.enMemoria(), ownerId: 'u'),
+      ),
     ],
   );
   container.listen(epocaServidorProvider, (_, _) {

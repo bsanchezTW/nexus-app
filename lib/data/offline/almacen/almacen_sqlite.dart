@@ -72,6 +72,7 @@ class AlmacenSqlite extends AlmacenCopiaLocal {
         e.tabla,
         e.evento,
         porEntrada[clave(e.owner, e.tabla, e.evento)] ?? const [],
+        actualizadaEn: e.actualizadaEn,
       );
     }
   }
@@ -119,10 +120,13 @@ class AlmacenSqlite extends AlmacenCopiaLocal {
       await _db
           .into(_db.entradasCopia)
           .insertOnConflictUpdate(
+            // Sin hora nueva la columna se omite: el UPSERT no pisa la que
+            // ya había.
             EntradasCopiaCompanion.insert(
               owner: c.owner,
               tabla: c.tabla,
               evento: c.evento,
+              actualizadaEn: Value.absentIfNull(c.actualizadaEn),
             ),
           );
       if (c.idsBorrados.isNotEmpty) {

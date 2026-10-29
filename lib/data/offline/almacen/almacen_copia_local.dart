@@ -36,6 +36,7 @@ class CambioCopiaLocal {
     this.borrarEntrada = false,
     this.filasNuevas = const [],
     this.idsBorrados = const [],
+    this.actualizadaEn,
   });
 
   final String owner;
@@ -50,13 +51,19 @@ class CambioCopiaLocal {
 
   /// Filas que ya no están.
   final List<String> idsBorrados;
+
+  /// Nueva hora de confirmación del servidor; `null` la deja como estaba.
+  final DateTime? actualizadaEn;
 }
 
 class _Entrada {
-  _Entrada(this.filas);
+  _Entrada(this.filas, this.actualizadaEn);
 
   /// Filas en orden, con su JSON.
   List<FilaCopiaLocal> filas;
+
+  /// Última confirmación del servidor (ver [AlmacenCopiaLocal.actualizadaEn]).
+  DateTime? actualizadaEn;
 }
 
 /// Dónde vive la copia local que permite leer sin conexión.
@@ -110,16 +117,27 @@ class AlmacenCopiaLocal {
     };
   }
 
+  /// Última vez que el servidor confirmó la entrada. `null` si no se sabe
+  /// (copia traída de SharedPreferences) o si no existe.
+  DateTime? actualizadaEn(String owner, String tabla, String evento) =>
+      _entradas[_clave(owner, tabla, evento)]?.actualizadaEn;
+
   /// Reemplaza la entrada por [filas] y responde si algo cambió.
   ///
   /// La memoria se actualiza antes de volver, así que una lectura inmediata ya
   /// ve lo nuevo; el disco recibe solo las filas que cambiaron.
+  ///
+  /// [confirmadaEn] es la hora en que el servidor entregó [filas]. Se registra
+  /// aunque nada haya cambiado —una copia idéntica sigue estando al día—, pero
+  /// en ese caso la respuesta es `false`: la UI no tiene nada nuevo que pintar.
+  /// Un parche local no la pasa: no es una confirmación del servidor.
   Future<bool> guardar(
     String owner,
     String tabla,
     String evento,
-    List<Map<String, dynamic>> filas,
-  ) async {
+    List<Map<String, dynamic>> filas, {
+    DateTime? confirmadaEn,
+  }) async {
     final clave = _clave(owner, tabla, evento);
     final nuevas = filasDe(filas);
     final anterior = _entradas[clave];
@@ -141,9 +159,23 @@ class AlmacenCopiaLocal {
     ];
 
     if (anterior != null && cambiadas.isEmpty && borradas.isEmpty) {
+      if (confirmadaEn != null) {
+        anterior.actualizadaEn = confirmadaEn;
+        await persistir(
+          CambioCopiaLocal(
+            owner: owner,
+            tabla: tabla,
+            evento: evento,
+            actualizadaEn: confirmadaEn,
+          ),
+        );
+      }
       return false;
     }
-    _entradas[clave] = _Entrada(nuevas);
+    _entradas[clave] = _Entrada(
+      nuevas,
+      confirmadaEn ?? anterior?.actualizadaEn,
+    );
     await persistir(
       CambioCopiaLocal(
         owner: owner,
@@ -151,6 +183,7 @@ class AlmacenCopiaLocal {
         evento: evento,
         filasNuevas: cambiadas,
         idsBorrados: borradas,
+        actualizadaEn: confirmadaEn,
       ),
     );
     return true;
@@ -182,9 +215,10 @@ class AlmacenCopiaLocal {
     String owner,
     String tabla,
     String evento,
-    List<FilaCopiaLocal> filas,
-  ) {
-    _entradas[_clave(owner, tabla, evento)] = _Entrada(filas);
+    List<FilaCopiaLocal> filas, {
+    DateTime? actualizadaEn,
+  }) {
+    _entradas[_clave(owner, tabla, evento)] = _Entrada(filas, actualizadaEn);
   }
 
   /// Convierte una lista en filas con id y orden.

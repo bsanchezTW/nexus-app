@@ -124,6 +124,83 @@ void main() {
     expect(sinRed.accion, AccionAviso.ninguna);
   });
 
+  group('copia local', () {
+    final ahora = DateTime(2026, 10, 29, 12);
+
+    EntradaAvisos conCopia(
+      EstadoConexion estado, {
+      DateTime? actualizada,
+      bool mostrando = true,
+    }) => EntradaAvisos(
+      estado: estado,
+      enLinea: !estado.degradado,
+      soportaCopiaLocal: true,
+      mostrandoCopia: mostrando,
+      copiaActualizadaEn: actualizada,
+      ahora: ahora,
+    );
+
+    test('con red, mostrar la copia se avisa y ofrece recargar', () {
+      final aviso = avisosDelSistema(
+        conCopia(
+          EstadoConexion.estable,
+          actualizada: ahora.subtract(const Duration(hours: 2)),
+        ),
+      ).single;
+      expect(aviso.tipo, TipoAviso.copiaLocal);
+      expect(aviso.titulo, 'Mostrando copia local');
+      expect(
+        aviso.detalle,
+        'El servidor no respondió a tiempo. Actualizada hace 2 h · Toca para '
+        'reintentar',
+      );
+      expect(aviso.accion, AccionAviso.recargar);
+    });
+
+    test('sin hora conocida no inventa una', () {
+      final aviso = avisosDelSistema(conCopia(EstadoConexion.estable)).single;
+      expect(
+        aviso.detalle,
+        'El servidor no respondió a tiempo. Toca para reintentar',
+      );
+    });
+
+    test('sin conexión, la edad de la copia va en el aviso de conexión', () {
+      final aviso = avisosDelSistema(
+        conCopia(
+          EstadoConexion.sinInternet,
+          actualizada: ahora.subtract(const Duration(minutes: 7)),
+        ),
+      ).single;
+      expect(aviso.tipo, TipoAviso.sinInternet);
+      expect(aviso.detalle, endsWith(' · Copia de hace 7 min'));
+    });
+
+    test('si nada se muestra desde la copia, no hay aviso', () {
+      expect(
+        avisosDelSistema(conCopia(EstadoConexion.estable, mostrando: false)),
+        isEmpty,
+      );
+    });
+  });
+
+  test('haceCuanto', () {
+    final ahora = DateTime(2026, 10, 29, 12);
+    String hace(Duration d) => haceCuanto(ahora.subtract(d), ahora);
+    expect(hace(const Duration(seconds: 20)), 'hace un momento');
+    expect(hace(const Duration(minutes: 1)), 'hace 1 min');
+    expect(hace(const Duration(minutes: 59)), 'hace 59 min');
+    expect(hace(const Duration(hours: 1)), 'hace 1 h');
+    expect(hace(const Duration(hours: 23)), 'hace 23 h');
+    expect(hace(const Duration(days: 1)), 'hace 1 día');
+    expect(hace(const Duration(days: 4)), 'hace 4 días');
+    // Reloj del servidor adelantado: no decir "hace -2 min".
+    expect(
+      haceCuanto(ahora.add(const Duration(minutes: 2)), ahora),
+      'hace un momento',
+    );
+  });
+
   test('los conflictos llevan a revisarlos', () {
     final aviso = avisosDelSistema(_entrada(conflictos: 2)).single;
     expect(aviso.titulo, '2 cambios necesitan revisión');

@@ -40,6 +40,7 @@ final orquestadorReconexionProvider = Provider<void>((ref) {
   Future<void> alEstabilizarse({required bool veniaDegradado}) async {
     await ref.read(syncCoordinatorProvider).sincronizarAhora();
     if (!vivo || !veniaDegradado) return;
+    ref.read(offlineReadCacheProvider).olvidarCopiasServidas();
     exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
     respaldo?.cancel();
     respaldo = Timer(esperaRespaldoTrasRecarga, () {

@@ -164,5 +164,86 @@ void main() {
       expect(reabierto.leer('a', 'leads', 'e1'), isNull);
       expect(reabierto.eventos('a', 'leads'), isEmpty);
     });
+
+    test(
+      'la hora de confirmación se guarda y no se pisa sin una nueva',
+      () async {
+        final hora = DateTime(2026, 10, 29, 9, 30);
+        final almacen = await AlmacenSqlite.deBase(db);
+        await almacen.guardar('a', 'registrados', 'e1', [
+          _persona('1'),
+        ], confirmadaEn: hora);
+        // Un parche local (sin hora) cambia filas pero no la confirmación.
+        await almacen.guardar('a', 'registrados', 'e1', [
+          _persona('1', acreditado: true),
+        ]);
+        await almacen.esperarEscrituras();
+
+        final reabierto = await AlmacenSqlite.deBase(db);
+        expect(reabierto.actualizadaEn('a', 'registrados', 'e1'), hora);
+
+        // Una respuesta idéntica solo mueve la hora.
+        final despues = hora.add(const Duration(minutes: 5));
+        expect(
+          await reabierto.guardar('a', 'registrados', 'e1', [
+            _persona('1', acreditado: true),
+          ], confirmadaEn: despues),
+          isFalse,
+        );
+        await reabierto.esperarEscrituras();
+        final otraVez = await AlmacenSqlite.deBase(db);
+        expect(otraVez.actualizadaEn('a', 'registrados', 'e1'), despues);
+      },
+    );
+  });
+
+  test('una base v1 se actualiza a v2 sin perder la copia', () async {
+    // La base que ya tienen los dispositivos: sin la columna de la hora.
+    final db = CopiaLocalDb(
+      DatabaseConnection(
+        NativeDatabase.memory(
+          setup: (raw) {
+            raw.execute(
+              'CREATE TABLE entradas_copia (owner TEXT NOT NULL, '
+              'tabla TEXT NOT NULL, evento TEXT NOT NULL, '
+              'PRIMARY KEY (owner, tabla, evento))',
+            );
+            raw.execute(
+              'CREATE TABLE filas_copia (owner TEXT NOT NULL, '
+              'tabla TEXT NOT NULL, evento TEXT NOT NULL, '
+              'fila_id TEXT NOT NULL, orden INTEGER NOT NULL, '
+              'datos TEXT NOT NULL, '
+              'PRIMARY KEY (owner, tabla, evento, fila_id))',
+            );
+            raw.execute(
+              "INSERT INTO entradas_copia VALUES ('a', 'registrados', 'e1')",
+            );
+            raw.execute(
+              "INSERT INTO filas_copia VALUES ('a', 'registrados', 'e1', "
+              "'1', 0, '{\"id\":\"1\"}')",
+            );
+            raw.userVersion = 1;
+          },
+        ),
+        closeStreamsSynchronously: true,
+      ),
+    );
+    addTearDown(db.close);
+
+    final almacen = await AlmacenSqlite.deBase(db);
+    expect(almacen.leer('a', 'registrados', 'e1'), [
+      {'id': '1'},
+    ]);
+    expect(almacen.actualizadaEn('a', 'registrados', 'e1'), isNull);
+
+    final hora = DateTime(2026, 10, 29, 10);
+    await almacen.guardar('a', 'registrados', 'e1', [
+      {'id': '1'},
+    ], confirmadaEn: hora);
+    await almacen.esperarEscrituras();
+    expect(
+      (await AlmacenSqlite.deBase(db)).actualizadaEn('a', 'registrados', 'e1'),
+      hora,
+    );
   });
 }
