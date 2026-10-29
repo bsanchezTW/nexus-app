@@ -9,8 +9,10 @@ import { log } from "../_shared/log.ts";
 import {
   asuntoDe,
   htmlConfirmacion,
+  textoConfirmacion,
   textoSms,
   tonoDe,
+  type DatosConfirmacion,
   type MotivoEnvio,
   type TallerCorreo,
 } from "../_shared/plantillas_confirmacion.ts";
@@ -159,7 +161,7 @@ async function procesarEnvio(envio: Envio): Promise<Record<string, unknown>> {
       "nombre_completo, email, telefono, codigo_qr, origen, ingresado_por",
     ).eq("id", envio.registrado_id).single();
     const { data: evento } = await admin.from("eventos").select(
-      "nombre, slug, pais, fecha, duracion_dias, hora_inicio, hora_fin, lugar, direccion, mapa_url, acceso_qr",
+      "nombre, slug, tipo, pais, fecha, duracion_dias, hora_inicio, hora_fin, lugar, direccion, mapa_url, acceso_qr",
     ).eq("id", envio.evento_id).single();
     const { data: inscripciones } = await admin.from("inscripciones_subevento").select(
       "subeventos(nombre, dia, hora_inicio, hora_fin, sala, expositor)",
@@ -258,6 +260,7 @@ async function enviarEmail(args: {
   evento: {
     nombre: string;
     slug: string;
+    tipo: string | null;
     pais: string;
     fecha: string;
     duracion_dias: number;
@@ -276,11 +279,12 @@ async function enviarEmail(args: {
   const email = args.registrado.email?.trim();
   if (!email) return { status: "skipped", reason: "sin_email" };
   const tono = tonoDe(args.registrado.origen, args.registrado.ingresado_por);
-  const html = htmlConfirmacion({
+  const datos: DatosConfirmacion = {
     tono,
     motivo: args.envio.motivo,
     evento: {
       nombre: args.evento.nombre,
+      tipo: args.evento.tipo === "taller" ? "taller" : "evento",
       fecha: args.evento.fecha,
       duracionDias: args.evento.duracion_dias ?? 1,
       horaInicio: args.evento.hora_inicio,
@@ -297,7 +301,7 @@ async function enviarEmail(args: {
     talleres: args.talleres,
     qrUrl: args.qrUrl,
     pieUrl: PIE_DE_FIRMA_URL,
-  });
+  };
   const attachment = args.evento.acceso_qr && esCodigoQrValido(args.codigo)
     ? [{
       name: `entrada-${args.evento.slug}.png`,
@@ -310,7 +314,8 @@ async function enviarEmail(args: {
       replyTo: remitenteContacto,
       to: [{ email, name: args.registrado.nombre_completo }],
       subject: asuntoDe(args.envio.motivo, args.evento.nombre),
-      htmlContent: html,
+      htmlContent: htmlConfirmacion(datos),
+      textContent: textoConfirmacion(datos),
       attachment,
       tags: ["confirmacion-registro"],
     });

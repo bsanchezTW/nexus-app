@@ -13,6 +13,12 @@ export function formatearDia(iso: string): string {
   return `${nombre} ${dd}-${mm}-${anio}`;
 }
 
+/** `2026-03-18` → `18-03-2026`. */
+export function formatearFecha(iso: string): string {
+  const [anio, mes, dia] = iso.slice(0, 10).split("-");
+  return `${dia}-${mes}-${anio}`;
+}
+
 export function formatearHora(hora: string | null | undefined): string {
   if (!hora) return "";
   return hora.slice(0, 5);
@@ -34,7 +40,7 @@ function compactarFecha(iso: string): string {
   return iso.slice(0, 10).replaceAll("-", "");
 }
 
-function sumarDias(iso: string, dias: number): string {
+export function sumarDias(iso: string, dias: number): string {
   const [anio, mes, dia] = iso.slice(0, 10).split("-").map(Number);
   const fecha = new Date(Date.UTC(anio, mes - 1, dia + dias));
   const y = fecha.getUTCFullYear();

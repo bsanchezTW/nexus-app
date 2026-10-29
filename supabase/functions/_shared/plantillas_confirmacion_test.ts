@@ -3,6 +3,7 @@ import {
   aGsm7,
   asuntoDe,
   htmlConfirmacion,
+  textoConfirmacion,
   textoSms,
   tonoDe,
 } from "./plantillas_confirmacion.ts";
@@ -56,14 +57,73 @@ Deno.test("el HTML escapa y muestra QR solo con acceso", () => {
   assertStringIncludes(html, "https://ejemplo/qr");
   assertStringIncludes(html, "#0078D4");
   assertStringIncludes(html, "#4285F4");
-  assertStringIncludes(html, "Consultas a");
-  assertStringIncludes(html, "contacto@transworld.cl");
-  assertStringIncludes(html, "margin-bottom: 50px");
+  assertStringIncludes(html, 'href="mailto:contacto@transworld.cl"');
   const sinQr = htmlConfirmacion({
     ...base,
     evento: { ...base.evento, accesoQr: false },
   });
   assertEquals(sinQr.includes("https://ejemplo/qr"), false);
+});
+
+const persona = { nombre: "Ana Pérez" };
+
+Deno.test("registrado desde la app, con hora de término", () => {
+  const texto = textoConfirmacion({
+    ...base,
+    persona,
+    tono: "registrado_por",
+    registradoPor: "Juan Soto",
+    evento: { ...base.evento, fecha: "2026-03-18" },
+  });
+  assertStringIncludes(texto, "Hola Ana Pérez.");
+  assertStringIncludes(
+    texto,
+    "Te informamos que Juan Soto te ha registrado para participar en el evento Connect a realizarse el 18-03-2026, entre las 09:00 y las 18:00, en Hotel, ubicado en Av. 1.",
+  );
+  assertStringIncludes(
+    texto,
+    "Si tienes alguna consulta, comunícate con Juan Soto o escríbenos a contacto@transworld.cl.",
+  );
+});
+
+Deno.test("registrado desde la app, sin hora de término", () => {
+  const texto = textoConfirmacion({
+    ...base,
+    persona,
+    tono: "registrado_por",
+    registradoPor: "Juan Soto",
+    evento: { ...base.evento, fecha: "2026-03-18", horaFin: null, tipo: "taller" },
+  });
+  assertStringIncludes(
+    texto,
+    "te ha registrado para participar en la actividad Connect a realizarse el 18-03-2026, a partir de las 09:00, en Hotel, ubicado en Av. 1.",
+  );
+});
+
+Deno.test("inscrito por formulario, con y sin hora de término", () => {
+  const con = textoConfirmacion({ ...base, persona, tono: "autoinscrito" });
+  assertStringIncludes(
+    con,
+    "Tu registro ha finalizado exitosamente para asistir a Connect a realizarse el 12-11-2026, entre las 09:00 y las 18:00, en Hotel, ubicado en Av. 1.",
+  );
+  assertEquals(con.includes("comunícate con"), false);
+  const sin = textoConfirmacion({
+    ...base,
+    persona,
+    tono: "autoinscrito",
+    evento: { ...base.evento, horaFin: null },
+  });
+  assertStringIncludes(sin, "a realizarse el 12-11-2026, a partir de las 09:00, en Hotel");
+});
+
+Deno.test("varios días, sin horario ni dirección", () => {
+  const texto = textoConfirmacion({
+    ...base,
+    persona,
+    tono: "autoinscrito",
+    evento: { ...base.evento, duracionDias: 3, horaInicio: null, horaFin: null, direccion: "" },
+  });
+  assertStringIncludes(texto, "a realizarse del 12-11-2026 al 14-11-2026, en Hotel.");
 });
 
 Deno.test("el SMS cabe en 160 y se omite sin acceso QR", () => {
