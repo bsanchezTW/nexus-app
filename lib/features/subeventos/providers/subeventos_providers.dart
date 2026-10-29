@@ -37,7 +37,7 @@ final subeventosTodosProvider = FutureProvider.autoDispose<List<Subevento>>((
 
 final ocupacionEventoProvider = FutureProvider.autoDispose
     .family<OcupacionEvento, String>((ref, eventoId) async {
-      if (!ref.watch(isOnlineProvider)) {
+      if (!ref.watch(usaServidorProvider)) {
         throw StateError('La ocupación solo está disponible con conexión.');
       }
       return ref.read(subeventosRepositoryProvider).ocupacion(eventoId);

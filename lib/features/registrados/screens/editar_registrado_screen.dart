@@ -217,7 +217,7 @@ class _EditarRegistradoScreenState
         // El build ya observa las inscripciones: solo se tocan talleres con datos.
         final tocarTalleres = _talleresCargados && !inscripcionesAsync.hasError;
         if (tocarTalleres &&
-            ref.read(isOnlineProvider) &&
+            ref.read(usaServidorProvider) &&
             !esIdSoloLocal(widget.registradoId)) {
           final agregar = _talleresSeleccionados.difference(_talleresIniciales);
           final quitar = _talleresIniciales.difference(_talleresSeleccionados);
@@ -328,7 +328,7 @@ class _EditarRegistradoScreenState
   @override
   Widget build(BuildContext context) {
     final esAdmin = ref.watch(isAdminProvider);
-    final hayRed = ref.watch(isOnlineProvider);
+    final hayRed = ref.watch(usaServidorProvider);
     final puedeVerContacto = ref.watch(canViewContactDataProvider);
     final inscripcionesAsync = ref.watch(
       inscripcionesPorEventoProvider(widget.eventoId),

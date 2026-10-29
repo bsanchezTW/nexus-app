@@ -121,7 +121,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     final enCache = registrados.where((r) => r.codigoQr == codigo).firstOrNull;
 
     return resolverRegistradoParaAcreditacion(
-      hayRed: ref.read(isOnlineProvider),
+      hayRed: ref.read(usaServidorProvider),
       enCache: enCache,
       obtenerDelServidor: () => ref
           .read(registradosRepositoryProvider)
@@ -190,7 +190,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     final perfilId = ref.read(currentPerfilProvider).valueOrNull?.id;
     final texto = email?.trim() ?? '';
     return resolverLeadExistenteParaCaptura(
-      hayRed: ref.read(isOnlineProvider),
+      hayRed: ref.read(usaServidorProvider),
       email: email,
       buscarEnServidor: () => ref
           .read(leadsRepositoryProvider)
@@ -327,7 +327,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
     final registradosAsync = ref.read(
       registradosPorEventoProvider(widget.eventoId),
     );
-    final isOnline = ref.read(isOnlineProvider);
+    final isOnline = ref.read(usaServidorProvider);
     if (!isOnline && registradosAsync.isLoading) {
       _scanner.showFeedback(
         'Espera a que carguen los asistentes (modo offline).',
@@ -448,7 +448,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
       modoEntrada: false,
       esExterno: perfil?.isExterno ?? false,
       puedeCrear: perfil?.canCreateContent ?? false,
-      hayRed: ref.read(isOnlineProvider),
+      hayRed: ref.read(usaServidorProvider),
     );
     switch (accion.tipo) {
       case AccionEscaneoTipo.marcarAsistencia:
@@ -487,7 +487,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
           isError: true,
         );
       case AccionEscaneoTipo.ofrecerInscribirYMarcar:
-        if (_inscripcionesNoCargadas && ref.read(isOnlineProvider)) {
+        if (_inscripcionesNoCargadas && ref.read(usaServidorProvider)) {
           final resultado = await ref
               .read(inscripcionesSubeventoRepositoryProvider)
               .marcarAsistencia(
@@ -535,7 +535,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
             .map((taller) => taller.nombre)
             .firstOrNull ??
         'este taller';
-    final sinRed = !ref.read(isOnlineProvider);
+    final sinRed = !ref.read(usaServidorProvider);
     final ok = await confirmDialog(
       context,
       title: 'No está inscrito',
@@ -679,7 +679,7 @@ class _AcreditarQrScreenState extends ConsumerState<AcreditarQrScreen>
           : 'Mover desde el taller solapado',
     );
     if (!mover || !mounted) return;
-    final sinRed = !ref.read(isOnlineProvider);
+    final sinRed = !ref.read(usaServidorProvider);
     try {
       final resultado = await conEspera(context, () async {
         if (sinRed) {

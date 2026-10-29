@@ -141,7 +141,7 @@ Future<void> persistirAcreditacion(
   required bool acreditado,
   required String acreditadoPorId,
 }) async {
-  final isOnline = ref.read(isOnlineProvider);
+  final isOnline = ref.read(usaServidorProvider);
   final cache = ref.read(offlineReadCacheProvider);
   // `parchearFila` toma turno, así que una consulta en vuelo ya no puede pisar
   // el parche. Con un wifi cautivo cada una aguanta hasta 30 s: esperarlas sin

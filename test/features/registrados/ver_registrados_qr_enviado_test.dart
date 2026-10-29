@@ -60,7 +60,7 @@ void main() {
             connectivityStreamProvider.overrideWith(
               (ref) => Stream.value(true),
             ),
-            isOnlineProvider.overrideWith((ref) => true),
+            usaServidorProvider.overrideWith((ref) => true),
             syncQueueActiveOwnerIdProvider.overrideWithValue('owner-1'),
             authStateChangesProvider.overrideWith(
               (ref) => const Stream<AuthState>.empty(),

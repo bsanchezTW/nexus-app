@@ -121,7 +121,7 @@ Future<Map<String, dynamic>?> persistirAsistenciaSubevento(
   bool forzar = false,
   bool reemplazar = false,
 }) async {
-  final online = ref.read(isOnlineProvider);
+  final online = ref.read(usaServidorProvider);
   final cache = ref.read(offlineReadCacheProvider);
   Map<String, dynamic>? resultado;
   var enCola = !online || esIdSoloLocal(registradoId);

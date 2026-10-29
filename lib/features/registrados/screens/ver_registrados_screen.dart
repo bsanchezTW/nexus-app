@@ -903,7 +903,7 @@ class _QrSheetState extends ConsumerState<_QrSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isOnline = ref.watch(isOnlineProvider);
+    final isOnline = ref.watch(usaServidorProvider);
     final puedeVerContacto = ref.watch(canViewContactDataProvider);
     final r = widget.registrado;
     // Un registro que solo existe en la cola local todavía no tiene id real

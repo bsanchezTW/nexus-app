@@ -24,7 +24,7 @@ void main() {
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           connectivityStreamProvider.overrideWith((ref) => Stream.value(false)),
-          isOnlineProvider.overrideWith((ref) => false),
+          usaServidorProvider.overrideWith((ref) => false),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -60,7 +60,7 @@ void main() {
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           connectivityStreamProvider.overrideWith((ref) => Stream.value(true)),
-          isOnlineProvider.overrideWith((ref) => true),
+          usaServidorProvider.overrideWith((ref) => true),
         ],
         child: MaterialApp(
           home: Scaffold(

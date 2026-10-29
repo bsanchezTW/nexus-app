@@ -21,7 +21,7 @@ const kMensajeSinBaseDeDatos =
 /// `true` si la app opera en línea. Si no, muestra el toast unificado y no
 /// sigue.
 bool requireOnline(BuildContext context, WidgetRef ref) {
-  if (ref.read(isOnlineProvider)) return true;
+  if (ref.read(usaServidorProvider)) return true;
   showOfflineUnavailableToast(context, ref: ref);
   return false;
 }

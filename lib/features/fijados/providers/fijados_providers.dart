@@ -21,7 +21,7 @@ final eventosFijadosProvider = FutureProvider.autoDispose<Set<String>>((
   ref,
 ) async {
   ref.watch(authStateChangesProvider);
-  final isOnline = ref.read(isOnlineProvider);
+  final isOnline = ref.read(usaServidorProvider);
   final repo = ref.watch(fijadosRepositoryProvider);
   final perfil = await ref.watch(currentPerfilProvider.future);
 
@@ -58,7 +58,7 @@ final campanasFijadasProvider = FutureProvider.autoDispose<Set<String>>((
   ref,
 ) async {
   ref.watch(authStateChangesProvider);
-  final isOnline = ref.read(isOnlineProvider);
+  final isOnline = ref.read(usaServidorProvider);
   final repo = ref.watch(fijadosRepositoryProvider);
   final perfil = await ref.watch(currentPerfilProvider.future);
 

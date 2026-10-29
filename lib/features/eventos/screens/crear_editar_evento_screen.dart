@@ -419,7 +419,7 @@ class _CrearEditarEventoFormState
   @override
   Widget build(BuildContext context) {
     final esAdmin = ref.watch(isAdminProvider);
-    final hayRed = ref.watch(isOnlineProvider);
+    final hayRed = ref.watch(usaServidorProvider);
     final eventoAsync = widget.eventoId == null
         ? null
         : ref.watch(eventoParaEditarProvider(widget.eventoId!));

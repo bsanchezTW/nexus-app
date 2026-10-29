@@ -21,7 +21,7 @@ Future<EventoLead> obtenerOCrearEventoLeadInterno(
   Evento evento,
 ) async {
   final repo = ref.read(eventosLeadsRepositoryProvider);
-  final isOnline = ref.read(isOnlineProvider);
+  final isOnline = ref.read(usaServidorProvider);
 
   EventoLead? existente;
   if (isOnline) {

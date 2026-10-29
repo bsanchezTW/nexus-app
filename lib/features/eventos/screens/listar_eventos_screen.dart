@@ -322,7 +322,7 @@ class _ListarEventosScreenState extends ConsumerState<ListarEventosScreen>
     // Sin red solo se puede entrar a lo que quedó en disco: la caché conserva
     // el set activo y suelta los eventos vencidos (ver
     // `offline_retention_policy.dart`).
-    final sinRed = !ref.watch(isOnlineProvider);
+    final sinRed = !ref.watch(usaServidorProvider);
     final cache = ref.watch(offlineReadCacheProvider);
 
     return CollapsingScrollScaffold(

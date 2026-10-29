@@ -45,7 +45,7 @@ Future<(ProviderContainer, List<Object>)> _montar(
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
-        isOnlineProvider.overrideWith((ref) => true),
+        usaServidorProvider.overrideWith((ref) => true),
         syncQueueActiveOwnerIdProvider.overrideWithValue('owner-1'),
         registradosRepositoryProvider.overrideWithValue(repo),
       ],

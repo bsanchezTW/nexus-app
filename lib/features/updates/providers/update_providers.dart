@@ -49,7 +49,7 @@ class UpdateController extends StateNotifier<UpdateState> {
   /// Check al abrir la app en Windows, antes del login (actualizador visible).
   Future<void> checkOnColdStart() async {
     if (!otaResolvesWindowsAsset) return;
-    if (!(_ref.read(isOnlineProvider))) return;
+    if (!(_ref.read(usaServidorProvider))) return;
     if (state.isBusy) return;
 
     state = state.copyWith(status: UpdateStatus.checking, clearError: true);
@@ -95,7 +95,7 @@ class UpdateController extends StateNotifier<UpdateState> {
     if (!otaUpdatesSupported) return;
     // Solo con sesión: el aviso de update no debe aparecer en login/splash.
     if (_ref.read(authRepositoryProvider).currentSession == null) return;
-    if (!(_ref.read(isOnlineProvider))) return;
+    if (!(_ref.read(usaServidorProvider))) return;
     if (state.isBusy) return;
 
     final previous = state;
@@ -137,7 +137,7 @@ class UpdateController extends StateNotifier<UpdateState> {
       );
       return;
     }
-    if (!(_ref.read(isOnlineProvider))) {
+    if (!(_ref.read(usaServidorProvider))) {
       state = state.copyWith(
         status: UpdateStatus.failed,
         errorMessage: kMensajeSinConexion,

@@ -108,7 +108,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          isOnlineProvider.overrideWith((ref) => true),
+          usaServidorProvider.overrideWith((ref) => true),
           offlineReadCacheProvider.overrideWithValue(cache),
           inscripcionesSubeventoRepositoryProvider.overrideWithValue(
             _RepoRechaza(),
@@ -159,7 +159,7 @@ void main() {
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           syncQueueActiveOwnerIdProvider.overrideWithValue('admin-1'),
-          isOnlineProvider.overrideWith((ref) => true),
+          usaServidorProvider.overrideWith((ref) => true),
           offlineReadCacheProvider.overrideWithValue(cache),
           inscripcionesSubeventoRepositoryProvider.overrideWithValue(
             _RepoSinSalida(),

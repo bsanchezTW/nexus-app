@@ -35,6 +35,11 @@ const Duration esperaMaximaRevalidacion = Duration(seconds: 30);
 /// copia local la sirven al instante y consultan por detrás. Sin esto, con un
 /// wifi cautivo cada pantalla esperaría [esperaMaximaServidorPorDefecto] antes
 /// de mostrar nada.
+///
+/// No duplica a `MonitorConexion`: el monitor no degrada por la espera corta
+/// de una pantalla —una consulta pesada con buena red no puede mandar la app
+/// a modo sin conexión—, así que entre el primer timeout y su próximo sondeo
+/// esta ventana es lo único que evita esperas seguidas de 5 s.
 const Duration ventanaServidorInalcanzable = Duration(seconds: 20);
 
 /// Último lector vivo de una entrada (`tabla:evento`). Una consulta puede
@@ -755,7 +760,7 @@ Future<void> refrescarLecturas(
   if (cache.consumirFallos() > 0) fallo = true;
 
   if (fallo && context != null && context.mounted) {
-    if (ref.read(isOnlineProvider)) {
+    if (ref.read(usaServidorProvider)) {
       showAppSnackBar(
         context,
         'No se pudo actualizar desde el servidor. Revisa tu conexión.',
@@ -838,7 +843,7 @@ final cacheRevisionProvider = StateProvider.family<int, String>(
 /// recompone con lo nuevo.
 ///
 /// Observa [epocaServidorProvider] para volver a consultar cuando sube. No
-/// observa [isOnlineProvider]: un emit de conectividad reiniciaría el
+/// observa [usaServidorProvider]: un emit de conectividad reiniciaría el
 /// [FutureProvider] y la UI pasaría por `loading`. Al volver a una conexión
 /// estable sube la época (ver `orquestadorReconexionProvider`) y las lecturas
 /// vuelven a pedir.
@@ -852,7 +857,7 @@ Future<List<T>> leerCacheFirstConRef<T>({
   Duration esperaMaximaServidor = esperaMaximaServidorPorDefecto,
 }) {
   final cache = ref.watch(offlineReadCacheProvider);
-  final isOnline = ref.read(isOnlineProvider);
+  final isOnline = ref.read(usaServidorProvider);
   final clave = '$tabla:$eventoId';
   final revision = ref.watch(cacheRevisionProvider(clave));
   ref.watch(epocaServidorProvider);

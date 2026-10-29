@@ -49,7 +49,7 @@ final eventoByIdProvider = FutureProvider.autoDispose.family<Evento, String>((
   ref,
   id,
 ) async {
-  final isOnline = ref.read(isOnlineProvider);
+  final isOnline = ref.read(usaServidorProvider);
   final cache = ref.watch(offlineReadCacheProvider);
   final repo = ref.watch(eventosRepositoryProvider);
 
@@ -88,7 +88,7 @@ final eventoByIdProvider = FutureProvider.autoDispose.family<Evento, String>((
 /// Sin red cae a la copia local (el formulario queda en solo lectura).
 final eventoParaEditarProvider = FutureProvider.autoDispose
     .family<Evento, String>((ref, id) async {
-      if (ref.read(isOnlineProvider)) {
+      if (ref.read(usaServidorProvider)) {
         try {
           return await ref.read(eventosRepositoryProvider).obtenerPorId(id);
         } catch (error) {

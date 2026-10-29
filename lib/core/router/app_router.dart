@@ -101,7 +101,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   );
   // Varias decisiones del redirect (cerrar sesión, forzar cambio de clave)
   // dependen de si la app opera en línea: al cambiar hay que re-evaluarlas.
-  ref.listen<bool>(isOnlineProvider, (_, _) => refreshListenable.refresh());
+  ref.listen<bool>(usaServidorProvider, (_, _) => refreshListenable.refresh());
 
   final router = GoRouter(
     initialLocation: authClient.currentSession != null
@@ -123,7 +123,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final esPublica = _esRutaPublica(location);
       final enSplash = location == RoutePaths.splash;
       final splashTimedOut = ref.read(splashNavigationTimedOutProvider);
-      final hayRed = ref.read(isOnlineProvider);
+      final hayRed = ref.read(usaServidorProvider);
 
       if (session == null && (!esPublica || enSplash)) {
         return RoutePaths.login;

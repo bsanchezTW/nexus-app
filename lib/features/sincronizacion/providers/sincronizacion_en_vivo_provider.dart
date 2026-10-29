@@ -36,7 +36,7 @@ const Duration _ventanaCambios = Duration(milliseconds: 800);
 /// (migración 202610201200); sin ella el canal no recibe nada y quedan los
 /// otros disparadores.
 ///
-/// El canal solo vive mientras [isOnlineProvider] es `true`: con la conexión
+/// El canal solo vive mientras [usaServidorProvider] es `true`: con la conexión
 /// degradada la app opera con su copia local y no tiene sentido mantener un
 /// socket que se cae a cada rato. Volver a estable ya recarga todo (ver
 /// `orquestadorReconexionProvider`).
@@ -51,7 +51,7 @@ final sincronizacionEnVivoProvider = Provider<void>((ref) {
   void exigirServidor() {
     pendiente?.cancel();
     pendiente = Timer(_ventanaCambios, () {
-      if (!ref.read(isOnlineProvider)) return;
+      if (!ref.read(usaServidorProvider)) return;
       exigirLecturaDelServidor(ref.read(epocaServidorProvider.notifier));
     });
   }
@@ -104,7 +104,7 @@ final sincronizacionEnVivoProvider = Provider<void>((ref) {
   void sincronizarSuscripcion() {
     final session = ref.read(authStateChangesProvider).valueOrNull?.session;
     final perfil = ref.read(currentPerfilProvider).valueOrNull;
-    final enLinea = ref.read(isOnlineProvider);
+    final enLinea = ref.read(usaServidorProvider);
     if (session != null && perfil != null && enLinea) {
       suscribir();
     } else {
@@ -114,7 +114,7 @@ final sincronizacionEnVivoProvider = Provider<void>((ref) {
 
   ref.listen(authStateChangesProvider, (_, _) => sincronizarSuscripcion());
   ref.listen(currentPerfilProvider, (_, _) => sincronizarSuscripcion());
-  ref.listen<bool>(isOnlineProvider, (_, _) => sincronizarSuscripcion());
+  ref.listen<bool>(usaServidorProvider, (_, _) => sincronizarSuscripcion());
 
   final ciclo = AppLifecycleListener(
     onPause: () => pausadaDesde = DateTime.now(),

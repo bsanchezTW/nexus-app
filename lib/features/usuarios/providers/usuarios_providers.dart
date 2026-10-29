@@ -30,7 +30,9 @@ final usuarioPorIdProvider = FutureProvider.autoDispose.family<Perfil, String>((
   try {
     return await repo.obtenerUsuarioPorId(id);
   } catch (error) {
-    if (ref.read(isOnlineProvider) && !isNetworkTransportError(error)) rethrow;
+    if (ref.read(usaServidorProvider) && !isNetworkTransportError(error)) {
+      rethrow;
+    }
     final cacheados = ref
         .read(offlineReadCacheProvider)
         .leerGlobal(

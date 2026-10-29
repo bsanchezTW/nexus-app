@@ -43,7 +43,7 @@ const Duration esperaMaximaEscrituraDirecta = Duration(seconds: 10);
 /// local pasan a operar sin conexión. Mientras se hace el primer sondeo vale
 /// `true`; las lecturas tienen su propio tope y caen a la copia local si el
 /// servidor no contesta.
-final isOnlineProvider = Provider<bool>((ref) {
+final usaServidorProvider = Provider<bool>((ref) {
   return PoliticaConexion.usaServidor(
     ref.watch(estadoConexionProvider),
     soportaCopiaLocal: supportsOfflineCacheAqui,

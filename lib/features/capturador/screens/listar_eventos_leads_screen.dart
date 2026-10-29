@@ -292,7 +292,7 @@ class _ListarEventosLeadsScreenState
     final fijados = fijadosAsync.valueOrNull ?? const <String>{};
     // Sin red solo se entra a lo que quedó en disco: la caché conserva el set
     // activo y suelta lo vencido (ver `offline_retention_policy.dart`).
-    final sinRed = !ref.watch(isOnlineProvider);
+    final sinRed = !ref.watch(usaServidorProvider);
     final cache = ref.watch(offlineReadCacheProvider);
     final verTodosLosLeads = ref.watch(canViewAllLeadsProvider);
 

@@ -26,7 +26,7 @@ class StorageCleanupService {
 
   /// Sin red no hay nada que pedir: la cola vive en el servidor y espera.
   Future<void> drenar() {
-    if (!_ref.read(isOnlineProvider)) return Future<void>.value();
+    if (!_ref.read(usaServidorProvider)) return Future<void>.value();
     _repetirAlTerminar = true;
     return _enVuelo ??= _drenarSolicitudes().whenComplete(() {
       _enVuelo = null;

@@ -764,7 +764,7 @@ class _FormularioSubeventoState extends ConsumerState<_FormularioSubevento> {
 
   @override
   Widget build(BuildContext context) {
-    final hayRed = ref.watch(isOnlineProvider);
+    final hayRed = ref.watch(usaServidorProvider);
     final eventoAsync = ref.watch(eventoByIdProvider(widget.eventoId));
     final existente = widget.subeventoId == null
         ? null

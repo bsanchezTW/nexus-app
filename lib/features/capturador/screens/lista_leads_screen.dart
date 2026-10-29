@@ -682,7 +682,7 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
               ? null
               : telefonoInternacional(_telefonoController.text, _paisTelefono)
         : _telefonoGuardado;
-    final isOnline = ref.read(isOnlineProvider);
+    final isOnline = ref.read(usaServidorProvider);
     var fotosPreparadas = const <String>[];
     Map<String, dynamic>? cambiosPreparados;
 
@@ -917,7 +917,7 @@ class _DetalleLeadScreenState extends ConsumerState<DetalleLeadScreen> {
         confirmLabel: 'Eliminar',
         destructive: true,
         accion: () async {
-          if (!ref.read(isOnlineProvider)) return encolar();
+          if (!ref.read(usaServidorProvider)) return encolar();
           try {
             await ref.read(leadsRepositoryProvider).eliminar(widget.leadId);
           } catch (error) {

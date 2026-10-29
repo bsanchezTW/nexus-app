@@ -63,7 +63,7 @@ final externoDashboardProvider =
       final queueItems = ref.watch(syncQueueServiceProvider);
       final leadsRepository = ref.watch(leadsRepositoryProvider);
       final perfil = await ref.watch(currentPerfilProvider.future);
-      final estaOnline = ref.watch(isOnlineProvider);
+      final estaOnline = ref.watch(usaServidorProvider);
 
       if (perfil == null || !perfil.isExterno) {
         return const ExternoDashboardData(

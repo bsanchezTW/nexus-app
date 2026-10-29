@@ -135,7 +135,7 @@ void main() {
           connectivityStreamProvider.overrideWith(
             (ref) => Stream.value(online),
           ),
-          isOnlineProvider.overrideWith((ref) => online),
+          usaServidorProvider.overrideWith((ref) => online),
           currentPerfilProvider.overrideWith(
             (ref) async => perfilOverride ?? perfil,
           ),
@@ -292,7 +292,7 @@ void main() {
       ProviderScope(
         overrides: [
           connectivityStreamProvider.overrideWith((ref) => Stream.value(false)),
-          isOnlineProvider.overrideWith((ref) => false),
+          usaServidorProvider.overrideWith((ref) => false),
         ],
         child: MaterialApp(
           home: Scaffold(

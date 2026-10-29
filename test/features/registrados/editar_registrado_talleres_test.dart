@@ -136,7 +136,7 @@ void main() {
           sharedPreferencesProvider.overrideWithValue(prefs),
           offlineReadCacheProvider.overrideWithValue(cache),
           syncQueueActiveOwnerIdProvider.overrideWithValue('admin-1'),
-          isOnlineProvider.overrideWith((ref) => true),
+          usaServidorProvider.overrideWith((ref) => true),
           currentPerfilProvider.overrideWith(
             (ref) async => const Perfil(
               id: 'admin-1',

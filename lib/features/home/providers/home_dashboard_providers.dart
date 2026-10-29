@@ -82,7 +82,7 @@ final homeDashboardProvider = FutureProvider.autoDispose<HomeDashboardData>((
 ) async {
   final eventos = await ref.watch(eventosListProvider.future);
   final actividades = await ref.watch(eventosLeadsListProvider.future);
-  final isOnline = ref.read(isOnlineProvider);
+  final isOnline = ref.read(usaServidorProvider);
   final repo = ref.watch(registradosRepositoryProvider);
 
   var resumen = const _ResumenGlobal(total: 0, acreditados: 0);

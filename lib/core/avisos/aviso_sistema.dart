@@ -85,7 +85,7 @@ class EntradaAvisos {
 
   final EstadoConexion estado;
 
-  /// La app está usando el servidor (ver `isOnlineProvider`).
+  /// La app está usando el servidor (ver `usaServidorProvider`).
   final bool enLinea;
   final bool soportaCopiaLocal;
   final int conflictos;

@@ -74,7 +74,7 @@ class SincronizacionScreen extends ConsumerWidget {
     ref.read(snapshotServiceProvider.notifier).restaurarMetadatosSiHaceFalta();
     final snapshot = ref.watch(snapshotServiceProvider);
     final cola = ref.watch(syncQueueServiceProvider);
-    final hayRed = ref.watch(isOnlineProvider);
+    final hayRed = ref.watch(usaServidorProvider);
 
     final pendientes = cola
         .where(

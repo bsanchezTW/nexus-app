@@ -78,7 +78,7 @@ class _UsarEventoExternoScreenState
     // Defensa en profundidad sobre `externoEventoBloqueadoProvider`: cerrar la
     // sesión es irreversible sin red, así que solo se hace cuando el servidor
     // pudo confirmar que no queda ningún evento operable.
-    if (!ref.read(isOnlineProvider)) return;
+    if (!ref.read(usaServidorProvider)) return;
     _bloqueoManejado = true;
     TwToast.info(context, 'No hay eventos operativos disponibles');
     await ref.read(authRepositoryProvider).cerrarSesion();

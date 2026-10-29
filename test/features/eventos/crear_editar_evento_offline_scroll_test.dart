@@ -23,7 +23,7 @@ void main() {
       ProviderScope(
         overrides: [
           connectivityStreamProvider.overrideWith((ref) => Stream.value(false)),
-          isOnlineProvider.overrideWith((ref) => false),
+          usaServidorProvider.overrideWith((ref) => false),
           currentPerfilProvider.overrideWith(
             (ref) async => const Perfil(
               id: 'admin-1',

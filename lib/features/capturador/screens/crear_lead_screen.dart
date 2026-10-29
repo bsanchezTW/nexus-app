@@ -390,7 +390,7 @@ class _CrearLeadScreenState extends ConsumerState<CrearLeadScreen> {
     }
 
     setState(() => _guardando = true);
-    final isOnline = ref.read(isOnlineProvider);
+    final isOnline = ref.read(usaServidorProvider);
     final perfil = ref.read(currentPerfilProvider).valueOrNull;
     final userId = perfil?.id;
     final puedeVerContacto = perfil?.canViewContactData ?? false;

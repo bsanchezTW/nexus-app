@@ -207,7 +207,7 @@ class SnapshotService extends StateNotifier<SnapshotEstado> {
     restaurarMetadatosSiHaceFalta();
     if (state.enCurso) return;
     if (!supportsOfflineCacheAqui) return;
-    if (!_ref.read(isOnlineProvider)) return;
+    if (!_ref.read(usaServidorProvider)) return;
 
     state = state.copyWith(enCurso: true, errores: const []);
     final errores = <String>[];

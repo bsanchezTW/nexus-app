@@ -20,7 +20,7 @@ final avisosSistemaProvider = Provider<List<AvisoSistema>>((ref) {
   return avisosDelSistema(
     EntradaAvisos(
       estado: ref.watch(estadoConexionProvider),
-      enLinea: ref.watch(isOnlineProvider),
+      enLinea: ref.watch(usaServidorProvider),
       soportaCopiaLocal: supportsOfflineCacheAqui,
       conflictos: ref.watch(syncConflictsProvider).length,
       pendientes: ref.watch(pendingSyncCountProvider),
