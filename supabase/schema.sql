@@ -6768,3 +6768,11 @@ $$;
 
 REVOKE ALL ON FUNCTION public.rpe_ping() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.rpe_ping() TO anon, authenticated;
+
+-- Funciones antiguas que solo existían en producción, sin uso; tres eran
+-- ejecutables por anon. Ver migración 202610291200_elimina_funciones_legado.
+DROP FUNCTION IF EXISTS public.verificar_duplicado(uuid, text);
+DROP FUNCTION IF EXISTS public.preparar_reset_clave(text);
+DROP FUNCTION IF EXISTS public.solicitar_reset_clave(text);
+DROP FUNCTION IF EXISTS public.validar_bloque_registro();
+DROP FUNCTION IF EXISTS public.rpe_puede_ver_notificacion_row(uuid, uuid);
