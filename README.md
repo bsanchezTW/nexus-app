@@ -5,7 +5,14 @@ Nexus**, unificando en un solo código
 base lo que antes eran dos apps separadas e inconsistentes:
 `registro-pro-eventos-master` (Expo/React Native) y `registro-pro-pc-main`
 (React + Vite + Electron). Corre en Android, iOS, Web y escritorio
-(macOS/Windows/Linux) desde el mismo código.
+(macOS/Windows/Linux) desde el mismo código. Versión actual: 1.9.0
+(`pubspec.yaml`, paquete `transworld_nexus`).
+
+> **Documentación retirada del repo.** La carpeta `docs/` (contrato de la web
+> pública, envío de QR, notificaciones push, plan de modo offline, arquitectura
+> de subeventos) se eliminó en el commit `114679f`. Sigue en el historial:
+> `git show 114679f^:docs/<archivo>`. Lo esencial está resumido en este README
+> y en los comentarios del código.
 
 Este proyecto nace del levantamiento detallado documentado en
 `documentacion_zips_registro_pro.md` (ver especialmente las Secciones 8, 17
@@ -16,27 +23,30 @@ y 18) y corrige explícitamente los hallazgos críticos ahí identificados.
 | # | Problema en el proyecto legado | Corrección en este proyecto |
 |---|---|---|
 | 1 | **Escalación de privilegios**: la policy RLS `rpe_perfiles_update` no tenía `WITH CHECK`, cualquier usuario autenticado podía autoasignarse `rol = 'admin'` llamando directo a la API de Supabase. | `supabase/schema.sql` agrega el trigger `rpe_prevent_role_self_escalation`, que rechaza cualquier `UPDATE` que cambie `rol` o `activo` si quien lo ejecuta no es admin. Además, el cambio de rol desde la app pasa por el RPC `rpe_actualizar_rol_usuario` (`SECURITY DEFINER`), nunca por un `UPDATE` directo. |
-| 2 | **Cola offline móvil rota**: `lib/offlineManager.ts` usaba la clave `capturador_leads_cola_offline` (nunca escrita), mientras las pantallas escribían en `registro_pro_cola_offline` (nunca leída). Los registros offline nunca se sincronizaban. | Una única cola (`data/offline/sync_queue_service.dart`), una única clave de `SharedPreferences`, con estado/reintentos/errores por ítem, y un único `SyncCoordinator` que dispara la sincronización al recuperar conexión. |
+| 2 | **Cola offline móvil rota**: `lib/offlineManager.ts` usaba la clave `capturador_leads_cola_offline` (nunca escrita), mientras las pantallas escribían en `registro_pro_cola_offline` (nunca leída). Los registros offline nunca se sincronizaban. | Una única cola (`data/offline/sync_queue_service.dart`), con estado/reintentos/errores por ítem, y un único `SyncCoordinator` que dispara la sincronización al recuperar conexión. Desde la 1.9.0 los pendientes viven en la copia local SQLite (una fila por pendiente) y lo que quedó en `SharedPreferences` se traspasa solo al abrir la app. |
 | 3 | `eventos` y `registrados` con RLS `USING (true) WITH CHECK (true)` para cualquier autenticado: la única barrera era ocultar botones en la UI. | Políticas separadas por operación: cualquier autenticado puede leer/registrar, pero crear/editar/eliminar eventos y eliminar registrados requiere `rol = 'admin'` **a nivel de base de datos**. |
 | 4 | Sin constraint de duplicados en `registrados`: la deduplicación era solo a nivel de aplicación. | `UNIQUE (evento_id, email)` en la base de datos, reforzado (no reemplazado) por un chequeo previo en el cliente. |
 | 5 | Esquema inconsistente: código y `.env` apuntaban a `registro_eventos`, pero `schema.sql` creaba todo en `public`. | Todo vive explícitamente en `public`, sin variables de esquema configurables que puedan desalinearse. |
 | 6 | Base de datos compartida con la app hermana "capturador-leads" sin documentar el impacto. | Captura de leads vive en esta misma app (`features/capturador/`), mismo `auth.users` y esquema `public`; políticas/funciones con prefijo `rpe_` para evitar colisiones (`supabase/schema.sql`). |
-| 7 | Formulario público de autoregistro vivía **fuera** de ambos repositorios (`intranet-transworld-dc.onrender.com`), como dependencia oculta e indocumentada. | El formulario público de Flutter se eliminó. El registro público lo hace la web Node con las RPC `rpe_publico_*`. Contrato: [`docs/api-publica.md`](docs/api-publica.md). |
+| 7 | Formulario público de autoregistro vivía **fuera** de ambos repositorios (`intranet-transworld-dc.onrender.com`), como dependencia oculta e indocumentada. | El formulario público de Flutter se eliminó. El registro público lo hace la web Node (repo `eventos-web`) con las RPC `rpe_publico_*` de `supabase/schema.sql`. |
 | 8 | Integración con Electron oculta (`window.ipcRenderer`) sin las herramientas de build correspondientes en el ZIP. | Ya no aplica: el mismo Flutter Desktop nativo cubre exportación de archivos sin depender de un runtime externo. |
-| 9 | `.env` con credenciales reales incluido en el ZIP pese a `.gitignore`. | `.env` real nunca se versiona; `.env.example` documenta las variables sin valores reales. Ver `.gitignore`. |
+| 9 | `.env` con credenciales reales incluido en el ZIP pese a `.gitignore`. | `.env` real nunca se versiona (ver `.gitignore`). Las variables que lee la app están listadas en «Variables `.env`». |
 | 10 | Control de acceso por rol solo en la UI (`if (rol === 'admin')` repetido en decenas de archivos). | Sigue existiendo en la UI por UX (`RequireAdmin`, `isAdminProvider`), pero ya no es la única barrera: RLS + triggers son la fuente de verdad. |
 | 11 | El cambio obligatorio de contraseña (`perfiles.cambiar_pass`, regla 6.1 de la doc) existía como pantalla pero nada lo forzaba: un usuario marcado podía seguir usando la app. | El `redirect` del router fuerza `/recrear-pass` mientras `cambiar_pass = true`; al guardar la nueva contraseña se refresca el perfil y se vuelve al home. |
-| 12 | La Edge Function `enviar-qr` estaba declarada pero **nunca se invocaba**, `email_confirmacion_enviado` nunca se marcaba, y ningún flujo mostraba/entregaba el QR del asistente (la pantalla de escaneo leía un QR que nadie tenía). | El QR es `codigo_qr` (`TW1-` + 32 hex). Se muestra en "Ver registrados", se envía por email y SMS, y el escáner lo lee para la entrada y para la asistencia a talleres. Ver [`docs/ENVIO_QR.md`](docs/ENVIO_QR.md). |
+| 12 | La Edge Function `enviar-qr` estaba declarada pero **nunca se invocaba**, `email_confirmacion_enviado` nunca se marcaba, y ningún flujo mostraba/entregaba el QR del asistente (la pantalla de escaneo leía un QR que nadie tenía). | El QR es `codigo_qr` (`TW1-` + 32 hex). Se muestra en "Ver registrados", se envía por email y SMS, y el escáner lo lee para la entrada y para la asistencia a talleres. Lo envía la Edge Function `enviar-qr`. |
 
 ## Arquitectura
 
 ```
 lib/
   core/           # Config, tema, router, constantes, widgets compartidos
+                  # avisos/ (aviso de sistema unificado), conexion/ (monitor y sondeos de red),
+                  # desktop/, permissions/, network/, errors/, utils/
   data/
     models/       # Entidades inmutables (Perfil, Evento, Registrado, …)
     repositories/ # Un repositorio por tabla/dominio, hablan con Supabase
     offline/      # Motor de sincronización offline unificado
+      almacen/    # Copia local en SQLite (drift) y migración desde SharedPreferences
     supabase/     # Inicialización y provider del cliente Supabase
   features/       # Un folder por pantalla/flujo de negocio
     auth/
@@ -47,7 +57,9 @@ lib/
     externo/          # Operación acotada a eventos asignados
     capturador/       # Campañas y captura de leads
     registro/
+    registro_publico/
     registrados/
+    sincronizacion/   # Pantalla de estado de la copia local y los pendientes
     subeventos/       # Talleres del evento
     acreditacion/
     fijados/          # Eventos/campañas fijados por usuario
@@ -56,11 +68,11 @@ lib/
     exportacion/
     usuarios/
     updates/          # OTA vía GitHub Releases (Android / Windows)
-docs/
-  NOTIFICACIONES_PUSH.md   # Setup Firebase + webhook Supabase
-  ENVIO_QR.md              # Webhook y envío del QR
-  api-publica.md           # Contrato de la web Node
-  arquitectura/subeventos/ # Fases y despliegue
+packages/         # flutter_local_notifications_windows (fork local)
+scripts/          # Instalador de Windows (Inno Setup / PowerShell) y utilitarios
+supabase/         # schema.sql, migrations, functions, tests
+tool/             # generate_platform_icons.py
+test/             # Espejo de lib/: core, data y features
 ```
 
 - **Sistema de diseño**: `core/theme/app_theme.dart` define los tokens
@@ -90,16 +102,22 @@ docs/
 - **Fijados y home**: cada usuario puede fijar eventos y campañas
   (límite por dominio); el home destaca esos ítems junto al próximo evento.
 - **Notificaciones**: inbox in-app (`/notificaciones`) con Realtime
-  Supabase; push de sistema vía FCM en Android/iOS (ver
-  `docs/NOTIFICACIONES_PUSH.md`). En Web/escritorio solo aplica el inbox.
+  Supabase; push de sistema vía FCM en Android/iOS, enviado por la Edge
+  Function `enviar-push`. En Web/escritorio solo aplica el inbox.
 - **Gestión de estado**: Riverpod (`flutter_riverpod` 2.x), con providers
   simples (`Provider`, `FutureProvider`, `StateNotifierProvider`) — sin
   generación de código, para mantener el build simple y predecible.
 - **Navegación**: `go_router`, con `redirect` reactivo a los cambios de
   sesión de Supabase (`GoRouterRefreshStream`).
-- **Persistencia offline**: `shared_preferences` como almacenamiento del
-  motor de sincronización (`SyncQueueService`), que funciona igual en
-  Android, iOS, Web y escritorio.
+- **Persistencia offline**: copia local en SQLite con `drift`
+  (`data/offline/almacen/`) para la caché de lectura y la cola de pendientes
+  (`SyncQueueService`); `shared_preferences` queda para preferencias simples.
+  La política de retención (`offline_retention_policy.dart`) conserva la copia
+  de un evento hasta 2 días después de su fecha. Cuando no hay servidor, la app
+  muestra «Mostrando copia local · actualizada hace X».
+- **Conexión**: `core/conexion/` decide si hay servidor de verdad (sondeo de
+  internet y del backend, no solo el estado de la interfaz de red) y
+  `core/avisos/` unifica los avisos de sistema.
 - **  Backend**: Supabase (Postgres + Auth + Storage + Edge Functions),
   esquema `public`. Ver `supabase/schema.sql` para el modelo completo,
   políticas RLS, triggers y funciones RPC. Es la fuente de verdad
@@ -114,12 +132,9 @@ docs/
    flutter pub get
    ```
 
-2. Copia `.env.example` a `.env` y completa con los datos de tu proyecto
-   Supabase (y, si usas OTA, las variables `GITHUB_*`):
-
-   ```bash
-   cp .env.example .env
-   ```
+2. Crea un `.env` en la raíz (no se versiona) con los datos de tu proyecto
+   Supabase y, si usas OTA, las variables `GITHUB_*`. Las variables están
+   listadas en «Variables `.env`», al final de este README.
 
 3. Aplica `supabase/schema.sql` en tu proyecto Supabase (SQL Editor).
    Es idempotente: puede ejecutarse varias veces sin duplicar objetos.
@@ -128,8 +143,7 @@ docs/
    `cp lib/firebase_options.stub.dart lib/firebase_options.dart` y luego
    `flutterfire configure`. También coloca `google-services.json` /
    `GoogleService-Info.plist` (gitignored). Sin eso, CI y clones usan el
-   stub: inbox in-app con Supabase; FCM desactivado. Para releases con
-   push, configura el secret `FIREBASE_OPTIONS_BASE64` en GitHub Actions.
+   stub: inbox in-app con Supabase; FCM desactivado.
 
 5. Corre la app:
 
@@ -139,16 +153,24 @@ docs/
    flutter run -d macos       # macOS (requiere Xcode)
    ```
 
-## Verificación realizada
+## Calidad
 
-- `flutter analyze` → sin advertencias ni errores.
-- `flutter test` → suite en `test/` (modelos, offline, widgets de listas,
-  home, notificaciones, storage, etc.). Las pantallas que hablan con
-  Supabase deben mockear los repositorios de `data/repositories/`.
-- `flutter build web --release` → build exitoso.
+```bash
+flutter analyze
+flutter test
+flutter build web --release
+```
+
+- La suite está en `test/` y replica la estructura de `lib/` (`core`, `data`,
+  `features`). Las pantallas que hablan con Supabase deben mockear los
+  repositorios de `data/repositories/`.
 - Para build de macOS/iOS/Android nativo hace falta un entorno con
-  Xcode/Android SDK completos; el código Dart se valida con `analyze` +
-  tests + `build web`.
+  Xcode/Android SDK completos.
+- El repo no tiene workflows de CI (`.github/workflows/` está vacío): la
+  verificación se corre en local.
+- La base de datos de la copia local (`drift`) tiene su código generado
+  versionado (`copia_local_db.g.dart`). Si cambias sus tablas, regenéralo con
+  `dart run build_runner build --delete-conflicting-outputs`.
 
 ## Edge Functions (`supabase/functions/`)
 
@@ -157,7 +179,7 @@ docs/
 | `crear-usuario` | Alta por admin + email de credenciales (Brevo) |
 | `regenerar-password-usuario` | Nueva password por admin + email |
 | `reset-password` | Olvido de contraseña (sin sesión) |
-| `enviar-qr` | Confirmación por email y SMS. El staff llama con JWT; el webhook de `envios_qr` usa la apikey secreta. Ver `docs/ENVIO_QR.md`. |
+| `enviar-qr` | Confirmación por email y SMS. El staff llama con JWT; el webhook de `envios_qr` usa la apikey secreta. |
 | `qr-imagen` | PNG público del código `TW1-…`, sin base de datos (`verify_jwt = false`) |
 | `enviar-push` | Envía FCM al insertar en `notificaciones` (secret `FIREBASE_SERVICE_ACCOUNT_JSON`) |
 | `limpiar-storage` | Vacía la cola `storage_basura`: borra los objetos que ya no referencia ninguna fila |
@@ -181,27 +203,20 @@ SMS transaccional de QR (eventos con acceso QR) usa además
 `Transworld` si el secreto no está). El SMS lleva un enlace a la imagen del
 QR. Hace falta crédito SMS en la cuenta Brevo.
 
-Detalle del webhook y Firebase:
-[`docs/NOTIFICACIONES_PUSH.md`](docs/NOTIFICACIONES_PUSH.md).
-El contrato de la web pública está en
-[`docs/api-publica.md`](docs/api-publica.md).
-El orden para sacar esta versión está en
-[`docs/arquitectura/subeventos/despliegue.md`](docs/arquitectura/subeventos/despliegue.md).
+Las guías de webhook/Firebase, del contrato de la web pública y del despliegue
+de subeventos estaban en `docs/` (retirada en `114679f`; ver el aviso al inicio).
 
 ## Pendiente / próximos pasos
 
 - **Push en dashboards**: webhook Database → `enviar-push` y secret
-  Firebase (checklist en `docs/NOTIFICACIONES_PUSH.md`). El inbox in-app
-  ya funciona sin eso.
+  Firebase (checklist en el historial: `git show 114679f^:docs/NOTIFICACIONES_PUSH.md`).
+  El inbox in-app ya funciona sin eso.
 - **RLS más granular por evento**: `usuarios_eventos` ya acota al rol
   externo en la app; falta reforzar a nivel de políticas que un usuario
   autenticado genérico no opere eventos ajenos solo vía API.
 - Tests de integración con mocks de Supabase (por ejemplo con
   `mocktail` + fakes de `SupabaseClient`) para los repositorios y el motor
   de sincronización offline.
-- Configurar íconos/splash screen definitivos (`flutter_launcher_icons`,
-  `flutter_native_splash`) — hoy el proyecto usa los assets por defecto de
-  `flutter create`.
 - Subir `Plantilla_Registro.xlsx` al bucket `plantillas` de Storage (lo
   referencia `StorageRepository.urlPlantillaRegistro`, pero el archivo en
   sí no se genera desde este repo).
@@ -259,12 +274,6 @@ Garantías del actualizador (`lib/features/updates/services/windows_installer.da
   indexador) antes de darse por vencida.
 - **Nunca deja al usuario sin app**: pase lo que pase, se relanza Nexus.
 - **Traza**: cada intento queda registrado en `%TEMP%\nexus-update.log`.
-
-Prueba de integración local (no modifica la instalación real):
-
-```powershell
-.\scripts\test-windows-ota.ps1
-```
 
 Los archivos ajenos al paquete (config local del usuario) se conservan: la
 actualización copia encima, no borra la carpeta.
@@ -337,7 +346,11 @@ suben a mano a la Release.
 
 ### Variables `.env`
 
-Ver `.env.example`. Para Supabase: `SUPABASE_URL`, la publishable
-`nexus_app` en `SUPABASE_PUBLISHABLE_KEY` o `SUPABASE_ANON_KEY`, y
-`eventos_web` en `SUPABASE_PUBLISHABLE_KEY_FORM` (si falta, se reusa la
-de la app). OTA: `GITHUB_OWNER`, `GITHUB_REPO`, `UPDATE_CHANNEL`.
+Archivo `.env` en la raíz (ignorado por Git; no hay `.env.example`).
+
+| Grupo | Variables |
+|-------|-----------|
+| Supabase | `SUPABASE_URL`; la publishable `nexus_app` en `SUPABASE_PUBLISHABLE_KEY` (o `SUPABASE_ANON_KEY`); `eventos_web` en `SUPABASE_PUBLISHABLE_KEY_FORM` (si falta, se reusa la de la app) |
+| Storage | `SUPABASE_BUCKET_IMAGENES`, `SUPABASE_BUCKET_PLANTILLAS`, `SUPABASE_BUCKET_FOTOS_LEADS` (opcional) |
+| Web | `PUBLIC_WEB_BASE_URL` (base pública de la web de registro) |
+| OTA | `GITHUB_OWNER`, `GITHUB_REPO`, `UPDATE_CHANNEL` |
